@@ -2,119 +2,288 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, Save, ArrowLeft, Lock } from "lucide-react";
+import { User, ArrowLeft, Save, Upload, Lock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import styles from "../dashboard.module.css";
+import styles from "./profile.module.css";
 
 export default function ProfilePage() {
   const router = useRouter();
+
   const [sessionUser, setSessionUser] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const [name, setName] = useState("");
-  const [location, setLocation] = useState("");
-
-  const [password, setPassword] = useState({
-    newPass: "",
-    confirmPass: "",
+  const [profile, setProfile] = useState({
+    full_name: "",
+    location: "",
+    avatar_url: "",
+    about_image_url: "",
   });
 
+  // password
+  const [passwordForm, setPasswordForm] = useState({
+    newPassword: "",
+    confirmPassword: "",
+  });
+
+  // auth + fetch profile
   useEffect(() => {
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!session) return router.push("/login");
 
       setSessionUser(session.user);
 
       const { data } = await supabase
         .from("portfolio_profile")
-        .select("full_name, location")
+        .select("*")
         .eq("user_id", session.user.id)
         .maybeSingle();
 
-      setName(data?.full_name || "");
-      setLocation(data?.location || "");
+      setProfile({
+        full_name: data?.full_name || "",
+        location: data?.location || "",
+        avatar_url: data?.avatar_url || "",
+        about_image_url: data?.about_image_url || "",
+      });
     };
 
     init();
   }, [router]);
 
+  // save admin profile
   const saveAdminProfile = async () => {
     if (!sessionUser) return;
+    setLoading(true);
 
-    const { data: existing } = await supabase
-      .from("portfolio_profile")
-      .select("id")
-      .eq("user_id", sessionUser.id)
-      .maybeSingle();
-
-    if (existing?.id) {
-      await supabase
+    try {
+      const { data: existing } = await supabase
         .from("portfolio_profile")
-        .update({ full_name: name, location })
-        .eq("id", existing.id);
-    }
+        .select("id")
+        .eq("user_id", sessionUser.id)
+        .maybeSingle();
 
-    alert("Profile Updated ✅");
+      const payload = {
+        full_name: profile.full_name,
+        location: profile.location,
+        avatar_url: profile.avatar_url,
+        about_image_url: profile.about_image_url,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("portfolio_profile")
+          .update(payload)
+          .eq("id", existing.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("portfolio_profile")
+          .insert([{ user_id: sessionUser.id, ...payload }]);
+
+        if (error) throw error;
+      }
+
+      alert("Profile Updated ✅");
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // upload avatar image
+  const uploadAvatar = async (e) => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file || !sessionUser) return;
+
+      setLoading(true);
+
+      const ext = file.name.split(".").pop();
+      const filePath = `${sessionUser.id}/avatar_${Date.now()}.${ext}`;
+
+      const { error } = await supabase.storage
+        .from("portfolio-projects")
+        .upload(filePath, file, { upsert: true });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from("portfolio-projects")
+        .getPublicUrl(filePath);
+
+      setProfile((prev) => ({ ...prev, avatar_url: data.publicUrl }));
+      alert("Avatar Uploaded ✅");
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // upload about image
+  const uploadAboutImage = async (e) => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file || !sessionUser) return;
+
+      setLoading(true);
+
+      const ext = file.name.split(".").pop();
+      const filePath = `${sessionUser.id}/about_${Date.now()}.${ext}`;
+
+      const { error } = await supabase.storage
+        .from("portfolio-projects")
+        .upload(filePath, file, { upsert: true });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from("portfolio-projects")
+        .getPublicUrl(filePath);
+
+      setProfile((prev) => ({ ...prev, about_image_url: data.publicUrl }));
+      alert("About Image Uploaded ✅");
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // change password
   const changePassword = async () => {
-    if (password.newPass.length < 6) return alert("Password min 6 chars");
-    if (password.newPass !== password.confirmPass) return alert("Password not match");
+    if (passwordForm.newPassword.length < 6)
+      return alert("Password minimum 6 characters");
 
-    const { error } = await supabase.auth.updateUser({
-      password: password.newPass,
-    });
+    if (passwordForm.newPassword !== passwordForm.confirmPassword)
+      return alert("Password not match!");
 
-    if (error) return alert(error.message);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: passwordForm.newPassword,
+      });
 
-    alert("Password updated ✅");
-    setPassword({ newPass: "", confirmPass: "" });
+      if (error) throw error;
+
+      alert("Password Updated ✅");
+      setPasswordForm({ newPassword: "", confirmPassword: "" });
+    } catch (e) {
+      alert(e.message);
+    }
   };
 
   return (
-    <div className={styles.main} style={{ padding: "2rem" }}>
-      <div className={styles.sectionCard}>
-        <button className={styles.secondaryBtn} onClick={() => router.push("/")}>
-          <ArrowLeft size={16} /> Back
+    <div className={styles.page}>
+      <div className={styles.top}>
+        <button onClick={() => router.back()} className={styles.backBtn}>
+          <ArrowLeft size={18} /> Back
         </button>
 
-        <h2 className={styles.sectionTitle} style={{ marginTop: "1rem" }}>
-          Admin Profile
-        </h2>
+        <h2>Admin Profile</h2>
+      </div>
 
-        <div className={styles.adminHeader}>
-          <div className={styles.adminAvatar}>
-            <User size={32} />
+      {/* profile card */}
+      <div className={styles.card}>
+        <div className={styles.avatarRow}>
+          <div className={styles.avatarBox}>
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} alt="avatar" />
+            ) : (
+              <User size={36} />
+            )}
           </div>
-          <div>
-            <h3 className={styles.adminName}>{name || "Admin"}</h3>
-            <p className={styles.smallText}>{sessionUser?.email}</p>
-          </div>
+
+          <label className={styles.uploadBtn}>
+            <Upload size={16} /> Upload Avatar
+            <input
+              type="file"
+              accept="image/*"
+              onChange={uploadAvatar}
+              style={{ display: "none" }}
+            />
+          </label>
         </div>
 
-        <div className={styles.grid2}>
-          <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name" />
-          <input className={styles.input} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location" />
+        <input
+          className={styles.input}
+          placeholder="Full Name"
+          value={profile.full_name}
+          onChange={(e) =>
+            setProfile((prev) => ({ ...prev, full_name: e.target.value }))
+          }
+        />
+
+        <input
+          className={styles.input}
+          placeholder="Location"
+          value={profile.location}
+          onChange={(e) =>
+            setProfile((prev) => ({ ...prev, location: e.target.value }))
+          }
+        />
+
+        {/* About image */}
+        <div className={styles.aboutRow}>
+          <label className={styles.uploadBtn}>
+            <Upload size={16} /> Upload About Image
+            <input
+              type="file"
+              accept="image/*"
+              onChange={uploadAboutImage}
+              style={{ display: "none" }}
+            />
+          </label>
+
+          {profile.about_image_url ? (
+            <img
+              src={profile.about_image_url}
+              alt="about"
+              className={styles.aboutPreview}
+            />
+          ) : (
+            <p className={styles.small}>No about image</p>
+          )}
         </div>
 
-        <button className={styles.primaryBtn} onClick={saveAdminProfile}>
-          <Save size={18} /> Update Profile
+        <button
+          disabled={loading}
+          onClick={saveAdminProfile}
+          className={styles.primaryBtn}
+        >
+          <Save size={18} /> Save Profile
         </button>
       </div>
 
-      <div className={styles.sectionCard} style={{ marginTop: "1.5rem" }}>
-        <h2 className={styles.sectionTitle}>
+      {/* password card */}
+      <div className={styles.card}>
+        <h3 className={styles.cardTitle}>
           <Lock size={18} /> Change Password
-        </h2>
+        </h3>
 
-        <input className={styles.input} type="password" placeholder="New Password"
-          value={password.newPass}
-          onChange={(e) => setPassword({ ...password, newPass: e.target.value })}
+        <input
+          className={styles.input}
+          placeholder="New Password"
+          type="password"
+          value={passwordForm.newPassword}
+          onChange={(e) =>
+            setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))
+          }
         />
 
-        <input className={styles.input} type="password" placeholder="Confirm Password"
-          value={password.confirmPass}
-          onChange={(e) => setPassword({ ...password, confirmPass: e.target.value })}
+        <input
+          className={styles.input}
+          placeholder="Confirm Password"
+          type="password"
+          value={passwordForm.confirmPassword}
+          onChange={(e) =>
+            setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))
+          }
         />
 
         <button className={styles.primaryBtn} onClick={changePassword}>

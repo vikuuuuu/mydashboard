@@ -516,9 +516,7 @@ export default function Dashboard() {
 
             {userMenuOpen && (
               <div className={styles.userDropdown}>
-                <button onClick={() => router.push("/profile")}>
-                  <Settings size={16} /> Profile
-                </button>
+                
                 <button onClick={logout}>
                   <LogOut size={16} /> Logout
                 </button>
