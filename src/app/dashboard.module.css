@@ -1,0 +1,542 @@
+.container {
+  display: flex;
+  min-height: 100vh;
+  background: #f1f5f9;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* ---------------- SIDEBAR ---------------- */
+.sidebar {
+  width: 260px;
+  background: #020617;
+  color: white;
+  padding: 1.5rem 1.25rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 2rem;
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #cbd5f5;
+  padding: 0.8rem 0.8rem;
+  text-align: left;
+  border-radius: 12px;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  font-size: 0.92rem;
+  transition: 0.2s ease;
+}
+
+.menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.active {
+  background: #1e293b !important;
+  color: white !important;
+}
+
+.sidebarFooter {
+  margin-top: 1.5rem;
+}
+
+.secBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+/* ---------------- MAIN ---------------- */
+.main {
+  flex: 1;
+  padding: 1.5rem 2.5rem;
+}
+
+/* ---------------- TOPBAR ---------------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  background: #f1f5f9;
+  z-index: 50;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.topbar p {
+  color: #64748b;
+}
+
+.userArea {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* ---------------- STATS ---------------- */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  flex: 1;
+}
+
+.card {
+  background: white;
+  padding: 1rem;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.card p {
+  color: #64748b;
+  margin-top: 0.35rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.card h2 {
+  margin-top: 0.2rem;
+  font-size: 1.45rem;
+  font-weight: 800;
+}
+
+.secure {
+  color: #16a34a;
+}
+
+/* ---------------- BUTTONS ---------------- */
+.primaryBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.8rem 1.2rem;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 1rem;
+  transition: 0.2s ease;
+}
+
+.primaryBtn:hover {
+  background: #1d4ed8;
+}
+
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f172a;
+  color: white;
+  border: none;
+  padding: 0.65rem 1rem;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.secondaryBtn:hover {
+  background: #111c33;
+}
+
+.dangerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 0.65rem 1rem;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.dangerBtn:hover {
+  background: #dc2626;
+}
+
+/* ---------------- SECTION CARD ---------------- */
+.sectionCard {
+  background: white;
+  border: 1px solid #e5e7eb;
+  padding: 1.4rem;
+  border-radius: 18px;
+  margin-top: 1.5rem;
+}
+
+.sectionTitle {
+  font-size: 1.1rem;
+  font-weight: 900;
+  margin-bottom: 1rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+/* ---------------- INPUTS ---------------- */
+.label {
+  font-size: 0.85rem;
+  color: #475569;
+  display: block;
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+}
+
+.input {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  outline: none;
+  font-size: 0.95rem;
+  background: #fff;
+}
+
+.input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  outline: none;
+  font-size: 0.95rem;
+  background: #fff;
+  margin-top: 0.5rem;
+}
+
+.textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.smallText {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+/* ---------------- ENCRYPTION KEY BOX ---------------- */
+.uploadBox {
+  background: white;
+  border: 1px dashed #cbd5e1;
+  padding: 1.2rem;
+  border-radius: 18px;
+  margin-top: 1.5rem;
+}
+
+.keyRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.keyInput {
+  width: 260px;
+  padding: 0.55rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  outline: none;
+}
+
+/* ---------------- PROJECT / LIST CARDS ---------------- */
+.projectCard {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 1rem;
+  border-radius: 18px;
+  margin-bottom: 1rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 80px;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.actionRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+/* ---------------- RESUME ---------------- */
+.resumeRow {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.uploadResumeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f172a;
+  color: white;
+  padding: 0.65rem 1.05rem;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 900;
+  transition: 0.2s ease;
+}
+
+.uploadResumeBtn:hover {
+  background: #111c33;
+}
+
+.resumeLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #2563eb;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.resumeLink:hover {
+  text-decoration: underline;
+}
+
+/* ---------------- PROJECT IMAGE ---------------- */
+.projectImageRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 0.7rem;
+}
+
+.imagePreviewBox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.imagePreview {
+  width: 92px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+}
+
+/* ---------------- ABOUT IMAGE ---------------- */
+.aboutImageRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.aboutImagePreview {
+  width: 92px;
+  height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+}
+
+/* ---------------- TOAST ---------------- */
+.toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  background: #0f172a;
+  color: white;
+  padding: 12px 14px;
+  border-radius: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  z-index: 9999;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.25);
+  font-weight: 800;
+}
+
+.toast button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: white;
+}
+
+/* ---------------- USER MENU ---------------- */
+.userBox {
+  position: relative;
+  cursor: pointer;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: white;
+  border: 1px solid #e2e8f0;
+}
+
+.userAvatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.userDropdown {
+  position: absolute;
+  top: 55px;
+  right: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  width: 200px;
+  overflow: hidden;
+  z-index: 999;
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.14);
+}
+
+.userDropdown button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.userDropdown button:hover {
+  background: #f1f5f9;
+}
+
+/* ---------------- ADMIN PROFILE PAGE ---------------- */
+.adminHeader {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.adminAvatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.adminAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.adminName {
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+/* ---------------- RESPONSIVE ---------------- */
+@media (max-width: 1024px) {
+  .main {
+    padding: 1.5rem 1.5rem;
+  }
+}
+
+@media (max-width: 850px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+  }
+
+  .main {
+    padding: 1.2rem;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+  }
+
+  .keyInput {
+    width: 100%;
+  }
+}
