@@ -387,12 +387,16 @@ export default function Dashboard() {
     try {
       const cleaned = rows.map((row) => {
         const obj = { ...row };
-        if (obj.id === null || obj.id === "" || obj.id === undefined) delete obj.id;
+        if (obj.id === null || obj.id === "" || obj.id === undefined)
+          delete obj.id;
         obj.user_id = sessionUser.id;
         return obj;
       });
 
-      const { data, error } = await supabase.from(table).upsert(cleaned).select("*");
+      const { data, error } = await supabase
+        .from(table)
+        .upsert(cleaned)
+        .select("*");
       if (error) throw error;
 
       setter(data || []);
@@ -435,31 +439,73 @@ export default function Dashboard() {
         <nav className={styles.menu}>
           <button className={styles.active}>Dashboard</button>
 
-          <button onClick={() => document.getElementById("portfolio")?.scrollIntoView({ behavior: "smooth" })}>
+          <button
+            onClick={() =>
+              document
+                .getElementById("portfolio")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             Portfolio
           </button>
 
-          <button onClick={() => document.getElementById("social")?.scrollIntoView({ behavior: "smooth" })}>
+          <button
+            onClick={() =>
+              document
+                .getElementById("social")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             Social Links
           </button>
 
-          <button onClick={() => document.getElementById("skills")?.scrollIntoView({ behavior: "smooth" })}>
+          <button
+            onClick={() =>
+              document
+                .getElementById("skills")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             Skills
           </button>
 
-          <button onClick={() => document.getElementById("projects")?.scrollIntoView({ behavior: "smooth" })}>
+          <button
+            onClick={() =>
+              document
+                .getElementById("projects")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             Projects
           </button>
 
-          <button onClick={() => document.getElementById("certs")?.scrollIntoView({ behavior: "smooth" })}>
+          <button
+            onClick={() =>
+              document
+                .getElementById("certs")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             Certifications
           </button>
 
-          <button onClick={() => document.getElementById("edu")?.scrollIntoView({ behavior: "smooth" })}>
+          <button
+            onClick={() =>
+              document
+                .getElementById("edu")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             Education
           </button>
 
-          <button onClick={() => document.getElementById("exp")?.scrollIntoView({ behavior: "smooth" })}>
+          <button
+            onClick={() =>
+              document
+                .getElementById("exp")
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             Experience
           </button>
         </nav>
@@ -497,13 +543,15 @@ export default function Dashboard() {
           </section>
 
           {/* user menu */}
+          {/* ✅ USER MENU */}
           <div
             className={styles.userBox}
             onClick={(e) => {
               e.stopPropagation();
-              setUserMenuOpen(!userMenuOpen);
+              setUserMenuOpen((prev) => !prev);
             }}
           >
+            {/* ✅ if avatar available show image else icon */}
             {profile.avatar_url ? (
               <img
                 src={profile.avatar_url}
@@ -511,13 +559,32 @@ export default function Dashboard() {
                 className={styles.userAvatar}
               />
             ) : (
-              <User />
+              <User size={22} />
             )}
 
+            {/* ✅ Dropdown */}
             {userMenuOpen && (
-              <div className={styles.userDropdown}>
-                
-                <button onClick={logout}>
+              <div
+                className={styles.userDropdown}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* ✅ Profile button */}
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    router.push("/profile"); // ✅ new page open
+                  }}
+                >
+                  <User size={16} /> Profile
+                </button>
+
+                {/* ✅ Logout button */}
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    logout();
+                  }}
+                >
                   <LogOut size={16} /> Logout
                 </button>
               </div>
@@ -617,13 +684,17 @@ export default function Dashboard() {
               className={styles.input}
               placeholder="Email"
               value={profile.email}
-              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+              onChange={(e) =>
+                setProfile({ ...profile, email: e.target.value })
+              }
             />
             <input
               className={styles.input}
               placeholder="Phone"
               value={profile.phone}
-              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+              onChange={(e) =>
+                setProfile({ ...profile, phone: e.target.value })
+              }
             />
           </div>
 
@@ -876,7 +947,9 @@ export default function Dashboard() {
               <div className={styles.projectImageRow}>
                 <label className={styles.uploadResumeBtn}>
                   <Upload size={16} />
-                  {uploadingProjectImgId === idx ? "Uploading..." : "Upload Image"}
+                  {uploadingProjectImgId === idx
+                    ? "Uploading..."
+                    : "Upload Image"}
                   <input
                     type="file"
                     accept="image/*"
@@ -909,7 +982,9 @@ export default function Dashboard() {
               <div className={styles.actionRow}>
                 <button
                   className={styles.dangerBtn}
-                  onClick={() => removeRow("portfolio_projects", p.id, setProjects)}
+                  onClick={() =>
+                    removeRow("portfolio_projects", p.id, setProjects)
+                  }
                 >
                   <Trash2 size={16} /> Delete
                 </button>
@@ -920,7 +995,9 @@ export default function Dashboard() {
           <button
             disabled={loading}
             className={styles.primaryBtn}
-            onClick={() => upsertRows("portfolio_projects", projects, setProjects)}
+            onClick={() =>
+              upsertRows("portfolio_projects", projects, setProjects)
+            }
           >
             <Save size={18} /> Save Projects
           </button>
@@ -988,7 +1065,9 @@ function SectionList({
         <h2 className={styles.sectionTitle}>{title}</h2>
         <button
           className={styles.secondaryBtn}
-          onClick={() => setRows((prev) => [{ ...template, id: undefined }, ...prev])}
+          onClick={() =>
+            setRows((prev) => [{ ...template, id: undefined }, ...prev])
+          }
         >
           <Plus size={16} /> Add
         </button>
