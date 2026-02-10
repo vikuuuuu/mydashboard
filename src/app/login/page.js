@@ -1,73 +1,97 @@
-// src/app/login/page.js
 "use client";
-import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
-import styles from '../login.module.css';
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  signInWithEmail,
+  signUpWithEmail,
+  getCurrentUser,
+} from "@/lib/firebaseAuth";
+import styles from "../login.module.css";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e) => {
+  useEffect(() => {
+    if (getCurrentUser()) {
+      router.replace("/");
+    }
+  }, [router]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setError("");
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-    } else {
-      // Success! Redirect to dashboard
-      router.push('/');
+    try {
+      if (isLogin) {
+        await signInWithEmail(email, password);
+      } else {
+        await signUpWithEmail(email, password);
+      }
+      router.replace("/");
+    } catch (authError) {
+      setError(authError.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
     <div className={styles.wrapper}>
       <div className={styles.loginCard}>
-        <h1 className={styles.title}>Welcome Back</h1>
-        <p className={styles.subtitle}>Enter your details to access your vault</p>
+        <h1 className={styles.title}>File Dashboard</h1>
+        <p className={styles.subtitle}>
+          Login with Firebase email/password to access tools
+        </p>
 
-        {error && <div className={styles.error}>{error}</div>}
+        {error ? <div className={styles.error}>{error}</div> : null}
 
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleSubmit}>
           <div className={styles.formGroup}>
-            <label className={styles.label}>Email Address</label>
-            <input 
-              type="email" 
-              className={styles.input} 
-              placeholder="you@example.com"
+            <label className={styles.label}>Email</label>
+            <input
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              className={styles.input}
+              placeholder="you@example.com"
               required
             />
           </div>
 
           <div className={styles.formGroup}>
             <label className={styles.label}>Password</label>
-            <input 
-              type="password" 
-              className={styles.input} 
-              placeholder="••••••••"
+            <input
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              className={styles.input}
+              placeholder="minimum 6 characters"
+              minLength={6}
               required
             />
           </div>
 
           <button type="submit" className={styles.loginBtn} disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? "Please wait..." : isLogin ? "Login" : "Create Account"}
           </button>
         </form>
+
+        <button
+          type="button"
+          className={styles.switchMode}
+          onClick={() => setIsLogin((prev) => !prev)}
+        >
+          {isLogin
+            ? "New user? Create account"
+            : "Already have an account? Login"}
+        </button>
       </div>
     </div>
   );
