@@ -1,76 +1,78 @@
-/* src/app/login.module.css */
 .wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
   min-height: 100vh;
-  background-color: #f1f5f9;
-  font-family: sans-serif;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: linear-gradient(180deg, #eff6ff, #f8fafc);
 }
 
 .loginCard {
-  background: white;
-  padding: 2.5rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 400px;
+  width: min(100%, 420px);
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #d9e4ff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  padding: 24px;
 }
 
 .title {
+  margin: 0;
   text-align: center;
-  margin-bottom: 0.5rem;
-  color: #1e293b;
+  color: #0f172a;
 }
 
 .subtitle {
+  margin-top: 8px;
+  color: #475569;
   text-align: center;
-  color: #64748b;
-  margin-bottom: 2rem;
   font-size: 0.9rem;
 }
 
 .formGroup {
-  margin-bottom: 1.5rem;
+  margin-top: 14px;
 }
 
 .label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
   color: #334155;
 }
 
 .input {
   width: 100%;
-  padding: 0.75rem;
+  margin-top: 6px;
+  padding: 10px 12px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  box-sizing: border-box; /* Important for manual CSS padding */
+  border-radius: 10px;
 }
 
 .loginBtn {
+  margin-top: 16px;
   width: 100%;
-  padding: 0.75rem;
-  background-color: #2563eb;
-  color: white;
   border: none;
-  border-radius: 6px;
-  font-weight: 600;
+  border-radius: 10px;
+  padding: 11px;
+  background: #2563eb;
+  color: white;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s;
 }
 
-.loginBtn:hover {
-  background-color: #1d4ed8;
+.switchMode {
+  margin-top: 12px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #1d4ed8;
+  cursor: pointer;
 }
 
 .error {
-  color: #dc2626;
+  margin-top: 12px;
+  border: 1px solid #fecaca;
   background: #fef2f2;
-  padding: 0.5rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
+  color: #b91c1c;
+  border-radius: 10px;
+  padding: 8px;
   font-size: 0.85rem;
-  text-align: center;
 }
