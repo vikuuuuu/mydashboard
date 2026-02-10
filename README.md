@@ -4,8 +4,7 @@ A responsive Next.js dashboard where users must login first, then access file to
 
 ## Features
 
-- Firebase email/password login and sign-up
-- Firebase Analytics initialization on the client
+
 - Protected dashboard route (`/`) for logged-in users only
 - File Management tools:
   - Image to PDF
@@ -24,10 +23,7 @@ A responsive Next.js dashboard where users must login first, then access file to
 npm install
 ```
 
-2. Copy environment variables:
 
-```bash
-cp .env.example .env.local
 ```
 
 3. Run dev server:
