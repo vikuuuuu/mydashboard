@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   signInWithEmail,
-  getCurrentUser,
-  getFirebaseConfigError,
+
 } from "@/lib/firebaseAuth";
 import styles from "../login.module.css";
 
 export default function LoginPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -19,12 +19,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (getCurrentUser()) {
       router.replace("/");
-      return;
-    }
 
-    const configError = getFirebaseConfigError();
-    if (configError) {
-      setError(configError);
     }
   }, [router]);
 
@@ -34,7 +29,7 @@ export default function LoginPage() {
     setError("");
 
     try {
-      await signInWithEmail(email, password);
+
       router.replace("/");
     } catch (authError) {
       setError(authError.message);
@@ -73,16 +68,14 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={styles.input}
-              placeholder="Enter password"
+
               minLength={6}
               required
             />
           </div>
 
           <button type="submit" className={styles.loginBtn} disabled={loading}>
-            {loading ? "Please wait..." : "Login"}
-          </button>
-        </form>
+
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ A responsive Next.js dashboard where users must login first, then access file to
 
 ## Features
 
-- Firebase email/password login
+
 - Protected dashboard route (`/`) for logged-in users only
 - File Management tools:
   - Image to PDF
@@ -23,10 +23,7 @@ A responsive Next.js dashboard where users must login first, then access file to
 npm install
 ```
 
-2. Add environment variable in `.env.local`:
 
-```bash
-NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_web_api_key
 ```
 
 3. Run dev server:

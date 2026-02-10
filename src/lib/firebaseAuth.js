@@ -12,22 +12,7 @@ const parseResponse = async (response) => {
   return data;
 };
 
-export const getFirebaseConfigError = () => {
-  if (!FIREBASE_API_KEY) {
-    return "Missing NEXT_PUBLIC_FIREBASE_API_KEY. Please set it in .env.local and restart the server.";
-  }
 
-  return "";
-};
-
-export const signInWithEmail = async (email, password) => {
-  const configError = getFirebaseConfigError();
-  if (configError) {
-    throw new Error(configError);
-  }
-
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
