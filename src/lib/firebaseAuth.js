@@ -12,7 +12,17 @@ const parseResponse = async (response) => {
   return data;
 };
 
+const ensureFirebaseKey = () => {
+  if (!FIREBASE_API_KEY) {
+    throw new Error("Missing NEXT_PUBLIC_FIREBASE_API_KEY in environment variables");
+  }
+};
 
+export const signInWithEmail = async (email, password) => {
+  ensureFirebaseKey();
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -32,6 +42,21 @@ const parseResponse = async (response) => {
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
   return user;
+};
+
+export const signUpWithEmail = async (email, password) => {
+  ensureFirebaseKey();
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    }
+  );
+
+  return parseResponse(response);
 };
 
 export const getCurrentUser = () => {
