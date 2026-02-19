@@ -3,18 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebaseAuth"; // 👈 auth export karo
-import styles from "./dashboard/dashboard.module.css";
+import { auth } from "@/lib/firebaseAuth";
+import styles from "./dashboard.module.css";
 
-export default function HomePage() {
+
+export default function DashboardLayout({ children }) {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        router.replace("/dashboard");
-      } else {
+      if (!user) {
         router.replace("/login");
       }
       setChecking(false);
@@ -23,8 +22,9 @@ export default function HomePage() {
     return () => unsub();
   }, [router]);
 
-  return checking ? (
-    <p className={styles.checkingSession}>Checking session...</p>
+  if (checking) {
+    return <p className={styles.checkingSession}>Checking authentication...</p>;
+  }
 
-  ) : null;
+  return <>{children}</>;
 }
