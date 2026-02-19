@@ -2,24 +2,32 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser, signInWithEmail } from "@/lib/firebaseAuth";
-import styles from "../login.module.css";
+import {
+  getCurrentUser,
+  signInWithEmail,
+  signInWithGoogle,
+} from "@/lib/firebaseAuth";
+import styles from "./login.module.css";
 
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (getCurrentUser()) {
-      router.replace("/");
-    }
-  }, [router]);
+  const user = getCurrentUser();
 
-  const handleSubmit = async (e) => {
+  // ✅ Already logged in → dashboard
+  if (user) {
+    router.replace("/dashboard");
+  }
+}, [router]);
+
+
+  const handleEmailLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
@@ -27,8 +35,22 @@ export default function LoginPage() {
     try {
       await signInWithEmail(email.trim(), password);
       router.replace("/");
-    } catch (authError) {
-      setError(authError.message);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      await signInWithGoogle();
+      router.replace("/");
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -38,19 +60,21 @@ export default function LoginPage() {
     <div className={styles.wrapper}>
       <div className={styles.loginCard}>
         <h1 className={styles.title}>File Dashboard</h1>
-        <p className={styles.subtitle}>Login with Firebase email/password to access tools</p>
+        <p className={styles.subtitle}>
+          Login using Email or Google
+        </p>
 
-        {error ? <div className={styles.error}>{error}</div> : null}
+        {error && <div className={styles.error}>{error}</div>}
 
-        <form onSubmit={handleSubmit}>
+        {/* EMAIL LOGIN */}
+        <form onSubmit={handleEmailLogin}>
           <div className={styles.formGroup}>
             <label className={styles.label}>Email</label>
             <input
               type="email"
+              className={styles.input}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={styles.input}
-              placeholder="you@example.com"
               required
             />
           </div>
@@ -59,18 +83,30 @@ export default function LoginPage() {
             <label className={styles.label}>Password</label>
             <input
               type="password"
+              className={styles.input}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={styles.input}
               minLength={6}
               required
             />
           </div>
 
-          <button type="submit" className={styles.loginBtn} disabled={loading}>
+          <button className={styles.loginBtn} disabled={loading}>
             {loading ? "Signing in..." : "Login"}
           </button>
         </form>
+
+        {/* DIVIDER */}
+        <div className={styles.divider}>OR</div>
+
+        {/* GOOGLE LOGIN */}
+        <button
+          className={styles.googleBtn}
+          onClick={handleGoogleLogin}
+          disabled={loading}
+        >
+          Continue with Google
+        </button>
       </div>
     </div>
   );

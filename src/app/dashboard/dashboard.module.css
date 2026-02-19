@@ -1,0 +1,87 @@
+.page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8fbff, #eef2ff);
+  padding: 20px;
+}
+
+.header {
+  max-width: 1100px;
+  margin: 0 auto 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h1 {
+  margin: 0;
+}
+
+.header p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.logoutBtn {
+  background: #111827;
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.cardGrid {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 18px;
+}
+
+.toolCard {
+  background: #fff;
+  border: 1px solid #dbe3f5;
+  border-radius: 16px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.toolCard:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 14px 40px rgba(30, 41, 59, 0.15);
+}
+
+.toolCard h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.toolCard p {
+  margin: 8px 0 14px;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.openText {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.loader {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+}
+
+.checkingSession {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #f1f5f9;
+  font-size: 1.2rem;
+  color: #64748b;
+}
