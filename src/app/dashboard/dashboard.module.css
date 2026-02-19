@@ -14,20 +14,14 @@
 
 .header h1 {
   margin: 0;
+  font-size: 1.5rem;
+  align-items: center;
+  display: flex;
 }
 
 .header p {
   margin: 4px 0 0;
   color: #64748b;
-}
-
-.logoutBtn {
-  background: #111827;
-  color: #fff;
-  border: none;
-  padding: 10px 16px;
-  border-radius: 10px;
-  cursor: pointer;
 }
 
 .cardGrid {
@@ -84,4 +78,100 @@
   background: #f1f5f9;
   font-size: 1.2rem;
   color: #64748b;
+}
+/* ======================
+   PROFILE DROPDOWN
+====================== */
+
+.profile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border: 1px solid #464c5a;
+  background: #ffffff;
+  color: #fff;
+  /* border: none; */
+  padding: 1px 1px;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.1);
+}
+
+.profile img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #e5e7eb;
+}
+
+.profile span {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ======================
+   DROPDOWN MENU
+====================== */
+
+.dropdown {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+  min-width: 160px;
+  padding: 6px;
+  display: none;
+  z-index: 1000;
+}
+
+/* Show dropdown on hover (desktop) */
+.profile:hover .dropdown {
+  display: block;
+}
+
+/* ======================
+   DROPDOWN ITEMS
+====================== */
+
+.dropdown button {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 10px 12px;
+  text-align: left;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.dropdown button:hover {
+  background: #f1f5f9;
+}
+
+/* Logout button special */
+.dropdown button:last-child {
+  color: #b91c1c;
+}
+
+/* ======================
+   MOBILE SUPPORT
+====================== */
+
+@media (max-width: 640px) {
+  .profile span {
+    display: none; /* hide email on mobile */
+  }
 }

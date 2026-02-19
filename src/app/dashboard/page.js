@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./dashboard.module.css";
 import { getCurrentUser, signOutUser } from "@/lib/firebaseAuth";
+import { LayoutDashboardIcon } from "lucide-react";
 
 const TOOLS = [
   { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images into PDF" },
@@ -41,12 +42,21 @@ export default function DashboardPage() {
       {/* Header */}
       <header className={styles.header}>
         <div>
-          <h1>Dashboard</h1>
+          <h1> <LayoutDashboardIcon className="w-6 h-6 mr-2 inline" /> Dashboard</h1>
           <p>Welcome, {user.email}</p>
         </div>
-        <button className={styles.logoutBtn} onClick={handleLogout}>
+        <div className={styles.profile}>
+          <img src={user.photoURL || "/avatar.png"} />
+          {/* <span>{user.email}</span> */}
+
+          <div className={styles.dropdown}>
+            <button onClick={() => router.push("/profile")}>Profile</button>
+            <button onClick={handleLogout}>Logout</button>
+          </div>
+        </div>
+        {/* <button className={styles.logoutBtn} onClick={handleLogout}>
           Logout
-        </button>
+        </button> */}
       </header>
 
       {/* Tool Cards */}
