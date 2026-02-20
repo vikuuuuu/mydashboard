@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { auth } from "@/lib/firebaseAuth";
 import {
   getCurrentUser,
   signInWithEmail,
   signInWithGoogle,
 } from "@/lib/firebaseAuth";
+import { logLogin } from "@/lib/loginlogger";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -17,16 +19,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  /* ================= AUTO REDIRECT ================= */
   useEffect(() => {
-  const user = getCurrentUser();
+    const user = getCurrentUser();
+    if (user) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
 
-  // ✅ Already logged in → dashboard
-  if (user) {
-    router.replace("/dashboard");
-  }
-}, [router]);
-
-
+  /* ================= EMAIL LOGIN ================= */
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -34,23 +35,36 @@ export default function LoginPage() {
 
     try {
       await signInWithEmail(email.trim(), password);
-      router.replace("/");
+
+      await logLogin({
+        userId: auth.currentUser.uid,
+        provider: "email",
+      });
+
+      router.replace("/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError("Invalid email or password");
     } finally {
       setLoading(false);
     }
   };
 
+  /* ================= GOOGLE LOGIN ================= */
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError("");
 
     try {
       await signInWithGoogle();
-      router.replace("/");
+
+      await logLogin({
+        userId: auth.currentUser.uid,
+        provider: "google",
+      });
+
+      router.replace("/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError("Google login failed");
     } finally {
       setLoading(false);
     }
@@ -96,7 +110,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* DIVIDER */}
         <div className={styles.divider}>OR</div>
 
         {/* GOOGLE LOGIN */}

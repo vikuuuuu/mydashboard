@@ -3,6 +3,8 @@ import { app } from "./firebase";
 
 const db = getFirestore(app);
 
+
+
 export const logToolUsage = async ({
   userId,
   tool,
@@ -17,3 +19,4 @@ export const logToolUsage = async ({
     createdAt: serverTimestamp(),
   });
 };
+

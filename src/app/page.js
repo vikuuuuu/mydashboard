@@ -24,7 +24,9 @@ export default function HomePage() {
   }, [router]);
 
   return checking ? (
-    <p className={styles.checkingSession}>Checking session...</p>
-
+    <div className={styles.checkingSession}>
+      <div className={styles.loaderSession}></div>
+      <p>Checking session...</p>
+    </div>
   ) : null;
 }

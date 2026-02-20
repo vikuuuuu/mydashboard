@@ -6,7 +6,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebaseAuth";
 import styles from "./dashboard.module.css";
 
-
 export default function DashboardLayout({ children }) {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
@@ -23,7 +22,10 @@ export default function DashboardLayout({ children }) {
   }, [router]);
 
   if (checking) {
-    return <p className={styles.checkingSession}>Checking authentication...</p>;
+    return <div className={styles.checkingSession}>
+      <div className={styles.loaderSession}></div>
+      <p>Checking Authentication...</p>
+    </div>;
   }
 
   return <>{children}</>;
