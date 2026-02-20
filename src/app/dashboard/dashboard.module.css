@@ -69,15 +69,36 @@
   place-items: center;
   font-size: 1.1rem;
 }
+/* ======================
+/page Checking Session 
+====================== */
 
 .checkingSession {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100vh;
   background: #f1f5f9;
-  font-size: 1.2rem;
+  font-size: 1rem;
   color: #64748b;
+  gap: 16px;
+}
+
+/* Spinner */
+.loaderSession {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top: 4px solid #2563eb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
 }
 /* ======================
    PROFILE DROPDOWN

@@ -6,6 +6,7 @@ import {
   signOut,
 } from "firebase/auth";
 import { app } from "./firebase";
+import { sendPasswordResetEmail } from "firebase/auth";
 
 /* ======================
    AUTH INSTANCE
@@ -31,6 +32,12 @@ const googleProvider = new GoogleAuthProvider();
 
 export const signInWithGoogle = () => {
   return signInWithPopup(auth, googleProvider);
+};
+
+// Reset password
+
+export const changePassword = (email) => {
+  return sendPasswordResetEmail(auth, email);
 };
 
 /* ======================
