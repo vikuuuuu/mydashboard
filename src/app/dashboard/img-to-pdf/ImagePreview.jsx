@@ -1,4 +1,4 @@
-import styles from "./imgToPdf.module.css";
+import styles from "./tool.module.css";
 
 export default function ImagePreview({ images, setImages, pdfInfo, onDownload }) {
   const onDragStart = (e, index) => {
