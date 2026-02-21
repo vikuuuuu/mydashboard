@@ -56,7 +56,7 @@ export default function ProfilePage() {
     const q = query(
       collection(db, "tool_usage"),
       where("userId", "==", uid),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
     const snap = await getDocs(q);
     setToolHistory(snap.docs.map((d) => d.data()));
@@ -67,7 +67,7 @@ export default function ProfilePage() {
     const q = query(
       collection(db, "login_logs"),
       where("userId", "==", uid),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
     const snap = await getDocs(q);
     setLoginLogs(snap.docs.map((d) => d.data()));
@@ -92,81 +92,73 @@ export default function ProfilePage() {
 
   return (
     <main className={styles.page}>
+      <button className={styles.backBtn} onClick={() => router.back()}>
+        ← Back
+      </button>
       <h1 className={styles.title}>My Profile</h1>
+      <div className={styles.cardParent}>
+        {/* PROFILE INFO */}
+        <section className={styles.card}>
+          <img src={user.photoURL || "/avatar.png"} className={styles.avatar} />
 
-      {/* PROFILE INFO */}
-      <section className={styles.card}>
-        <img
-          src={user.photoURL || "/avatar.png"}
-          className={styles.avatar}
-        />
+          <label className={styles.label}>Name</label>
+          <input
+            className={styles.input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
 
-        <label className={styles.label}>Name</label>
-        <input
-          className={styles.input}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+          <label className={styles.label}>Email</label>
+          <input className={styles.input} value={user.email} disabled />
 
-        <label className={styles.label}>Email</label>
-        <input
-          className={styles.input}
-          value={user.email}
-          disabled
-        />
+          <button className={styles.primaryBtn} onClick={saveProfile}>
+            Save Profile
+          </button>
+        </section>
 
-        <button className={styles.primaryBtn} onClick={saveProfile}>
-          Save Profile
-        </button>
-      </section>
+        {/* SECURITY */}
+        <section className={styles.card}>
+          <h3>Security</h3>
+          <button className={styles.secondaryBtn} onClick={resetPassword}>
+            Send Password Reset Email
+          </button>
+        </section>
 
-      {/* SECURITY */}
-      <section className={styles.card}>
-        <h3>Security</h3>
-        <button
-          className={styles.secondaryBtn}
-          onClick={resetPassword}
-        >
-          Send Password Reset Email
-        </button>
-      </section>
+        {/* LOGIN LOGS */}
+        <section className={styles.card}>
+          <h3>Login Activity</h3>
 
-      {/* LOGIN LOGS */}
-      <section className={styles.card}>
-        <h3>Login Activity</h3>
+          {loginLogs.length === 0 && (
+            <p className={styles.empty}>No login activity</p>
+          )}
 
-        {loginLogs.length === 0 && (
-          <p className={styles.empty}>No login activity</p>
-        )}
+          {loginLogs.map((log, i) => (
+            <div key={i} className={styles.listItem}>
+              <strong>{log.provider || "Email / Google"}</strong>
+              <small>{log.createdAt?.toDate().toLocaleString()}</small>
+            </div>
+          ))}
+        </section>
 
-        {loginLogs.map((log, i) => (
-          <div key={i} className={styles.listItem}>
-            <strong>{log.provider || "Email / Google"}</strong>
-            <small>
-              {log.createdAt?.toDate().toLocaleString()}
-            </small>
-          </div>
-        ))}
-      </section>
+        {/* TOOL HISTORY */}
+        <section className={styles.card}>
+          <h3>Tool Usage History</h3>
 
-      {/* TOOL HISTORY */}
-      <section className={styles.card}>
-        <h3>Tool Usage History</h3>
+          {toolHistory.length === 0 && (
+            <p className={styles.empty}>No tool usage yet</p>
+          )}
 
-        {toolHistory.length === 0 && (
-          <p className={styles.empty}>No tool usage yet</p>
-        )}
-
-        {toolHistory.map((h, i) => (
-          <div key={i} className={styles.listItem}>
-            <strong>{formatTool(h.tool)}</strong>
-            <small>
-              {h.imageCount} items · {h.totalSizeKB} KB ·{" "}
-              {h.createdAt?.toDate().toLocaleString()}
-            </small>
-          </div>
-        ))}
-      </section>
+          {toolHistory.map((h, i) => (
+            <div key={i} className={styles.listItem}>
+              <strong>{formatTool(h.tool)}</strong>
+              <small>
+                {h.imageCount} items · {h.totalSizeKB} KB ·{" "}
+                {h.createdAt?.toDate().toLocaleString()}
+              </small>
+            </div>
+          ))}
+        </section>
+      </div>
     </main>
   );
 }
