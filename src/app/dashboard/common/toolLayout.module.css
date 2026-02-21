@@ -1,0 +1,90 @@
+/* PAGE */
+.page {
+  min-height: 100vh;
+  background: #f1f5f9;
+  padding: 16px;
+}
+
+/* GRID LAYOUT */
+.layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .layout {
+    grid-template-columns: 300px 1fr 280px;
+    align-items: start;
+  }
+}
+
+/* PANELS */
+.mainPanel {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  padding: 16px;
+}
+
+.sidePanel {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  padding: 16px;
+  position: sticky;
+  top: 16px;
+}
+
+/* HEADER */
+.backBtn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.subText {
+  color: #64748b;
+  margin: 6px 0 16px;
+}
+
+/* HISTORY */
+.historyItem {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 10px 0;
+}
+
+.historyItem:last-child {
+  border-bottom: none;
+}
+
+.historyItem p {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.historyItem small {
+  color: #64748b;
+}
+
+.emptyText {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.dateText {
+  color: #94a3b8;
+  font-size: 0.75rem;
+}

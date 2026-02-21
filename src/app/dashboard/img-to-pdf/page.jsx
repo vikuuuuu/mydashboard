@@ -4,12 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import jsPDF from "jspdf";
 
-import common from "../pages.module.css";
-import styles from "./imgToPdf.module.css";
+import common from "../common/toolLayout.module.css";
+import styles from "./tool.module.css";
 
 import ImagePreview from "./ImagePreview";
 import PdfSettings from "./PdfSettings";
-import UsageHistory from "./UsageHistory";
+import UsageHistory from "../common/UsageHistory";
 
 import { getCurrentUser } from "@/lib/firebaseAuth";
 import { logToolUsage } from "@/lib/firestore";
@@ -75,16 +75,14 @@ export default function ImgToPdfPage() {
     setLoading(false);
   };
 
- 
   const download = () => {
-  if (!pdfBlob || !pdfInfo) return;
+    if (!pdfBlob || !pdfInfo) return;
 
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(pdfBlob);
-  a.download = pdfInfo.name || "images-to-pdf.pdf";
-  a.click();
-};
-
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(pdfBlob);
+    a.download = pdfInfo.name || "images-to-pdf.pdf";
+    a.click();
+  };
 
   return (
     <main className={common.page}>
@@ -135,7 +133,7 @@ export default function ImgToPdfPage() {
         </section>
 
         {/* RIGHT */}
-        <UsageHistory userId={user?.uid} />
+        <UsageHistory userId={user?.uid} tool="image-to-pdf" />
       </div>
     </main>
   );
