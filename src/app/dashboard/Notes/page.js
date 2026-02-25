@@ -154,6 +154,9 @@ export default function NotesDashboard() {
 
   return (
     <main className={styles.page}>
+        <button className={styles.backBtn} onClick={() => router.back()}>
+                ← Back
+              </button>
       <div className={styles.layout}>
 
         {/* LEFT – FOLDERS */}

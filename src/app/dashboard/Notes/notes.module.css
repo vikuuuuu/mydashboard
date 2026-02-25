@@ -4,6 +4,17 @@
   padding: 16px;
 }
 
+.backBtn {
+  background: #ffffff;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
 .layout {
   max-width: 1300px;
   margin: auto;
