@@ -43,6 +43,26 @@
   border: 1px solid #e5e7eb;
   margin-bottom: 20px;
   height: fit-content;
+  max-height: 380px;
+  width: 310px;
+   
+  overflow: hidden;        /* 👈 VERY IMPORTANT */
+  display: flex;
+  flex-direction: column;
+}
+
+.cardContent {
+  padding: 20px;
+  overflow-y: auto;        /* 👈 scroll yaha hoga */
+  flex: 1;
+}
+.cardContent::-webkit-scrollbar {
+  width: 3px;
+}
+
+.cardContent::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
 }
 
 /* AVATAR */
