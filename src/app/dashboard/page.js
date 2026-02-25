@@ -5,15 +5,16 @@ import { useRouter } from "next/navigation";
 import styles from "./dashboard.module.css";
 import { getCurrentUser, signOutUser } from "@/lib/firebaseAuth";
 import { LayoutDashboardIcon } from "lucide-react";
+import { APP_VERSION, BUILD_DATE } from "@/lib/appVersion";
 
 const TOOLS = [
+  { id: "Notes", title: "Our Notes Page", desc: "Create Notes with Folder and Export in PDF, TXT Format. " },
   { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images into PDF" },
-  { id: "pdf-to-img", title: "PDF to Image", desc: "Extract images from PDF" },
+  // { id: "pdf-to-img", title: "PDF to Image", desc: "Extract images from PDF" },
   { id: "video-to-img", title: "Video to Image", desc: "Capture video frame" },
-  { id: "img-resize", title: "Image Resize", desc: "Resize image dimensions" },
-  { id: "pdf-resize", title: "PDF Resize", desc: "Reduce PDF size" },
-  { id: "img-format", title: "Image Format", desc: "JPG / PNG convert" },
-  { id: "Notes", title: "Our Notes", desc: "Create Notes " },
+  // { id: "img-resize", title: "Image Resize", desc: "Resize image dimensions" },
+  // { id: "pdf-resize", title: "PDF Resize", desc: "Reduce PDF size" },
+  // { id: "img-format", title: "Image Format", desc: "JPG / PNG convert" },
 
 ];
 
@@ -75,6 +76,15 @@ export default function DashboardPage() {
           </div>
         ))}
       </section>
+      <footer className={styles.footer}>
+  <span>
+    MyDashboard {APP_VERSION}
+  </span>
+  <span className={styles.dot}>•</span>
+  <span>
+    Build {BUILD_DATE}
+  </span>
+</footer>
     </main>
   );
 }

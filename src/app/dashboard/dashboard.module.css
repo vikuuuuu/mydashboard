@@ -187,6 +187,26 @@
   color: #b91c1c;
 }
 
+
+
+/* ===== FOOTER VERSION ===== */
+.footer {
+  margin-top: 40px;
+  padding: 12px 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #64748b;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  opacity: 0.6;
+}
+
+
 /* ======================
    MOBILE SUPPORT
 ====================== */
