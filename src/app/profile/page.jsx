@@ -127,36 +127,38 @@ export default function ProfilePage() {
         {/* LOGIN LOGS */}
         <section className={styles.card}>
           <h3>Login Activity</h3>
+          <div className={styles.cardContent}>
+            {loginLogs.length === 0 && (
+              <p className={styles.empty}>No login activity</p>
+            )}
 
-          {loginLogs.length === 0 && (
-            <p className={styles.empty}>No login activity</p>
-          )}
-
-          {loginLogs.map((log, i) => (
-            <div key={i} className={styles.listItem}>
-              <strong>{log.provider || "Email / Google"}</strong>
-              <small>{log.createdAt?.toDate().toLocaleString()}</small>
-            </div>
-          ))}
+            {loginLogs.map((log, i) => (
+              <div key={i} className={styles.listItem}>
+                <strong>{log.provider || "Email / Google"}</strong>
+                <small>{log.createdAt?.toDate().toLocaleString()}</small>
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* TOOL HISTORY */}
         <section className={styles.card}>
           <h3>Tool Usage History</h3>
-
-          {toolHistory.length === 0 && (
-            <p className={styles.empty}>No tool usage yet</p>
-          )}
-
-          {toolHistory.map((h, i) => (
-            <div key={i} className={styles.listItem}>
-              <strong>{formatTool(h.tool)}</strong>
-              <small>
-                {h.imageCount} items · {h.totalSizeKB} KB ·{" "}
-                {h.createdAt?.toDate().toLocaleString()}
-              </small>
-            </div>
-          ))}
+          <div className={styles.cardContent}>
+            {" "}
+            {toolHistory.length === 0 && (
+              <p className={styles.empty}>No tool usage yet</p>
+            )}
+            {toolHistory.map((h, i) => (
+              <div key={i} className={styles.listItem}>
+                <strong>{formatTool(h.tool)}</strong>
+                <small>
+                  {h.imageCount} items · {h.totalSizeKB} KB ·{" "}
+                  {h.createdAt?.toDate().toLocaleString()}
+                </small>
+              </div>
+            ))}
+          </div>
         </section>
       </div>
     </main>
@@ -170,3 +172,4 @@ function formatTool(tool) {
   if (tool === "img-resize") return "Image Resize";
   return tool;
 }
+
