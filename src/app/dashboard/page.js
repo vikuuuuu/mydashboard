@@ -13,6 +13,8 @@ const TOOLS = [
   { id: "img-resize", title: "Image Resize", desc: "Resize image dimensions" },
   { id: "pdf-resize", title: "PDF Resize", desc: "Reduce PDF size" },
   { id: "img-format", title: "Image Format", desc: "JPG / PNG convert" },
+  { id: "Notes", title: "Our Notes", desc: "Create Notes " },
+
 ];
 
 export default function DashboardPage() {

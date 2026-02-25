@@ -1,0 +1,127 @@
+.page {
+  min-height: 100vh;
+  background: #f1f5f9;
+  padding: 16px;
+}
+
+.layout {
+  max-width: 1300px;
+  margin: auto;
+  display: grid;
+  grid-template-columns: 220px 260px 1fr;
+  gap: 16px;
+}
+
+.sidebar,
+.list,
+.editor {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  padding: 14px;
+}
+.editor {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar h3,
+.list h3 {
+  font-weight: 700;
+}
+
+.newBtn {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: #3b82f6;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.hr {
+  margin: 12px 0;
+  border-top: 1px solid #e5e7eb;
+}
+
+.sidebar div,
+.list div {
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.active {
+  background: #e0e7ff;
+  font-weight: 700;
+}
+
+.noteItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px dotted rgb(94, 84, 84) ;
+  margin-bottom: 10px;
+}
+
+/* .noteItem:hover {
+  border: 2px solid rgb(94, 84, 84) ;
+} */
+
+.noteActive {
+  background: linear-gradient(to right, #e0e7ff, #54608d);
+  border: 2px dotted rgb(94, 84, 84) ;
+}
+
+.editor input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+}
+
+.actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.primary {
+  background: #4f46e5;
+  color: white;
+}
+
+.secondary {
+  background: #e5e7eb;
+}
+
+.danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.empty {
+  color: #94a3b8;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
