@@ -126,7 +126,7 @@ export default function ProfilePage() {
 
         {/* LOGIN LOGS */}
         <section className={styles.card}>
-          <h3>Login Activity</h3>
+          <h3>Login Activity ({loginLogs.length}) </h3>
           <div className={styles.cardContent}>
             {loginLogs.length === 0 && (
               <p className={styles.empty}>No login activity</p>
@@ -172,4 +172,5 @@ function formatTool(tool) {
   if (tool === "img-resize") return "Image Resize";
   return tool;
 }
+
 
