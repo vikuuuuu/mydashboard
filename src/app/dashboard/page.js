@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import styles from "./dashboard.module.css";
 import { getCurrentUser, signOutUser } from "@/lib/firebaseAuth";
 import { LayoutDashboardIcon } from "lucide-react";
-import { APP_VERSION, BUILD_DATE } from "@/lib/appVersion";
+import { APP_VERSION, UPDATE_DATE } from "@/lib/appVersion";
 
 const TOOLS = [
   { id: "Notes", title: "Our Notes Page", desc: "Create Notes with Folder and Export in PDF, TXT Format. " },
@@ -82,7 +82,7 @@ export default function DashboardPage() {
   </span>
   <span className={styles.dot}>•</span>
   <span>
-    Build {BUILD_DATE}
+    last Update {UPDATE_DATE}
   </span>
 </footer>
     </main>
