@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import styles from "./dashboard.module.css";
 import { getCurrentUser, signOutUser } from "@/lib/firebaseAuth";
 import { LayoutDashboardIcon } from "lucide-react";
-import { APP_VERSION, UPDATE_DATE } from "@/lib/appVersion";
+import { APP_VERSION, LASTUPDATE_DATE } from "@/lib/appVersion";
 
 const TOOLS = [
   { id: "Notes", title: "Our Notes Page", desc: "Create Notes with Folder and Export in PDF, TXT Format. " },
+  { id: "private_video_chat", title: "Private Video Chat", desc: "Chat with your friends in private video calls" },
   { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images into PDF" },
-  // { id: "pdf-to-img", title: "PDF to Image", desc: "Extract images from PDF" },
   { id: "video-to-img", title: "Video to Image", desc: "Capture video frame" },
   // { id: "img-resize", title: "Image Resize", desc: "Resize image dimensions" },
   // { id: "pdf-resize", title: "PDF Resize", desc: "Reduce PDF size" },
@@ -82,7 +82,7 @@ export default function DashboardPage() {
   </span>
   <span className={styles.dot}>•</span>
   <span>
-    last Update {UPDATE_DATE}
+    Last Update {LASTUPDATE_DATE}
   </span>
 </footer>
     </main>
