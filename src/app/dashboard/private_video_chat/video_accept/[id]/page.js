@@ -11,13 +11,9 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import {
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  PhoneOff,
-} from "lucide-react";
+import styles from "./page.module.css";
+
+import { Mic, MicOff, Video, VideoOff, PhoneOff } from "lucide-react";
 
 const iceServers = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -41,10 +37,7 @@ export default function VideoAcceptPage() {
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: { echoCancellation: true, noiseSuppression: true },
       });
 
       streamRef.current = stream;
@@ -106,7 +99,7 @@ export default function VideoAcceptPage() {
     return () => {};
   }, [id]);
 
-  /* ================= CONTROLS ================= */
+  /* ===== Controls ===== */
 
   const toggleMic = () => {
     const track = streamRef.current?.getAudioTracks()[0];
@@ -129,87 +122,41 @@ export default function VideoAcceptPage() {
   };
 
   return (
-    <main
-      style={{
-        height: "100vh",
-        background: "#0f172a",
-        color: "#fff",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* VIDEO AREA */}
-      <div style={{ flex: 1, position: "relative" }}>
-        <video
-          ref={remoteVideo}
-          autoPlay
-          playsInline
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            background: "#000",
-          }}
-        />
+    <div className={styles.container}>
+      {/* Remote video (FULL SCREEN) */}
+      <video
+        ref={remoteVideo}
+        autoPlay
+        playsInline
+        className={styles.remoteVideo}
+      />
 
-        {/* Local Preview */}
-        <video
-          ref={localVideo}
-          autoPlay
-          muted
-          playsInline
-          style={{
-            position: "absolute",
-            bottom: 20,
-            right: 20,
-            width: 140,
-            height: 200,
-            objectFit: "cover",
-            borderRadius: 12,
-            border: "2px solid #22c55e",
-          }}
-        />
-      </div>
+      {/* Local preview */}
+      <video
+        ref={localVideo}
+        autoPlay
+        muted
+        playsInline
+        className={styles.localVideo}
+      />
 
-      {/* CONTROLS */}
-      <div
-        style={{
-          padding: 20,
-          display: "flex",
-          justifyContent: "center",
-          gap: 20,
-          background: "#020617",
-        }}
-      >
-        <button onClick={toggleMic} style={controlBtnStyle}>
+      {/* Controls */}
+      <div className={styles.controls}>
+        <button onClick={toggleMic} className={styles.controlBtn}>
           {micOn ? <Mic /> : <MicOff />}
         </button>
 
-        <button onClick={toggleCamera} style={controlBtnStyle}>
+        <button onClick={toggleCamera} className={styles.controlBtn}>
           {camOn ? <Video /> : <VideoOff />}
         </button>
 
         <button
           onClick={endCall}
-          style={{ ...controlBtnStyle, background: "#dc2626" }}
+          className={`${styles.controlBtn} ${styles.end}`}
         >
           <PhoneOff />
         </button>
       </div>
-    </main>
+    </div>
   );
 }
-
-/* ================= STYLES ================= */
-const controlBtnStyle = {
-  width: 60,
-  height: 60,
-  borderRadius: "50%",
-  border: "none",
-  background: "#1e293b",
-  color: "#fff",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-};
