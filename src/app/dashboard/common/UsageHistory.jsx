@@ -69,7 +69,7 @@ export default function UsageHistory({ userId, tool }) {
 
   return (
     <aside className={styles.sidePanel}>
-      <h3>Your History</h3>
+      <h3>Your History ({history.length})</h3>
 
       {loading && <p className={styles.emptyText}>Loading…</p>}
 

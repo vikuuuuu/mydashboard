@@ -126,7 +126,7 @@ export default function ProfilePage() {
 
         {/* LOGIN LOGS */}
         <section className={styles.card}>
-          <h3>Login Activity ({loginLogs.length}) </h3>
+          <h3>Login Activity ({loginLogs.length})</h3>
           <div className={styles.cardContent}>
             {loginLogs.length === 0 && (
               <p className={styles.empty}>No login activity</p>
@@ -143,7 +143,7 @@ export default function ProfilePage() {
 
         {/* TOOL HISTORY */}
         <section className={styles.card}>
-          <h3>Tool Usage History ({toolHistory.length}) </h3>
+          <h3>Tool Usage History ({toolHistory.length})</h3>
           <div className={styles.cardContent}>
             {" "}
             {toolHistory.length === 0 && (
@@ -172,6 +172,3 @@ function formatTool(tool) {
   if (tool === "img-resize") return "Image Resize";
   return tool;
 }
-
-
-
