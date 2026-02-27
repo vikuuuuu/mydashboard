@@ -1,104 +1,71 @@
-.page {
-  min-height: 100vh;
-  background: #f1f5f9;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-}
-
-/* Back */
-.backBtn {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  background: none;
-  border: none;
-  color: #2563eb;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  gap: 6px;
-}
-
-/* Card */
-.card {
-  width: 100%;
-  max-width: 820px;
-  background: #ffffff;
-  border-radius: 18px;
-  padding: 24px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-}
-
-.title {
-  text-align: center;
-  margin-bottom: 16px;
-}
-
-/* Videos */
-.videoGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.videoBox {
-  background: #0f172a;
-  border-radius: 14px;
-  overflow: hidden;
+.container {
   position: relative;
-}
-
-.videoBox span {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 0.75rem;
-  padding: 2px 6px;
-  border-radius: 6px;
-}
-
-.videoBox video {
   width: 100%;
-  height: 240px;
-  object-fit: cover;
+  height: 100vh;
+  background: black;
+  overflow: hidden;
 }
 
-/* Controls */
+/* Full screen remote video */
+.remoteVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: black;
+}
+
+/* Small local preview */
+.localVideo {
+  position: absolute;
+  bottom: 90px;
+  right: 20px;
+  width: 140px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 2px solid #22c55e;
+  background: black;
+}
+
+/* Bottom control bar */
 .controls {
-  margin-top: 18px;
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  padding: 16px;
   display: flex;
   justify-content: center;
-  gap: 14px;
+  gap: 20px;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.7),
+    rgba(0, 0, 0, 0)
+  );
 }
 
+/* Round buttons */
 .controlBtn {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   border: none;
-  background: #e5e7eb;
-  display: grid;
-  place-items: center;
+  background: #1f2937;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
-.end {
-  background: #dc2626;
-  color: white;
+.controlBtn:hover {
+  background: #374151;
 }
 
-/* Mobile */
-@media (max-width: 768px) {
-  .videoGrid {
-    grid-template-columns: 1fr;
-  }
+/* End call */
+.end {
+  background: #dc2626;
+}
 
-  .videoBox video {
-    height: 200px;
-  }
+.end:hover {
+  background: #b91c1c;
 }
