@@ -244,10 +244,10 @@ export default function FinancialsPage() {
     setForm({ ...form, stockType: e.target.value })
   }
 >
-  <option value="">Default</option>
-  <option value="Equity">Equity</option>
-  <option value="ETF">ETF</option>
-  <option value="Crypto">Crypto</option>
+  
+  <option>Equity</option>
+  <option>ETF</option>
+  <option>Crypto</option>
 </select>
 
         <input
