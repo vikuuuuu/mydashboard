@@ -4,10 +4,23 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 import { Video, LogIn, ArrowLeft } from "lucide-react";
+import { logToolUsage } from "@/lib/firestore";
+import { getCurrentUser } from "@/lib/firebaseAuth";
 
 export default function PrivateVideoChatPage() {
   const router = useRouter();
   const [roomId, setRoomId] = useState("");
+    const user = getCurrentUser();
+ useEffect(() => {
+   if (!user) router.replace("/login");
+
+  if (user) {
+    logToolUsage({
+      userId: user.uid,
+      tool: "Private Video Chat - Page Visit",
+    });
+  }
+}, [user, router]);
 
   return (
     <main className={styles.page}>
@@ -61,4 +74,5 @@ export default function PrivateVideoChatPage() {
       </div>
     </main>
   );
+
 }
