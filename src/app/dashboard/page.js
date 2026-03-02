@@ -12,7 +12,7 @@ const TOOLS = [
   { id: "private_video_chat", title: "Private Video Chat", desc: "Chat with your friends in private video calls" },
   { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images into PDF" },
   { id: "video-to-img", title: "Video to Image", desc: "Capture video frame" },
-  // { id: "img-resize", title: "Image Resize", desc: "Resize image dimensions" },
+  { id: "myfinancials", title: "My Financials Dashboard Page", desc: "In Dashboard the Financials Manage and Track" },
   // { id: "pdf-resize", title: "PDF Resize", desc: "Reduce PDF size" },
   // { id: "img-format", title: "Image Format", desc: "JPG / PNG convert" },
 
