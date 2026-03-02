@@ -242,7 +242,7 @@ export default function FinancialsPage() {
           value={form.stockType}
           onChange={(e) => setForm({ ...form, stockType: e.target.value })}
         >
-          <option selected disabled>Default</option>
+          <option selected >Default</option>
           <option>Equity</option>
           <option>ETF</option>
           <option>Crypto</option>
