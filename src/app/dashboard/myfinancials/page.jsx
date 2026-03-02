@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { logToolUsage } from "@/lib/firestore";
+
 
 import {
   collection,
@@ -170,6 +172,13 @@ export default function FinancialsPage() {
     });
 
     fetchData(user.uid);
+
+     if (user) {
+      await logToolUsage({
+        userId: user.uid,
+        tool: "My Financials - Add Trade",
+      });
+    }
   };
 
   if (loading) return <div className={styles.loader}>Loading...</div>;
