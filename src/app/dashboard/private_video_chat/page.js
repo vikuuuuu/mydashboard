@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 import { Video, LogIn, ArrowLeft } from "lucide-react";
@@ -76,3 +76,4 @@ export default function PrivateVideoChatPage() {
   );
 
 }
+
