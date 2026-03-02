@@ -4,26 +4,109 @@
   padding: 20px;
 }
 
+/* ======================
+   HEADER
+====================== */
 .header {
-  max-width: 1100px;
-  margin: 0 auto 24px;
+  max-width: 1200px;
+  margin: 0 auto 30px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: white;
+  padding: 18px 24px;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+  flex-wrap: wrap;
 }
 
-.header h1 {
-  margin: 0;
-  font-size: 1.5rem;
-  align-items: center;
+.logoSection {
   display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.header p {
-  margin: 4px 0 0;
-  color: #64748b;
+.logoSection h1 {
+  font-size: 1.3rem;
+  margin: 0;
 }
 
+/* ======================
+   PROFILE
+====================== */
+.profile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  background: #f1f5f9;
+  padding: 6px 20px;
+  border-radius: 40px;
+  transition: 0.3s;
+  border: 1px solid #8e95ac;
+}
+
+.profile:hover {
+  background: #e2e8f0;
+}
+
+.profile img {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile span {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-right: 10px;
+}
+
+/* ======================
+   DROPDOWN
+====================== */
+.dropdown {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  width: 160px;
+  padding: 6px;
+  animation: fadeIn 0.2s ease-in-out;
+  z-index: 100;
+  display: none;
+}
+
+.profile:hover .dropdown {
+  display: block;
+}
+
+.dropdown button {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.dropdown button:hover {
+  background: #f1f5f9;
+}
+
+.dropdown button:last-child {
+  color: #dc2626;
+}
 .cardGrid {
   max-width: 1100px;
   margin: 0 auto;
@@ -110,11 +193,11 @@
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  border: 1px solid #464c5a;
+  border: 1px solid #8e95ac;
   background: #ffffff;
   color: #fff;
   /* border: none; */
-  padding: 1px 1px;
+  padding: 1px 3px;
   border-radius: 50px;
   cursor: pointer;
   box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.1);
@@ -187,8 +270,6 @@
   color: #b91c1c;
 }
 
-
-
 /* ===== FOOTER VERSION ===== */
 .footer {
   margin-top: 40px;
@@ -205,7 +286,6 @@
 .dot {
   opacity: 0.6;
 }
-
 
 /* ======================
    MOBILE SUPPORT

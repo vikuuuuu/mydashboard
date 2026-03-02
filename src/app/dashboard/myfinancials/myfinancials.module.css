@@ -1,108 +1,127 @@
-.page {
+.container {
+  padding: 30px;
+  background: #f8fafc;
   min-height: 100vh;
-  background: linear-gradient(180deg, #f8fbff, #f1f5ff);
-  padding: 22px;
-  color: #0f172a;
+  font-family: 'Inter', sans-serif;
 }
 
-.headerCard {
-  max-width: 1200px;
-  margin: 0 auto 18px;
+.backBtn {
   background: #ffffff;
-  border: 1px solid #dbe3f5;
-  border-radius: 16px;
-  padding: 18px;
-}
-
-.headerCard h1 { margin: 0; font-size: 1.4rem; }
-.headerCard p { margin: 8px 0; color: #475569; }
-
-.metaRow {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.warning { margin-top: 8px; color: #b45309; font-size: 0.9rem; }
-
-.actionsRow {
-  max-width: 1200px;
-  margin: 0 auto 18px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.actionBtn {
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  color: #0f172a;
+  padding: 8px 16px;
   border-radius: 10px;
-  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  color: #2563eb;
+  font-weight: 600;
   cursor: pointer;
+  margin-bottom: 12px;
 }
 
-.saveMsg { font-size: 0.88rem; color: #0f766e; }
+.pageTitle {
+  margin-bottom: 20px;
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #1e293b;
+}
 
 .kpiGrid {
-  max-width: 1200px;
-  margin: 0 auto 18px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  gap: 15px;
+  margin-bottom: 30px;
 }
 
-.kpiCard { background: #fff; border: 1px solid #dbe3f5; border-radius: 14px; padding: 14px; }
-.kpiCard h3 { margin: 0; color: #64748b; font-size: 0.9rem; }
-.kpiCard strong { display: block; margin-top: 8px; font-size: 1.35rem; }
-
-.contentGrid {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 14px;
+.card {
+  background: linear-gradient(145deg, #ffffff, #f1f5f9);
+  padding: 20px;
+  border-radius: 12px;
+  transition: 0.3s ease;
 }
 
-.panel { background: #fff; border: 1px solid #dbe3f5; border-radius: 14px; padding: 14px; }
-.panel h2 { margin: 0 0 12px; font-size: 1rem; }
-.tableWrap { overflow-x: auto; }
+.card:hover {
+  transform: translateY(-4px);
+}
 
-.tableWrap table { width: 100%; border-collapse: collapse; }
-.tableWrap th, .tableWrap td { padding: 9px 8px; border-bottom: 1px solid #eef2ff; text-align: left; font-size: 0.88rem; }
-.tableWrap th { color: #64748b; font-weight: 600; }
+.card span {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
 
-.tableWrap input,
-.tableWrap select {
-  width: 100%;
-  min-width: 82px;
-  border: 1px solid #cbd5e1;
+.card h2 {
+  margin-top: 8px;
+  font-size: 22px;
+}
+
+.addForm {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+
+.addForm input,
+.addForm select {
+  padding: 10px;
   border-radius: 8px;
-  padding: 6px;
-  font-size: 0.82rem;
+  border: 1px solid #e2e8f0;
 }
 
-.removeBtn {
-  border: 1px solid #fecaca;
-  background: #fff1f2;
-  color: #b91c1c;
+.addForm button {
+  background: #22c55e;
+  color: white;
+  border: none;
+  padding: 10px 20px;
   border-radius: 8px;
-  padding: 6px 10px;
   cursor: pointer;
+  transition: 0.2s;
 }
 
-.chartWrap { display: flex; flex-direction: column; gap: 10px; }
-.barRow { display: grid; grid-template-columns: 52px 1fr 100px; align-items: center; gap: 10px; }
-.barLabel { font-weight: 600; font-size: 0.84rem; }
-.barTrack { height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
-.barFill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #2563eb, #22c55e); }
-.barValue { text-align: right; font-size: 0.82rem; color: #334155; }
+.addForm button:hover {
+  background: #16a34a;
+}
 
-.positive { color: #15803d; margin-left: 5px; }
-.negative { color: #b91c1c; margin-left: 5px; }
+.tableWrapper {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  margin-top: 30px;
+}
 
-@media (max-width: 960px) {
-  .contentGrid { grid-template-columns: 1fr; }
+.scrollTable {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: #f1f5f9;
+  padding: 12px;
+  font-size: 13px;
+  color: #475569;
+  position: sticky;
+  top: 0;
+}
+
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .kpiGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
 }
