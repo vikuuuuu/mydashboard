@@ -5,18 +5,17 @@ const db = getFirestore(app);
 
 
 
-export const logToolUsage = async ({
-  userId,
-  tool,
-  imageCount,
-  totalSizeKB,
-}) => {
-  await addDoc(collection(db, "tool_usage"), {
+export const logToolUsage = async ({ userId, tool, imageCount, totalSizeKB }) => {
+  const data = {
     userId,
     tool,
-    imageCount,
-    totalSizeKB,
     createdAt: serverTimestamp(),
-  });
+  };
+
+  if (imageCount !== undefined) data.imageCount = imageCount;
+  if (totalSizeKB !== undefined) data.totalSizeKB = totalSizeKB;
+
+  await addDoc(collection(db, "tool_usage"), data);
 };
+
 
