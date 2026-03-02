@@ -15,12 +15,16 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: none;
-  border: none;
-  color: #2563eb;
   font-weight: 600;
+  background: #ffffff;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  color: #2563eb;
   cursor: pointer;
+  margin-bottom: 12px;
 }
+
 
 /* Main card */
 .card {

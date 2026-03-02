@@ -4,23 +4,22 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./dashboard.module.css";
 import { getCurrentUser, signOutUser } from "@/lib/firebaseAuth";
-import { LayoutDashboardIcon } from "lucide-react";
+import { LayoutDashboardIcon, LogOut, User } from "lucide-react";
 import { APP_VERSION, LASTUPDATE_DATE } from "@/lib/appVersion";
+import Avatar from "../../../public/avatar.png";
 
 const TOOLS = [
-  { id: "Notes", title: "Our Notes Page", desc: "Create Notes with Folder and Export in PDF, TXT Format. " },
-  { id: "private_video_chat", title: "Private Video Chat", desc: "Chat with your friends in private video calls" },
-  { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images into PDF" },
-  { id: "video-to-img", title: "Video to Image", desc: "Capture video frame" },
-  { id: "myfinancials", title: "My Financials Dashboard Page", desc: "In Dashboard the Financials Manage and Track" },
-  // { id: "pdf-resize", title: "PDF Resize", desc: "Reduce PDF size" },
-  // { id: "img-format", title: "Image Format", desc: "JPG / PNG convert" },
-
+  { id: "Notes", title: "Notes", desc: "Create & Export Notes" },
+  { id: "private_video_chat", title: "Private Video Chat", desc: "Secure video calls and  it working on same Network." },
+  { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images to PDF" },
+  { id: "video-to-img", title: "Video to Image", desc: "Capture video frames" },
+  { id: "myfinancials", title: "My Financials", desc: "Track investments & profit" },
 ];
 
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [openMenu, setOpenMenu] = useState(false);
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -37,32 +36,47 @@ export default function DashboardPage() {
   };
 
   if (!user) {
-    return <div className={styles.loader}>Loading dashboard...</div>;
+    return (
+      <div className={styles.loaderWrapper}>
+        <div className={styles.loader}></div>
+        <p>Checking session...</p>
+      </div>
+    );
   }
 
   return (
     <main className={styles.page}>
-      {/* Header */}
+      {/* HEADER */}
       <header className={styles.header}>
-        <div>
-          <h1> <LayoutDashboardIcon className="w-6 h-6 mr-2 inline" /> Dashboard</h1>
-          <p>Welcome, {user.email}</p>
+        <div className={styles.logoSection}>
+          <LayoutDashboardIcon size={24} />
+          <h1>Dashboard</h1>
         </div>
-        <div className={styles.profile}>
-          <img src={user.photoURL || "/avatar.png"} />
-          {/* <span>{user.email}</span> */}
 
-          <div className={styles.dropdown}>
-            <button onClick={() => router.push("/profile")}>Profile</button>
-            <button onClick={handleLogout}>Logout</button>
-          </div>
+        <div
+          className={styles.profile}
+          onClick={() => setOpenMenu(!openMenu)}
+        >
+          <img
+            src={user.photoURL || Avatar.src}
+            alt="profile"
+          />
+          <span>{user.displayName || user.email}</span>
+
+          {openMenu && (
+            <div className={styles.dropdown}>
+              <button onClick={() => router.push("/profile")}>
+                <User size={16} /> Profile
+              </button>
+              <button onClick={handleLogout}>
+                <LogOut size={16} /> Logout
+              </button>
+            </div>
+          )}
         </div>
-        {/* <button className={styles.logoutBtn} onClick={handleLogout}>
-          Logout
-        </button> */}
       </header>
 
-      {/* Tool Cards */}
+      {/* DASHBOARD CARDS */}
       <section className={styles.cardGrid}>
         {TOOLS.map((tool) => (
           <div
@@ -72,19 +86,17 @@ export default function DashboardPage() {
           >
             <h3>{tool.title}</h3>
             <p>{tool.desc}</p>
-            <span className={styles.openText}>Open →</span>
+            <span>Open →</span>
           </div>
         ))}
       </section>
+
+      {/* FOOTER */}
       <footer className={styles.footer}>
-  <span>
-    MyDashboard {APP_VERSION}
-  </span>
-  <span className={styles.dot}>•</span>
-  <span>
-    Last Update {LASTUPDATE_DATE}
-  </span>
-</footer>
+        <span>MyDashboard {APP_VERSION}</span>
+        <span className={styles.dot}>•</span>
+        <span>Last Update {LASTUPDATE_DATE}</span>
+      </footer>
     </main>
   );
 }

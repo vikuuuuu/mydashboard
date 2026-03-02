@@ -1,342 +1,315 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
 import {
-  doc,
-  getDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+  addDoc,
   serverTimestamp,
-  setDoc,
+  orderBy,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getCurrentUser } from "@/lib/firebaseAuth";
 import styles from "./myfinancials.module.css";
 
-const DEFAULT_HOLDINGS = [
-  { symbol: "AAPL", name: "Apple Inc.", type: "Stock", qty: 12, avgPrice: 176.3 },
-  { symbol: "MSFT", name: "Microsoft", type: "Stock", qty: 8, avgPrice: 362.1 },
-  { symbol: "TSLA", name: "Tesla", type: "Stock", qty: 6, avgPrice: 244.2 },
-  { symbol: "VOO", name: "Vanguard S&P 500 ETF", type: "ETF", qty: 10, avgPrice: 463.4 },
-  { symbol: "QQQ", name: "Invesco QQQ ETF", type: "ETF", qty: 9, avgPrice: 447.9 },
-];
-
-function MiniBarChart({ rows }) {
-  const maxValue = Math.max(...rows.map((row) => row.marketValue), 1);
-
-  return (
-    <div className={styles.chartWrap}>
-      {rows.map((row) => (
-        <div key={row.symbol} className={styles.barRow}>
-          <span className={styles.barLabel}>{row.symbol}</span>
-          <div className={styles.barTrack}>
-            <div
-              className={styles.barFill}
-              style={{ width: `${(row.marketValue / maxValue) * 100}%` }}
-            />
-          </div>
-          <span className={styles.barValue}>${row.marketValue.toFixed(2)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export default function MyFinancialsPage() {
-  const [holdings, setHoldings] = useState(DEFAULT_HOLDINGS);
-  const [quoteMap, setQuoteMap] = useState({});
-  const [asOf, setAsOf] = useState("");
+export default function FinancialsPage() {
+  const [user, setUser] = useState(null);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
 
+  const [form, setForm] = useState({
+    symbol: "",
+    companyName: "",
+    stockType: "Equity",
+    qty: "",
+    price: "",
+    action: "BUY",
+    date: "",
+  });
+
+  const router = useRouter();
+
+  // ---------------- FETCH ----------------
   useEffect(() => {
-    let active = true;
-
-    const loadPortfolio = async () => {
-      const user = getCurrentUser();
-      if (!user) {
-        if (active) {
-          setError("Please login to load financial portfolio.");
-          setLoading(false);
-        }
-        return;
-      }
-
-      try {
-        const ref = doc(db, "financial_portfolios", user.uid);
-        const snap = await getDoc(ref);
-
-        if (!active) return;
-
-        if (snap.exists()) {
-          const data = snap.data();
-          const savedHoldings = Array.isArray(data.holdings) ? data.holdings : [];
-
-          if (savedHoldings.length) {
-            setHoldings(
-              savedHoldings.map((item) => ({
-                symbol: String(item.symbol || "").toUpperCase(),
-                name: String(item.name || ""),
-                type: String(item.type || "Stock"),
-                qty: Number(item.qty || 0),
-                avgPrice: Number(item.avgPrice || 0),
-              }))
-            );
-          }
-        }
-      } catch {
-        if (active) {
-          setError("Could not load saved portfolio from Firebase.");
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadPortfolio();
-
-    return () => {
-      active = false;
-    };
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      setUser(currentUser);
+      fetchData(currentUser.uid);
+    }
+    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    if (!holdings.length) return;
+  const fetchData = async (uid) => {
+    const q = query(
+      collection(db, "transactions"),
+      where("userId", "==", uid),
+      orderBy("createdAt", "asc")
+    );
+    const snap = await getDocs(q);
+    setTransactions(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+  };
 
-    let active = true;
-    const fetchQuotes = async () => {
-      try {
-        const symbols = holdings
-          .map((item) => item.symbol)
-          .filter(Boolean)
-          .join(",");
+  // ---------------- COMPANY SUGGEST ----------------
+  const companyList = useMemo(() => {
+    const map = {};
+    transactions.forEach((t) => {
+      map[t.symbol] = t.companyName;
+    });
+    return map;
+  }, [transactions]);
 
-        if (!symbols) return;
+  // ---------------- FIFO ENGINE ----------------
+  const holdings = useMemo(() => {
+    const map = {};
 
-        const response = await fetch(`/api/finance/quotes?symbols=${symbols}`, {
-          cache: "no-store",
-        });
+    transactions.forEach((tx) => {
+      const qty = Number(tx.qty);
+      const price = Number(tx.price);
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch quotes");
-        }
+      if (!map[tx.symbol]) {
+        map[tx.symbol] = {
+          companyName: tx.companyName,
+          lots: [],
+          qty: 0,
+          invested: 0,
+          realized: 0,
+        };
+      }
 
-        const data = await response.json();
-        if (!active) return;
+      const stock = map[tx.symbol];
 
-        setQuoteMap(data.quotes || {});
-        setAsOf(data.asOf || "");
-        setError(data.note || "");
-      } catch {
-        if (active) {
-          setError("Unable to load live prices right now.");
+      if (tx.action === "BUY") {
+        stock.lots.push({ qty, price });
+        stock.qty += qty;
+        stock.invested += qty * price;
+      }
+
+      if (tx.action === "SELL") {
+        let remaining = qty;
+
+        while (remaining > 0 && stock.lots.length > 0) {
+          const firstLot = stock.lots[0];
+
+          if (firstLot.qty <= remaining) {
+            stock.realized += firstLot.qty * (price - firstLot.price);
+            stock.invested -= firstLot.qty * firstLot.price;
+            remaining -= firstLot.qty;
+            stock.qty -= firstLot.qty;
+            stock.lots.shift();
+          } else {
+            stock.realized += remaining * (price - firstLot.price);
+            stock.invested -= remaining * firstLot.price;
+            firstLot.qty -= remaining;
+            stock.qty -= remaining;
+            remaining = 0;
+          }
         }
       }
-    };
-
-    fetchQuotes();
-    const interval = setInterval(fetchQuotes, 30000);
-
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [holdings]);
-
-  const rows = useMemo(() => {
-    return holdings.map((item) => {
-      const quote = quoteMap[item.symbol] || {};
-      const currentPrice = Number(quote.price || item.avgPrice);
-      const invested = item.qty * item.avgPrice;
-      const marketValue = item.qty * currentPrice;
-      const pnl = marketValue - invested;
-
-      return {
-        ...item,
-        currentPrice,
-        invested,
-        marketValue,
-        pnl,
-        change: Number(quote.change || 0),
-      };
     });
-  }, [holdings, quoteMap]);
 
+    return Object.entries(map).map(([symbol, data]) => ({
+      symbol,
+      ...data,
+    }));
+  }, [transactions]);
+
+  // ---------------- KPI ----------------
   const totals = useMemo(() => {
-    return rows.reduce(
-      (acc, row) => {
-        acc.invested += row.invested;
-        acc.value += row.marketValue;
+    return holdings.reduce(
+      (acc, h) => {
+        if (h.qty > 0) acc.currentInvest += h.invested;
+        acc.totalPL += h.realized;
+        if (h.qty > 0) acc.totalStocks += 1;
         return acc;
       },
-      { invested: 0, value: 0 }
+      { currentInvest: 0, totalPL: 0, totalStocks: 0 }
     );
-  }, [rows]);
+  }, [holdings]);
 
-  const totalPnl = totals.value - totals.invested;
+  const totalInvest =
+    transactions
+      .filter((t) => t.action === "BUY")
+      .reduce((sum, t) => sum + Number(t.qty) * Number(t.price), 0) || 0;
 
-  const updateHolding = (index, key, value) => {
-    setHoldings((prev) =>
-      prev.map((item, i) => {
-        if (i !== index) return item;
-        if (key === "qty" || key === "avgPrice") {
-          return { ...item, [key]: Number(value || 0) };
-        }
-        if (key === "symbol") {
-          return { ...item, symbol: value.toUpperCase() };
-        }
-        return { ...item, [key]: value };
-      })
-    );
-  };
+  // ---------------- ADD TRADE ----------------
+  const addTrade = async (e) => {
+    e.preventDefault();
 
-  const addHolding = () => {
-    setHoldings((prev) => [
-      ...prev,
-      { symbol: "", name: "", type: "Stock", qty: 0, avgPrice: 0 },
-    ]);
-  };
+    const sellQty = Number(form.qty);
+    const symbol = form.symbol.toUpperCase();
+    const currentStock = holdings.find((h) => h.symbol === symbol);
 
-  const removeHolding = (index) => {
-    setHoldings((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const savePortfolio = async () => {
-    const user = getCurrentUser();
-    if (!user) {
-      setSaveMessage("Please login first.");
+    if (form.action === "SELL" && (!currentStock || currentStock.qty < sellQty)) {
+      alert("Not enough stock to sell!");
       return;
     }
 
-    try {
-      const cleaned = holdings
-        .filter((item) => item.symbol)
-        .map((item) => ({
-          symbol: item.symbol.toUpperCase(),
-          name: item.name,
-          type: item.type,
-          qty: Number(item.qty || 0),
-          avgPrice: Number(item.avgPrice || 0),
-        }));
+    await addDoc(collection(db, "transactions"), {
+      userId: user.uid,
+      symbol,
+      companyName: companyList[symbol] || form.companyName,
+      stockType: form.stockType,
+      qty: sellQty,
+      price: Number(form.price),
+      action: form.action,
+      createdAt: form.date ? new Date(form.date) : serverTimestamp(),
+    });
 
-      await setDoc(
-        doc(db, "financial_portfolios", user.uid),
-        {
-          userId: user.uid,
-          holdings: cleaned,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+    setForm({
+      symbol: "",
+      companyName: "",
+      stockType: "Equity",
+      qty: "",
+      price: "",
+      action: "BUY",
+      date: "",
+    });
 
-      setSaveMessage("Portfolio saved in Firebase.");
-    } catch {
-      setSaveMessage("Failed to save portfolio.");
-    }
+    fetchData(user.uid);
   };
 
+  if (loading) return <div className={styles.loader}>Loading...</div>;
+
   return (
-    <main className={styles.page}>
-      <section className={styles.headerCard}>
-        <h1>My Financials Dashboard</h1>
-        <p>Track your stocks, ETFs, invested amount, quantity, current rate and live P/L.</p>
-        <div className={styles.metaRow}>
-          <span>{loading ? "Loading portfolio..." : "Live market snapshot"}</span>
-          {asOf && <span>Updated: {new Date(asOf).toLocaleTimeString()}</span>}
+    <div className={styles.container}>
+      <button className={styles.backBtn} onClick={() => router.back()}>
+        ← Back
+      </button>
+
+      <h1 className={styles.pageTitle}>📈 Portfolio Manager</h1>
+
+      {/* KPI */}
+      <div className={styles.kpiGrid}>
+        <div className={styles.card}>
+          <span>Total Invest</span>
+          <h2>₹{totalInvest.toLocaleString()}</h2>
         </div>
-        {error && <p className={styles.warning}>{error}</p>}
-      </section>
+        <div className={styles.card}>
+          <span>Current Invest</span>
+          <h2>₹{totals.currentInvest.toLocaleString()}</h2>
+        </div>
+        <div className={styles.card}>
+          <span>Total Profit / Loss</span>
+          <h2 style={{ color: totals.totalPL >= 0 ? "green" : "red" }}>
+            ₹{totals.totalPL.toLocaleString()}
+          </h2>
+        </div>
+        <div className={styles.card}>
+          <span>Total Stocks</span>
+          <h2>{totals.totalStocks}</h2>
+        </div>
+      </div>
 
-      <section className={styles.actionsRow}>
-        <button className={styles.actionBtn} onClick={addHolding}>+ Add Holding</button>
-        <button className={styles.actionBtn} onClick={savePortfolio}>Save to Firebase</button>
-        {saveMessage && <span className={styles.saveMsg}>{saveMessage}</span>}
-      </section>
+      {/* FORM */}
+      <form onSubmit={addTrade} className={styles.addForm}>
+        <input
+          list="symbolList"
+          placeholder="Symbol"
+          value={form.symbol}
+          onChange={(e) => {
+            const val = e.target.value.toUpperCase();
+            setForm({ ...form, symbol: val, companyName: companyList[val] || "" });
+          }}
+          required
+        />
+        <datalist id="symbolList">
+          {Object.keys(companyList).map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
 
-      <section className={styles.kpiGrid}>
-        <article className={styles.kpiCard}>
-          <h3>Total Invested</h3>
-          <strong>${totals.invested.toFixed(2)}</strong>
-        </article>
-        <article className={styles.kpiCard}>
-          <h3>Current Value</h3>
-          <strong>${totals.value.toFixed(2)}</strong>
-        </article>
-        <article className={styles.kpiCard}>
-          <h3>Net P/L</h3>
-          <strong className={totalPnl >= 0 ? styles.positive : styles.negative}>
-            ${totalPnl.toFixed(2)}
-          </strong>
-        </article>
-      </section>
+        <input
+          placeholder="Company Name"
+          value={form.companyName}
+          onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+          required
+        />
 
-      <section className={styles.contentGrid}>
-        <article className={styles.panel}>
-          <h2>Holdings (Editable)</h2>
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Qty</th>
-                  <th>Avg Price</th>
-                  <th>Current</th>
-                  <th>Invested</th>
-                  <th>Value</th>
-                  <th>P/L</th>
-                  <th>Action</th>
+        <select
+          value={form.stockType}
+          onChange={(e) => setForm({ ...form, stockType: e.target.value })}
+        >
+          <option>Equity</option>
+          <option>ETF</option>
+          <option>Crypto</option>
+        </select>
+
+        <input
+          type="number"
+          placeholder="Qty"
+          value={form.qty}
+          onChange={(e) => setForm({ ...form, qty: e.target.value })}
+          required
+        />
+        <input
+          type="number"
+          placeholder="Price"
+          value={form.price}
+          onChange={(e) => setForm({ ...form, price: e.target.value })}
+          required
+        />
+        <input
+          type="datetime-local"
+          value={form.date}
+          onChange={(e) => setForm({ ...form, date: e.target.value })}
+        />
+        <select
+          value={form.action}
+          onChange={(e) => setForm({ ...form, action: e.target.value })}
+        >
+          <option value="BUY">BUY</option>
+          <option value="SELL">SELL</option>
+        </select>
+
+        <button type="submit">Add Trade</button>
+      </form>
+
+      {/* TABLE */}
+      <div className={styles.tableWrapper}>
+        <h3>Transaction History</h3>
+        <div className={styles.scrollTable}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Company</th>
+                <th>Symbol</th>
+                <th>Type</th>
+                <th>Action</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Total Amount</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((t, i) => (
+                <tr key={i}>
+                  <td>{t.action === "BUY" ? "🟢" : "🔴"}</td>
+                  <td>{t.companyName}</td>
+                  <td>{t.symbol}</td>
+                  <td>{t.stockType}</td>
+                  <td style={{ color: t.action === "BUY" ? "green" : "red" }}>
+                    {t.action}
+                  </td>
+                  <td>{t.qty}</td>
+                  <td>₹{Number(t.price).toFixed(2)}</td>
+                  <td>₹{(Number(t.qty) * Number(t.price)).toFixed(2)}</td>
+                  <td>
+                    {new Date(
+                      t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt
+                    ).toLocaleString()}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, idx) => (
-                  <tr key={`${row.symbol}-${idx}`}>
-                    <td>
-                      <input value={row.symbol} onChange={(e) => updateHolding(idx, "symbol", e.target.value)} />
-                    </td>
-                    <td>
-                      <input value={row.name} onChange={(e) => updateHolding(idx, "name", e.target.value)} />
-                    </td>
-                    <td>
-                      <select value={row.type} onChange={(e) => updateHolding(idx, "type", e.target.value)}>
-                        <option>Stock</option>
-                        <option>ETF</option>
-                        <option>Crypto</option>
-                      </select>
-                    </td>
-                    <td>
-                      <input type="number" value={row.qty} onChange={(e) => updateHolding(idx, "qty", e.target.value)} />
-                    </td>
-                    <td>
-                      <input type="number" value={row.avgPrice} onChange={(e) => updateHolding(idx, "avgPrice", e.target.value)} />
-                    </td>
-                    <td>
-                      ${row.currentPrice.toFixed(2)}
-                      <span className={row.change >= 0 ? styles.positive : styles.negative}>
-                        {row.change >= 0 ? " ▲" : " ▼"}
-                        {Math.abs(row.change).toFixed(2)}%
-                      </span>
-                    </td>
-                    <td>${row.invested.toFixed(2)}</td>
-                    <td>${row.marketValue.toFixed(2)}</td>
-                    <td className={row.pnl >= 0 ? styles.positive : styles.negative}>${row.pnl.toFixed(2)}</td>
-                    <td>
-                      <button className={styles.removeBtn} onClick={() => removeHolding(idx)}>Remove</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className={styles.panel}>
-          <h2>Portfolio Allocation (Value)</h2>
-          <MiniBarChart rows={rows} />
-        </article>
-      </section>
-    </main>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }

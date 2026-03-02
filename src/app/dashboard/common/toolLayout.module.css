@@ -41,8 +41,10 @@
 
 /* HEADER */
 .backBtn {
-  background: none;
-  border: none;
+  background: #ffffff;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
   color: #2563eb;
   font-weight: 600;
   cursor: pointer;
