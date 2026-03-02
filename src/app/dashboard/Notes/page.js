@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { logToolUsage } from "@/lib/firestore";
 import {
   getFirestore,
   collection,
@@ -46,8 +47,15 @@ export default function NotesDashboard() {
 
   /* ================= AUTH GUARD ================= */
   useEffect(() => {
-    if (!user) router.replace("/login");
-  }, [user, router]);
+  if (!user) router.replace("/login");
+
+  if (user) {
+    logToolUsage({
+      userId: user.uid,
+      tool: "Notes Dashboard - Page Visit",
+    });
+  }
+}, [user, router]);
 
   /* ================= LOAD DATA ================= */
   const loadFolders = async () => {
@@ -255,4 +263,5 @@ export default function NotesDashboard() {
       </div>
     </main>
   );
+
 }
