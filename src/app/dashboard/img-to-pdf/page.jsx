@@ -67,8 +67,9 @@ export default function ImgToPdfPage() {
       await logToolUsage({
         userId: user.uid,
         tool: "image-to-pdf",
-        imageCount: pdf.getNumberOfPages(),
+        imageCount: images.length,
         totalSizeKB: Math.round(blob.size / 1024),
+        imageType: "multiple",
       });
     }
 

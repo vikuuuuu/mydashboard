@@ -29,7 +29,7 @@ export default function UsageHistory({ userId, tool }) {
           where("userId", "==", userId),
           where("tool", "==", tool), // ✅ FILTER BY TOOL
           orderBy("createdAt", "desc"),
-          limit(10)
+          limit(10),
         );
 
         const snap = await getDocs(q);
@@ -38,7 +38,7 @@ export default function UsageHistory({ userId, tool }) {
           snap.docs.map((d) => ({
             id: d.id,
             ...d.data(),
-          }))
+          })),
         );
       } catch (err) {
         console.error("History error:", err);
@@ -79,16 +79,28 @@ export default function UsageHistory({ userId, tool }) {
 
       {history.map((h) => (
         <div key={h.id} className={styles.historyItem}>
-          <p>
+          <p className={styles.toolName}>
             <strong>{toolLabel[h.tool] || h.tool}</strong>
           </p>
-          <small>
-            {h.imageCount} images · {h.totalSizeKB} KB
-          </small>
-          <br />
-          <small className={styles.dateText}>
-            {formatDate(h.createdAt)}
-          </small>
+
+          <div className={styles.metaLine}>
+            {h.imageCount && <span>{h.imageCount} images</span>}
+            {h.totalSizeKB && <span> · {h.totalSizeKB} KB</span>}
+          </div>
+
+          <div className={styles.metaLine}>
+            {h.imageType && <span>Type: {h.imageType}</span>}
+            {h.convertType && <span> → {h.convertType}</span>}
+            {h.width && h.height && (
+              <span>
+                {" "}
+                · {h.width}×{h.height}px
+              </span>
+            )}
+            {h.videoType && <span> · video: {h.videoType}</span>}
+          </div>
+
+          <small className={styles.dateText}>{formatDate(h.createdAt)}</small>
         </div>
       ))}
     </aside>

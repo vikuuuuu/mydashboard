@@ -70,6 +70,7 @@ export default function VideoToImagePage() {
           tool: "video-to-image",
           imageCount: captured.length,
           totalSizeKB: Math.round(videoFile.size / 1024),
+          videoType: videoFile.type.split("/")[1],
         });
       }
     } catch (err) {
@@ -186,7 +187,6 @@ export default function VideoToImagePage() {
         {/* RIGHT – HISTORY */}
 
         <UsageHistory userId={user?.uid} tool="video-to-image" />
-
       </div>
     </main>
   );
