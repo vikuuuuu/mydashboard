@@ -10,10 +10,25 @@ import Avatar from "../../../public/avatar.png";
 
 const TOOLS = [
   { id: "Notes", title: "Notes", desc: "Create & Export Notes" },
-  { id: "private_video_chat", title: "Private Video Chat", desc: "Secure video calls and  it working on same Network." },
+  {
+    id: "myfinancials",
+    title: "My Financials",
+    desc: "Track investments & profit",
+  },
   { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images to PDF" },
+  {
+    id: "image-resize-pixal",
+    title: "Image Resize Pixal",
+    desc: "Resize images to specific dimensions",
+  },
+  { id: "img-convert", title: "Image type Convert", desc: "Convert images to different types" },
+  { id: "img-compress", title: "Image Compress", desc: "Compress images to reduce file size" },
   { id: "video-to-img", title: "Video to Image", desc: "Capture video frames" },
-  { id: "myfinancials", title: "My Financials", desc: "Track investments & profit" },
+  {
+    id: "private_video_chat",
+    title: "Private Video Chat",
+    desc: "Secure video calls and  it working on same Network.",
+  },
 ];
 
 export default function DashboardPage() {
@@ -53,14 +68,8 @@ export default function DashboardPage() {
           <h1>Dashboard</h1>
         </div>
 
-        <div
-          className={styles.profile}
-          onClick={() => setOpenMenu(!openMenu)}
-        >
-          <img
-            src={user.photoURL || Avatar.src}
-            alt="profile"
-          />
+        <div className={styles.profile} onClick={() => setOpenMenu(!openMenu)}>
+          <img src={user.photoURL || Avatar.src} alt="profile" />
           <span>{user.displayName || user.email}</span>
 
           {openMenu && (
