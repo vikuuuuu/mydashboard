@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Toaster, toast } from "react-hot-toast";
 import { auth } from "@/lib/firebaseAuth";
 import {
   getCurrentUser,
   signInWithEmail,
   signInWithGoogle,
+  changePassword,
 } from "@/lib/firebaseAuth";
+
 import { logLogin } from "@/lib/loginlogger";
 import styles from "./login.module.css";
 
@@ -16,8 +19,8 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   /* ================= AUTO REDIRECT ================= */
   useEffect(() => {
@@ -30,8 +33,8 @@ export default function LoginPage() {
   /* ================= EMAIL LOGIN ================= */
   const handleEmailLogin = async (e) => {
     e.preventDefault();
+
     setLoading(true);
-    setError("");
 
     try {
       await signInWithEmail(email.trim(), password);
@@ -41,9 +44,10 @@ export default function LoginPage() {
         provider: "email",
       });
 
+      toast.success("Login successful");
       router.replace("/dashboard");
     } catch (err) {
-      setError("Invalid email or password");
+      toast.error("Invalid email or password");
     } finally {
       setLoading(false);
     }
@@ -52,7 +56,6 @@ export default function LoginPage() {
   /* ================= GOOGLE LOGIN ================= */
   const handleGoogleLogin = async () => {
     setLoading(true);
-    setError("");
 
     try {
       await signInWithGoogle();
@@ -62,9 +65,29 @@ export default function LoginPage() {
         provider: "google",
       });
 
+      toast.success("Google login successful");
       router.replace("/dashboard");
     } catch (err) {
-      setError("Google login failed");
+      toast.error("Google login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ================= RESET PASSWORD ================= */
+  const handleResetPassword = async () => {
+    if (!email) {
+      toast.error("Enter your email first");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await changePassword(email);
+      toast.success("Password reset email sent");
+    } catch (err) {
+      toast.error("Failed to send reset email");
     } finally {
       setLoading(false);
     }
@@ -72,13 +95,10 @@ export default function LoginPage() {
 
   return (
     <div className={styles.wrapper}>
+      <Toaster position="top-right" />
       <div className={styles.loginCard}>
         <h1 className={styles.title}>File Dashboard</h1>
-        <p className={styles.subtitle}>
-          Login using Email or Google
-        </p>
-
-        {error && <div className={styles.error}>{error}</div>}
+        <p className={styles.subtitle}>Login using Email or Google</p>
 
         {/* EMAIL LOGIN */}
         <form onSubmit={handleEmailLogin}>
@@ -104,6 +124,16 @@ export default function LoginPage() {
               required
             />
           </div>
+
+          {/* FORGOT PASSWORD */}
+          <button
+            type="button"
+            className={styles.switchMode}
+            onClick={handleResetPassword}
+            disabled={loading}
+          >
+            Forgot Password?
+          </button>
 
           <button className={styles.loginBtn} disabled={loading}>
             {loading ? "Signing in..." : "Login"}
