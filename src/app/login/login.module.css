@@ -3,59 +3,80 @@
   display: grid;
   place-items: center;
   padding: 20px;
-  background: linear-gradient(180deg, #eff6ff, #f8fafc);
+  background: linear-gradient(180deg, #e0f2fe, #f0f9ff);
 }
 
 .loginCard {
   width: min(100%, 420px);
-  background: #fff;
-  border-radius: 14px;
-  border: 1px solid #d9e4ff;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-  padding: 24px;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #dbeafe;
+  box-shadow: 0 15px 40px rgba(15, 23, 42, 0.1);
+  padding: 32px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.loginCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
 }
 
 .title {
   margin: 0;
   text-align: center;
   color: #0f172a;
+  font-size: 1.8rem;
+  font-weight: 700;
 }
 
 .subtitle {
   margin-top: 8px;
   color: #475569;
   text-align: center;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .formGroup {
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .label {
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 600;
   color: #334155;
 }
 
 .input {
   width: 100%;
   margin-top: 6px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid #cbd5e1;
-  border-radius: 10px;
+  border-radius: 12px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 .loginBtn {
-  margin-top: 16px;
+  margin-top: 20px;
   width: 100%;
   border: none;
-  border-radius: 10px;
-  padding: 11px;
+  border-radius: 12px;
+  padding: 12px;
   background: #2563eb;
   color: white;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.loginBtn:hover {
+  background: #1e40af;
+  transform: translateY(-1px);
 }
 
 .switchMode {
@@ -63,42 +84,18 @@
   width: 100%;
   border: none;
   background: transparent;
-  color: #1d4ed8;
-  cursor: pointer;
-}
-
-.error {
-  margin-top: 12px;
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
-  border-radius: 10px;
-  padding: 8px;
-  font-size: 0.85rem;
-}
-.modeSwitch {
-  margin-top: 16px;
-  display: flex;
-  gap: 8px;
-}
-
-.modeSwitch button {
-  flex: 1;
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  cursor: pointer;
+  color: #2563eb;
   font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-.activeTab {
-  background: #2563eb;
-  color: white;
-  border-color: #2563eb;
+.switchMode:hover {
+  color: #1e40af;
 }
+
 .divider {
-  margin: 16px 0;
+  margin: 20px 0;
   text-align: center;
   font-size: 0.85rem;
   color: #64748b;
@@ -107,13 +104,33 @@
 .googleBtn {
   width: 100%;
   border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  padding: 11px;
-  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
 }
 
 .googleBtn:hover {
-  background: #f8fafc;
+  background: #f1f5f9;
+  transform: translateY(-1px);
+}
+
+.success {
+  margin-top: 12px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+  border-radius: 12px;
+  padding: 10px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .loginCard {
+    width: 95%;
+    padding: 24px;
+  }
 }
