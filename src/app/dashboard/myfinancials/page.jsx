@@ -4,13 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logToolUsage } from "@/lib/firestore";
 
-
 import {
   collection,
   getDocs,
   query,
   where,
   addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
   serverTimestamp,
   orderBy,
 } from "firebase/firestore";
@@ -31,6 +33,7 @@ export default function FinancialsPage() {
     price: "",
     action: "BUY",
     date: "",
+    id: null,
   });
 
   const router = useRouter();
@@ -52,50 +55,35 @@ export default function FinancialsPage() {
       orderBy("createdAt", "asc")
     );
     const snap = await getDocs(q);
-    setTransactions(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   };
 
   // ---------------- COMPANY SUGGEST ----------------
   const companyList = useMemo(() => {
     const map = {};
-    transactions.forEach((t) => {
-      map[t.symbol] = t.companyName;
-    });
+    transactions.forEach((t) => { map[t.symbol] = t.companyName; });
     return map;
   }, [transactions]);
 
   // ---------------- FIFO ENGINE ----------------
   const holdings = useMemo(() => {
     const map = {};
-
     transactions.forEach((tx) => {
       const qty = Number(tx.qty);
       const price = Number(tx.price);
-
       if (!map[tx.symbol]) {
-        map[tx.symbol] = {
-          companyName: tx.companyName,
-          lots: [],
-          qty: 0,
-          invested: 0,
-          realized: 0,
-        };
+        map[tx.symbol] = { companyName: tx.companyName, lots: [], qty: 0, invested: 0, realized: 0 };
       }
-
       const stock = map[tx.symbol];
-
       if (tx.action === "BUY") {
         stock.lots.push({ qty, price });
         stock.qty += qty;
         stock.invested += qty * price;
       }
-
       if (tx.action === "SELL") {
         let remaining = qty;
-
         while (remaining > 0 && stock.lots.length > 0) {
           const firstLot = stock.lots[0];
-
           if (firstLot.qty <= remaining) {
             stock.realized += firstLot.qty * (price - firstLot.price);
             stock.invested -= firstLot.qty * firstLot.price;
@@ -112,11 +100,7 @@ export default function FinancialsPage() {
         }
       }
     });
-
-    return Object.entries(map).map(([symbol, data]) => ({
-      symbol,
-      ...data,
-    }));
+    return Object.entries(map).map(([symbol, data]) => ({ symbol, ...data }));
   }, [transactions]);
 
   // ---------------- KPI ----------------
@@ -137,87 +121,110 @@ export default function FinancialsPage() {
       .filter((t) => t.action === "BUY")
       .reduce((sum, t) => sum + Number(t.qty) * Number(t.price), 0) || 0;
 
-  // ---------------- ADD TRADE ----------------
-  const addTrade = async (e) => {
+  // ---------------- SAVE TRADE ----------------
+  const saveTrade = async (e) => {
     e.preventDefault();
-
-    const sellQty = Number(form.qty);
     const symbol = form.symbol.toUpperCase();
-    const currentStock = holdings.find((h) => h.symbol === symbol);
+    const qty = Number(form.qty);
+    const price = Number(form.price);
 
-    if (form.action === "SELL" && (!currentStock || currentStock.qty < sellQty)) {
-      alert("Not enough stock to sell!");
-      return;
+    if (form.action === "SELL") {
+      const currentStock = holdings.find((h) => h.symbol === symbol);
+      if (!currentStock || qty > currentStock.qty) {
+        alert("Not enough stock to sell!");
+        return;
+      }
     }
 
-    await addDoc(collection(db, "transactions"), {
-      userId: user.uid,
-      symbol,
-      companyName: companyList[symbol] || form.companyName,
-      stockType: form.stockType,
-      qty: sellQty,
-      price: Number(form.price),
-      action: form.action,
-      createdAt: form.date ? new Date(form.date) : serverTimestamp(),
-    });
+    if (form.id) {
+      await updateDoc(doc(db, "transactions", form.id), {
+        symbol, companyName: form.companyName, stockType: form.stockType,
+        qty, price, action: form.action,
+        createdAt: form.date ? new Date(form.date) : serverTimestamp(),
+      });
+    } else {
+      await addDoc(collection(db, "transactions"), {
+        userId: user.uid, symbol, companyName: form.companyName,
+        stockType: form.stockType, qty, price, action: form.action,
+        createdAt: form.date ? new Date(form.date) : serverTimestamp(),
+      });
+    }
 
-    setForm({
-      symbol: "",
-      companyName: "",
-      stockType: "Equity",
-      qty: "",
-      price: "",
-      action: "BUY",
-      date: "",
-    });
-
+    setForm({ symbol: "", companyName: "", stockType: "Equity", qty: "", price: "", action: "BUY", date: "", id: null });
     fetchData(user.uid);
 
-     if (user) {
+    if (user) {
       await logToolUsage({
         userId: user.uid,
-        tool: "My Financials - Add Trade",
+        tool: form.id ? "My Financials - Edit Trade" : "My Financials - Add Trade",
       });
     }
   };
 
-  if (loading) return <div className={styles.loader}>Loading...</div>;
+  // ---------------- DELETE ----------------
+  const deleteTrade = async (id) => {
+    if (!window.confirm("Delete this trade?")) return;
+    await deleteDoc(doc(db, "transactions", id));
+    fetchData(user.uid);
+    if (user) await logToolUsage({ userId: user.uid, tool: "My Financials - Delete Trade" });
+  };
+
+  // ---------------- EDIT ----------------
+  const editTrade = (t) => {
+    setForm({
+      symbol: t.symbol, companyName: t.companyName, stockType: t.stockType,
+      qty: t.qty, price: t.price, action: t.action,
+      date: t.createdAt?.seconds
+        ? new Date(t.createdAt.seconds * 1000).toISOString().slice(0, 16)
+        : t.createdAt,
+      id: t.id,
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const formatDate = (createdAt) => {
+    const d = new Date(createdAt?.seconds ? createdAt.seconds * 1000 : createdAt);
+    return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  if (loading) return <div className={styles.loader}>Loading portfolio…</div>;
 
   return (
     <div className={styles.container}>
+
       <button className={styles.backBtn} onClick={() => router.back()}>
         ← Back
       </button>
 
       <h1 className={styles.pageTitle}>📈 Portfolio Manager</h1>
 
-      {/* KPI */}
+      {/* ── KPI CARDS ── */}
       <div className={styles.kpiGrid}>
         <div className={styles.card}>
-          <span>Total Invest</span>
-          <h2>₹{totalInvest.toLocaleString()}</h2>
+          <span>Total Invested</span>
+          <h2>₹{totalInvest.toLocaleString("en-IN")}</h2>
         </div>
         <div className={styles.card}>
-          <span>Current Invest</span>
-          <h2>₹{totals.currentInvest.toLocaleString()}</h2>
+          <span>Current Value</span>
+          <h2>₹{totals.currentInvest.toLocaleString("en-IN")}</h2>
         </div>
         <div className={styles.card}>
-          <span>Total Profit / Loss</span>
-          <h2 style={{ color: totals.totalPL >= 0 ? "green" : "red" }}>
-            ₹{totals.totalPL.toLocaleString()}
+          <span>Realised P&amp;L</span>
+          <h2 style={{ color: totals.totalPL >= 0 ? "var(--buy)" : "var(--sell)" }}>
+            {totals.totalPL >= 0 ? "+" : ""}₹{totals.totalPL.toLocaleString("en-IN")}
           </h2>
         </div>
         <div className={styles.card}>
-          <span>Total Stocks</span>
+          <span>Active Positions</span>
           <h2>{totals.totalStocks}</h2>
         </div>
       </div>
 
-      {/* FORM */}
-      <form onSubmit={addTrade} className={styles.addForm}>
+      {/* ── FORM ── */}
+      <form onSubmit={saveTrade} className={styles.addForm}>
         <input
           list="symbolList"
-          placeholder="Symbol"
+          placeholder="Symbol (e.g. INFY)"
           value={form.symbol}
           onChange={(e) => {
             const val = e.target.value.toUpperCase();
@@ -226,9 +233,7 @@ export default function FinancialsPage() {
           required
         />
         <datalist id="symbolList">
-          {Object.keys(companyList).map((s) => (
-            <option key={s} value={s} />
-          ))}
+          {Object.keys(companyList).map((s) => <option key={s} value={s} />)}
         </datalist>
 
         <input
@@ -238,61 +243,46 @@ export default function FinancialsPage() {
           required
         />
 
- <select
-          value={form.stockType}
-          onChange={(e) => setForm({ ...form, stockType: e.target.value })}
-        >
+        <select value={form.stockType} onChange={(e) => setForm({ ...form, stockType: e.target.value })}>
           <option>Equity</option>
           <option>ETF</option>
           <option>Crypto</option>
         </select>
 
-        <input
-          type="number"
-          placeholder="Qty"
-          value={form.qty}
-          onChange={(e) => setForm({ ...form, qty: e.target.value })}
-          required
-        />
-        <input
-          type="number"
-          placeholder="Price"
-          value={form.price}
-          onChange={(e) => setForm({ ...form, price: e.target.value })}
-          required
-        />
-        <input
-          type="datetime-local"
-          value={form.date}
-          onChange={(e) => setForm({ ...form, date: e.target.value })}
-        />
-        <select
-          value={form.action}
-          onChange={(e) => setForm({ ...form, action: e.target.value })}
-        >
+        <input type="number" placeholder="Qty" value={form.qty}
+          onChange={(e) => setForm({ ...form, qty: e.target.value })} required />
+
+        <input type="number" placeholder="Price (₹)" value={form.price}
+          onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+
+        <input type="datetime-local" value={form.date}
+          onChange={(e) => setForm({ ...form, date: e.target.value })} />
+
+        <select value={form.action} onChange={(e) => setForm({ ...form, action: e.target.value })}>
           <option value="BUY">BUY</option>
           <option value="SELL">SELL</option>
         </select>
 
-        <button type="submit">Add Trade</button>
+        <button type="submit">{form.id ? "Update Trade" : "Add Trade"}</button>
       </form>
 
-      {/* TABLE */}
+      {/* ── TRANSACTION TABLE ── */}
       <div className={styles.tableWrapper}>
         <h3>Transaction History</h3>
         <div className={styles.scrollTable}>
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Status</th>
+                <th></th>
                 <th>Company</th>
                 <th>Symbol</th>
                 <th>Type</th>
                 <th>Action</th>
                 <th>Qty</th>
                 <th>Price</th>
-                <th>Total Amount</th>
+                <th>Total</th>
                 <th>Date</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -300,25 +290,39 @@ export default function FinancialsPage() {
                 <tr key={i}>
                   <td>{t.action === "BUY" ? "🟢" : "🔴"}</td>
                   <td>{t.companyName}</td>
-                  <td>{t.symbol}</td>
+                  <td style={{ fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>{t.symbol}</td>
                   <td>{t.stockType}</td>
-                  <td style={{ color: t.action === "BUY" ? "green" : "red" }}>
+                  <td style={{
+                    fontWeight: 700,
+                    color: t.action === "BUY" ? "var(--buy)" : "var(--sell)",
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: "12px",
+                    letterSpacing: "0.06em"
+                  }}>
                     {t.action}
                   </td>
                   <td>{t.qty}</td>
-                  <td>₹{Number(t.price).toFixed(2)}</td>
-                  <td>₹{(Number(t.qty) * Number(t.price)).toFixed(2)}</td>
-                  <td>
-                    {new Date(
-                      t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt
-                    ).toLocaleString()}
+                  <td>₹{Number(t.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td>₹{(Number(t.qty) * Number(t.price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td style={{ color: "var(--text2)", whiteSpace: "nowrap" }}>{formatDate(t.createdAt)}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className={styles.editBtn} onClick={() => editTrade(t)}>Edit</button>
+                    <button className={styles.deleteBtn} onClick={() => deleteTrade(t.id)}>Delete</button>
                   </td>
                 </tr>
               ))}
+              {transactions.length === 0 && (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: "center", padding: "40px", color: "var(--text2)" }}>
+                    No transactions yet. Add your first trade above.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
     </div>
   );
 }
