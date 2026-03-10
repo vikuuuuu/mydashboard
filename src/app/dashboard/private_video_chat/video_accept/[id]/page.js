@@ -16,7 +16,20 @@ import styles from "./page.module.css";
 import { Mic, MicOff, Video, VideoOff, PhoneOff } from "lucide-react";
 
 const iceServers = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+  ],
 };
 
 export default function VideoAcceptPage() {
@@ -31,21 +44,29 @@ export default function VideoAcceptPage() {
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
 
+  /* ================= JOIN CALL ================= */
+
   useEffect(() => {
     const joinCall = async () => {
       pc.current = new RTCPeerConnection(iceServers);
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
       });
 
       streamRef.current = stream;
       localVideo.current.srcObject = stream;
-      stream.getTracks().forEach((t) => pc.current.addTrack(t, stream));
 
-      pc.current.ontrack = (e) => {
-        remoteVideo.current.srcObject = e.streams[0];
+      stream.getTracks().forEach((track) =>
+        pc.current.addTrack(track, stream)
+      );
+
+      pc.current.ontrack = (event) => {
+        remoteVideo.current.srcObject = event.streams[0];
       };
 
       const roomRef = doc(db, "rooms", id);
@@ -65,16 +86,24 @@ export default function VideoAcceptPage() {
       await pc.current.setLocalDescription(answer);
 
       await updateDoc(roomRef, {
-        answer: { type: answer.type, sdp: answer.sdp },
+        answer: {
+          type: answer.type,
+          sdp: answer.sdp,
+        },
       });
 
-      pc.current.onicecandidate = (e) => {
-        e.candidate &&
+      /* ICE candidates (callee) */
+
+      pc.current.onicecandidate = (event) => {
+        if (event.candidate) {
           addDoc(
             collection(db, "rooms", id, "calleeCandidates"),
-            e.candidate.toJSON()
+            event.candidate.toJSON()
           );
+        }
       };
+
+      /* Listen for end call */
 
       onSnapshot(doc(db, "rooms", id), (snap) => {
         if (snap.data()?.status === "ended") {
@@ -82,13 +111,15 @@ export default function VideoAcceptPage() {
         }
       });
 
+      /* Listen for caller ICE */
+
       onSnapshot(
         collection(db, "rooms", id, "callerCandidates"),
-        (snap) =>
-          snap.docChanges().forEach((c) => {
-            if (c.type === "added" && pc.current) {
+        (snapshot) =>
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
               pc.current.addIceCandidate(
-                new RTCIceCandidate(c.doc.data())
+                new RTCIceCandidate(change.doc.data())
               );
             }
           })
@@ -96,14 +127,16 @@ export default function VideoAcceptPage() {
     };
 
     joinCall();
+
     return () => {};
   }, [id]);
 
-  /* ===== Controls ===== */
+  /* ================= CONTROLS ================= */
 
   const toggleMic = () => {
     const track = streamRef.current?.getAudioTracks()[0];
     if (!track) return;
+
     track.enabled = !track.enabled;
     setMicOn(track.enabled);
   };
@@ -111,19 +144,21 @@ export default function VideoAcceptPage() {
   const toggleCamera = () => {
     const track = streamRef.current?.getVideoTracks()[0];
     if (!track) return;
+
     track.enabled = !track.enabled;
     setCamOn(track.enabled);
   };
 
   const endCall = () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     pc.current?.close();
+
     router.push("/dashboard/private_video_chat");
   };
 
   return (
     <div className={styles.container}>
-      {/* Remote video (FULL SCREEN) */}
+      {/* Remote video */}
       <video
         ref={remoteVideo}
         autoPlay
