@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { logToolUsage } from "@/lib/firestore";
 import {
   collection,
   query,
@@ -475,6 +476,16 @@ export default function WhatsAppUI({ onBackToDashboard }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
 
+  //LogToolHistory
+   useEffect(() => {
+    if (currentUser) {
+      logToolUsage({
+        userId: currentUser.uid,
+        tool: "WebChat Page - Real time.",
+      });
+    }
+  }, [currentUser]);
+
   // Responsive check
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -576,4 +587,5 @@ export default function WhatsAppUI({ onBackToDashboard }) {
       </div>
     </>
   );
+
 }
