@@ -25,9 +25,9 @@ export default function PrivateVideoChatPage() {
   return (
     <main className={styles.page}>
       {/* Back */}
-      <button className={styles.backBtn} onClick={() => router.back()}>
-        <ArrowLeft size={16} /> Back
-      </button>
+      <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>
+  <ArrowLeft size={16} /> Back
+</button>
 
       {/* Card */}
       <div className={styles.card}>
@@ -76,4 +76,5 @@ export default function PrivateVideoChatPage() {
   );
 
 }
+
 
