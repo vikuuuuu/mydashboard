@@ -24,6 +24,8 @@ const TOOLS = [
   { id: "img-convert", title: "Image type Convert", desc: "Convert images to different types" },
   { id: "img-compress", title: "Image Compress", desc: "Compress images to reduce file size" },
   { id: "video-to-img", title: "Video to Image", desc: "Capture video frames" },
+  { id: "webchat", title: "Web Chat", desc: "Real-time messaging" },
+
   {
     id: "private_video_chat",
     title: "Private Video Chat",
