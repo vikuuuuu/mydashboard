@@ -22,7 +22,20 @@ import {
 } from "lucide-react";
 
 const iceServers = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+  ],
 };
 
 export default function StreamPage() {
@@ -37,7 +50,6 @@ export default function StreamPage() {
 
   const router = useRouter();
 
-  /* ================= START CALL ================= */
   const startCall = async () => {
     pc.current = new RTCPeerConnection(iceServers);
 
@@ -62,25 +74,32 @@ export default function StreamPage() {
     setRoomId(roomRef.id);
 
     pc.current.onicecandidate = (e) => {
-      e.candidate &&
+      if (e.candidate) {
         addDoc(
           collection(db, "rooms", roomRef.id, "callerCandidates"),
           e.candidate.toJSON()
         );
+      }
     };
 
     const offer = await pc.current.createOffer();
     await pc.current.setLocalDescription(offer);
 
     await setDoc(doc(db, "rooms", roomRef.id), {
-      offer: { type: offer.type, sdp: offer.sdp },
+      offer: offer,
       status: "live",
     });
 
     onSnapshot(doc(db, "rooms", roomRef.id), async (snap) => {
       const data = snap.data();
-      if (data?.answer && !pc.current.currentRemoteDescription) {
-        await pc.current.setRemoteDescription(data.answer);
+
+      if (
+        data?.answer &&
+        !pc.current.currentRemoteDescription
+      ) {
+        await pc.current.setRemoteDescription(
+          new RTCSessionDescription(data.answer)
+        );
       }
     });
 
@@ -89,13 +108,14 @@ export default function StreamPage() {
       (snap) =>
         snap.docChanges().forEach((c) => {
           if (c.type === "added") {
-            pc.current.addIceCandidate(c.doc.data());
+            pc.current.addIceCandidate(
+              new RTCIceCandidate(c.doc.data())
+            );
           }
         })
     );
   };
 
-  /* ================= CONTROLS ================= */
   const toggleMic = () => {
     const track = streamRef.current.getAudioTracks()[0];
     track.enabled = !track.enabled;
@@ -125,16 +145,13 @@ export default function StreamPage() {
 
   return (
     <main className={styles.page}>
-      {/* Back */}
       <button className={styles.backBtn} onClick={() => router.back()}>
         <ArrowLeft size={16} /> Back
       </button>
 
-      {/* Card */}
       <div className={styles.card}>
         <h2 className={styles.title}>Private Video Call</h2>
 
-        {/* Videos */}
         <div className={styles.videoGrid}>
           <div className={styles.videoBox}>
             <span>You</span>
@@ -147,7 +164,6 @@ export default function StreamPage() {
           </div>
         </div>
 
-        {/* Controls */}
         <div className={styles.controls}>
           <button onClick={toggleMic} className={styles.controlBtn}>
             {micOn ? <Mic /> : <MicOff />}
@@ -176,9 +192,9 @@ export default function StreamPage() {
 
         {roomId && (
           <p className={styles.shareText}>
-            Share Room ID with your guest to join:
+            Share Room ID:
             <br />
-            <strong>/watch/{roomId}</strong>
+            <strong>{roomId}</strong>
           </p>
         )}
       </div>
