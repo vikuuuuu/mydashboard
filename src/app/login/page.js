@@ -134,6 +134,12 @@ export default function LoginPage() {
           >
             Forgot Password?
           </button>
+          <button
+ className={styles.switchMode}
+ onClick={()=>router.push("/register")}
+>
+ Create new account
+</button>
 
           <button className={styles.loginBtn} disabled={loading}>
             {loading ? "Signing in..." : "Login"}
