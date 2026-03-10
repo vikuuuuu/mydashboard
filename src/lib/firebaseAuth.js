@@ -3,46 +3,106 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
+  createUserWithEmailAndPassword,
   signOut,
+  sendPasswordResetEmail
 } from "firebase/auth";
-import { app } from "./firebase";
-import { sendPasswordResetEmail } from "firebase/auth";
+
+import {
+  doc,
+  setDoc,
+  serverTimestamp
+} from "firebase/firestore";
+
+import { app, db } from "./firebase";
 
 /* ======================
    AUTH INSTANCE
 ====================== */
+
 export const auth = getAuth(app);
 
 /* ======================
    GET CURRENT USER
 ====================== */
-export const getCurrentUser = () => auth.currentUser;
+
+export const getCurrentUser = () => {
+  return auth.currentUser;
+};
 
 /* ======================
    EMAIL / PASSWORD LOGIN
 ====================== */
-export const signInWithEmail = (email, password) => {
-  return signInWithEmailAndPassword(auth, email, password);
+
+export const signInWithEmail = async (email, password) => {
+  return await signInWithEmailAndPassword(auth, email, password);
 };
 
 /* ======================
    GOOGLE LOGIN
 ====================== */
+
 const googleProvider = new GoogleAuthProvider();
 
-export const signInWithGoogle = () => {
-  return signInWithPopup(auth, googleProvider);
+export const signInWithGoogle = async () => {
+
+  const result = await signInWithPopup(auth, googleProvider);
+  const user = result.user;
+
+  /* Save user in Firestore */
+
+  await setDoc(
+    doc(db, "users", user.uid),
+    {
+      name: user.displayName || "",
+      email: user.email,
+      photoURL: user.photoURL || "",
+      provider: "google",
+      isPrivate: false,
+      createdAt: serverTimestamp(),
+      lastLogin: serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  return result;
 };
 
-// Reset password
+/* ======================
+   REGISTER WITH EMAIL
+====================== */
 
-export const changePassword = (email) => {
-  return sendPasswordResetEmail(auth, email);
+export const registerWithEmail = async (name, email, password) => {
+
+  const result = await createUserWithEmailAndPassword(auth, email, password);
+
+  const user = result.user;
+
+  await setDoc(doc(db, "users", user.uid), {
+    name: name,
+    email: email,
+    photoURL: "",
+    provider: "email",
+    isPrivate: false,
+    createdAt: serverTimestamp(),
+    lastLogin: serverTimestamp()
+  });
+
+  return result;
+};
+
+/* ======================
+   RESET PASSWORD
+====================== */
+
+export const changePassword = async (email) => {
+  return await sendPasswordResetEmail(auth, email);
 };
 
 /* ======================
    LOGOUT
 ====================== */
-export const signOutUser = () => {
-  return signOut(auth);
+
+export const signOutUser = async () => {
+  return await signOut(auth);
 };
