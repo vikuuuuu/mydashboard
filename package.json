@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1",
-    "firebase": "^12.9.0",
+    "firebase": "^12.10.0",
     "html-to-text": "^9.0.5",
     "jspdf": "^4.2.0",
     "jszip": "^3.10.1",
