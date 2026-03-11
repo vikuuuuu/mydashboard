@@ -131,6 +131,8 @@ export default function LoginPage() {
 
             <hr>
              {/* FORGOT PASSWORD */}
+            <div className={styles.forgetbtn}>
+            
           <button
             type="button"
             className={styles.switchMode}
@@ -146,6 +148,7 @@ export default function LoginPage() {
 >
  Create new account
 </button>
+   </div>
         </form>
 
         <div className={styles.divider}>OR</div>
