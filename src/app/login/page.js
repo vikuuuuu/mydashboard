@@ -125,7 +125,12 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* FORGOT PASSWORD */}
+          <button className={styles.loginBtn} disabled={loading}>
+            {loading ? "Signing in..." : "Login"}
+          </button>
+
+            <hr>
+             {/* FORGOT PASSWORD */}
           <button
             type="button"
             className={styles.switchMode}
@@ -134,16 +139,13 @@ export default function LoginPage() {
           >
             Forgot Password?
           </button>
+              
           <button
  className={styles.switchMode}
  onClick={()=>router.push("/register")}
 >
  Create new account
 </button>
-
-          <button className={styles.loginBtn} disabled={loading}>
-            {loading ? "Signing in..." : "Login"}
-          </button>
         </form>
 
         <div className={styles.divider}>OR</div>
