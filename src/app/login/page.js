@@ -129,7 +129,7 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Login"}
           </button>
 
-            <hr>
+            
              {/* FORGOT PASSWORD */}
             <div className={styles.forgetbtn}>
             
