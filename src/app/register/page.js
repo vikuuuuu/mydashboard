@@ -96,13 +96,22 @@ export default function RegisterPage() {
           </button>
 
         </form>
-<div> Already have an account? 
-        <button
-          className={styles.switchMode}
-          onClick={()=>router.push("/login")}
-        >
-         Login
-        </button></div>
+<div style={{ marginTop: "10px", fontSize: "14px" }}>
+  Already have an account? 
+  <button
+    style={{
+      background: "none",
+      border: "none",
+      color: "blue",
+      cursor: "pointer",
+      textDecoration: "underline",
+      marginLeft: "5px"
+    }}
+    onClick={() => router.push("/login")}
+  >
+    Login
+  </button>
+</div>
 
       </div>
 
