@@ -96,13 +96,13 @@ export default function RegisterPage() {
           </button>
 
         </form>
-<p> Already have an account? </p>
+<div> Already have an account? 
         <button
           className={styles.switchMode}
           onClick={()=>router.push("/login")}
         >
          Login
-        </button>
+        </button></div>
 
       </div>
 
