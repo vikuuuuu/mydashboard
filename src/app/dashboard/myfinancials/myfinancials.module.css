@@ -375,6 +375,237 @@
   padding: 16px 22px;
   margin: 0;
 }
+
+/* ─── TABLE TOP BAR ──────────────────────────────────────── */
+.tableTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ─── TABS ───────────────────────────────────────────────── */
+.tabGroup {
+  display: flex;
+  gap: 6px;
+}
+.tabBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border2);
+  background: transparent;
+  color: var(--text2);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.tabBtn:hover { background: var(--surface3); color: var(--text); }
+.tabAll {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(67,97,238,0.22);
+}
+.tabBuyActive {
+  background: var(--buy-soft);
+  border-color: rgba(15,157,110,0.35);
+  color: var(--buy);
+}
+.tabSellActive {
+  background: var(--sell-soft);
+  border-color: rgba(230,57,70,0.35);
+  color: var(--sell);
+}
+.tabCount {
+  background: rgba(0,0,0,0.08);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+}
+.tabBuyActive  .tabCount { background: rgba(15,157,110,0.15); }
+.tabSellActive .tabCount { background: rgba(230,57,70,0.12); }
+
+/* ─── EXPORT BTN ─────────────────────────────────────────── */
+.exportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border2);
+  background: var(--surface);
+  color: var(--text2);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.exportBtn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(67,97,238,0.22);
+}
+
+/* ─── FILTER BAR ─────────────────────────────────────────── */
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.filterSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  min-width: 220px;
+  transition: border-color 0.18s;
+}
+.filterSearch:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(67,97,238,0.09);
+}
+.filterIcon { font-size: 13px; }
+.filterInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  width: 100%;
+}
+.filterInput::placeholder { color: var(--text3); }
+.filterClear {
+  background: none; border: none;
+  color: var(--text3); cursor: pointer;
+  font-size: 12px; padding: 0 2px; line-height: 1;
+  transition: color 0.15s;
+}
+.filterClear:hover { color: var(--danger); }
+
+.filterDateGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filterLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.filterDate {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.18s;
+}
+.filterDate:focus { border-color: var(--accent); }
+
+.filterSortGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filterSelect {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12.5px;
+  padding: 7px 28px 7px 10px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7ab5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color 0.18s;
+}
+.filterSelect:focus { border-color: var(--accent); }
+
+.sortDirBtn {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text2);
+  font-family: 'DM Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.sortDirBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.clearAllBtn {
+  background: var(--sell-soft);
+  border: 1.5px solid rgba(230,57,70,0.22);
+  border-radius: var(--radius-sm);
+  color: var(--sell);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.clearAllBtn:hover { background: rgba(230,57,70,0.18); }
+
+.resultCount {
+  font-family: 'DM Mono', monospace;
+  font-size: 11.5px;
+  color: var(--text3);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ─── SORTABLE TH ────────────────────────────────────────── */
+.thSort {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.thSort:hover { color: var(--accent); }
+.sortNeutral { color: var(--text3); margin-left: 4px; font-size: 11px; }
+.sortActive  { color: var(--accent); margin-left: 4px; font-size: 11px; }
+
 .scrollTable {
   overflow-x: auto;
 }
@@ -486,11 +717,8 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
-.monoCell {
-  font-family: 'DM Mono', monospace;
-  font-size: 13px;
-  color: var(--text);
-}
+
+
 
 .chargesCell {
   color: var(--charges) !important;
