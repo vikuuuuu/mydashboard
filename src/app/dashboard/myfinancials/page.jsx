@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { logToolUsage } from "@/lib/firestore";
+
 import {
   collection,
   getDocs,
@@ -14,7 +16,6 @@ import {
   serverTimestamp,
   orderBy,
 } from "firebase/firestore";
-
 import { db } from "@/lib/firebase";
 import { getCurrentUser } from "@/lib/firebaseAuth";
 import styles from "./myfinancials.module.css";
@@ -30,7 +31,7 @@ export default function FinancialsPage() {
     stockType: "Equity",
     qty: "",
     price: "",
-    charges: "",
+    charges: "", // ✅ NEW
     action: "BUY",
     date: "",
     id: null,
@@ -38,6 +39,7 @@ export default function FinancialsPage() {
 
   const router = useRouter();
 
+  // ---------------- FETCH ----------------
   useEffect(() => {
     const currentUser = getCurrentUser();
     if (currentUser) {
@@ -57,23 +59,23 @@ export default function FinancialsPage() {
     setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   };
 
-  // FIFO ENGINE
+  // ---------------- COMPANY SUGGEST ----------------
+  const companyList = useMemo(() => {
+    const map = {};
+    transactions.forEach((t) => { map[t.symbol] = t.companyName; });
+    return map;
+  }, [transactions]);
+
+  // ---------------- FIFO ENGINE ----------------
   const holdings = useMemo(() => {
     const map = {};
-
     transactions.forEach((tx) => {
       const qty = Number(tx.qty);
       const price = Number(tx.price);
       const charges = Number(tx.charges || 0);
 
       if (!map[tx.symbol]) {
-        map[tx.symbol] = {
-          companyName: tx.companyName,
-          lots: [],
-          qty: 0,
-          invested: 0,
-          realized: 0,
-        };
+        map[tx.symbol] = { companyName: tx.companyName, lots: [], qty: 0, invested: 0, realized: 0 };
       }
 
       const stock = map[tx.symbol];
@@ -81,11 +83,7 @@ export default function FinancialsPage() {
       if (tx.action === "BUY") {
         const totalCost = qty * price + charges;
 
-        stock.lots.push({
-          qty,
-          price: totalCost / qty,
-        });
-
+        stock.lots.push({ qty, price: totalCost / qty });
         stock.qty += qty;
         stock.invested += totalCost;
       }
@@ -113,16 +111,14 @@ export default function FinancialsPage() {
           }
         }
 
-        stock.realized -= charges;
+        stock.realized -= charges; // ✅ NEW
       }
     });
 
-    return Object.entries(map).map(([symbol, data]) => ({
-      symbol,
-      ...data,
-    }));
+    return Object.entries(map).map(([symbol, data]) => ({ symbol, ...data }));
   }, [transactions]);
 
+  // ---------------- KPI ----------------
   const totals = useMemo(() => {
     return holdings.reduce(
       (acc, h) => {
@@ -142,30 +138,40 @@ export default function FinancialsPage() {
         (sum, t) =>
           sum +
           Number(t.qty) * Number(t.price) +
-          Number(t.charges || 0),
+          Number(t.charges || 0), // ✅ NEW
         0
       ) || 0;
 
-  // SAVE
+  // ---------------- SAVE TRADE ----------------
   const saveTrade = async (e) => {
     e.preventDefault();
 
-    const data = {
-      userId: user.uid,
-      symbol: form.symbol.toUpperCase(),
-      companyName: form.companyName,
-      stockType: form.stockType,
-      qty: Number(form.qty),
-      price: Number(form.price),
-      charges: Number(form.charges || 0),
-      action: form.action,
-      createdAt: form.date ? new Date(form.date) : serverTimestamp(),
-    };
+    const symbol = form.symbol.toUpperCase();
+    const qty = Number(form.qty);
+    const price = Number(form.price);
+    const charges = Number(form.charges || 0);
+
+    if (form.action === "SELL") {
+      const currentStock = holdings.find((h) => h.symbol === symbol);
+      if (!currentStock || qty > currentStock.qty) {
+        alert("Not enough stock to sell!");
+        return;
+      }
+    }
 
     if (form.id) {
-      await updateDoc(doc(db, "transactions", form.id), data);
+      await updateDoc(doc(db, "transactions", form.id), {
+        symbol, companyName: form.companyName, stockType: form.stockType,
+        qty, price, charges, action: form.action,
+        createdAt: form.date ? new Date(form.date) : serverTimestamp(),
+      });
     } else {
-      await addDoc(collection(db, "transactions"), data);
+      await addDoc(collection(db, "transactions"), {
+        userId: user.uid, symbol, companyName: form.companyName,
+        stockType: form.stockType, qty, price, charges,
+        action: form.action,
+        createdAt: form.date ? new Date(form.date) : serverTimestamp(),
+      });
     }
 
     setForm({
@@ -181,33 +187,48 @@ export default function FinancialsPage() {
     });
 
     fetchData(user.uid);
+
+    if (user) {
+      await logToolUsage({
+        userId: user.uid,
+        tool: form.id ? "Edit Trade" : "Add Trade",
+      });
+    }
   };
 
+  // ---------------- DELETE ----------------
   const deleteTrade = async (id) => {
+    if (!window.confirm("Delete this trade?")) return;
     await deleteDoc(doc(db, "transactions", id));
     fetchData(user.uid);
   };
 
-  if (loading) return <div className={styles.loader}>Loading...</div>;
+  const formatDate = (createdAt) => {
+    const d = new Date(createdAt?.seconds ? createdAt.seconds * 1000 : createdAt);
+    return d.toLocaleString("en-IN");
+  };
+
+  if (loading) return <div>Loading...</div>;
 
   return (
     <div className={styles.container}>
-      <button onClick={() => router.back()} className={styles.backBtn}>
-        ← Back
-      </button>
 
-      <h1 className={styles.title}>Portfolio Manager</h1>
+      <button onClick={() => router.back()} className={styles.backBtn}>← Back</button>
+
+      <h1 className={styles.pageTitle}>📈 Portfolio Manager</h1>
 
       {/* KPI */}
-      <div className={styles.grid}>
+      <div className={styles.kpiGrid}>
         <div className={styles.card}>
           <span>Total Invested</span>
           <h2>₹{totalInvest.toFixed(2)}</h2>
         </div>
+
         <div className={styles.card}>
-          <span>Current Invest</span>
+          <span>Current Value</span>
           <h2>₹{totals.currentInvest.toFixed(2)}</h2>
         </div>
+
         <div className={styles.card}>
           <span>P&L</span>
           <h2 style={{ color: totals.totalPL >= 0 ? "green" : "red" }}>
@@ -217,59 +238,26 @@ export default function FinancialsPage() {
       </div>
 
       {/* FORM */}
-      <form onSubmit={saveTrade} className={styles.form}>
-        <input
-          placeholder="Symbol"
-          value={form.symbol}
-          onChange={(e) =>
-            setForm({ ...form, symbol: e.target.value })
-          }
-          required
-        />
+      <form onSubmit={saveTrade} className={styles.addForm}>
+        <input placeholder="Symbol" value={form.symbol}
+          onChange={(e) => setForm({ ...form, symbol: e.target.value })} required />
 
-        <input
-          placeholder="Company"
-          value={form.companyName}
-          onChange={(e) =>
-            setForm({ ...form, companyName: e.target.value })
-          }
-        />
+        <input placeholder="Company" value={form.companyName}
+          onChange={(e) => setForm({ ...form, companyName: e.target.value })} />
 
-        <input
-          type="number"
-          placeholder="Qty"
-          value={form.qty}
-          onChange={(e) =>
-            setForm({ ...form, qty: e.target.value })
-          }
-          required
-        />
+        <input type="number" placeholder="Qty" value={form.qty}
+          onChange={(e) => setForm({ ...form, qty: e.target.value })} required />
 
-        <input
-          type="number"
-          placeholder="Price"
-          value={form.price}
-          onChange={(e) =>
-            setForm({ ...form, price: e.target.value })
-          }
-          required
-        />
+        <input type="number" placeholder="Price" value={form.price}
+          onChange={(e) => setForm({ ...form, price: e.target.value })} required />
 
-        <input
-          type="number"
-          placeholder="Charges"
+        {/* ✅ NEW FIELD */}
+        <input type="number" placeholder="Charges"
           value={form.charges}
-          onChange={(e) =>
-            setForm({ ...form, charges: e.target.value })
-          }
-        />
+          onChange={(e) => setForm({ ...form, charges: e.target.value })} />
 
-        <select
-          value={form.action}
-          onChange={(e) =>
-            setForm({ ...form, action: e.target.value })
-          }
-        >
+        <select value={form.action}
+          onChange={(e) => setForm({ ...form, action: e.target.value })}>
           <option value="BUY">BUY</option>
           <option value="SELL">SELL</option>
         </select>
@@ -284,11 +272,12 @@ export default function FinancialsPage() {
             <th>Symbol</th>
             <th>Qty</th>
             <th>Price</th>
-            <th>Charges</th>
+            <th>Charges</th> {/* NEW */}
             <th>Action</th>
             <th>Total</th>
           </tr>
         </thead>
+
         <tbody>
           {transactions.map((t) => (
             <tr key={t.id}>
@@ -298,16 +287,13 @@ export default function FinancialsPage() {
               <td>₹{t.charges || 0}</td>
               <td>{t.action}</td>
               <td>
-                ₹
-                {(
-                  t.qty * t.price +
-                  (t.action === "BUY" ? t.charges || 0 : 0)
-                ).toFixed(2)}
+                ₹{(t.qty * t.price + (t.charges || 0)).toFixed(2)}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
     </div>
   );
 }
