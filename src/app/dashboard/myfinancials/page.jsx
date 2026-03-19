@@ -1,1 +1,531 @@
-"use client"; import { useEffect, useMemo, useState } from "react"; import { useRouter } from "next/navigation"; import { logToolUsage } from "@/lib/firestore"; import { collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, } from "firebase/firestore"; import { db } from "@/lib/firebase"; import { getCurrentUser } from "@/lib/firebaseAuth"; import styles from "./myfinancials.module.css"; export default function FinancialsPage() { const [user, setUser] = useState(null); const [transactions, setTransactions] = useState([]); const [loading, setLoading] = useState(true); const [form, setForm] = useState({ symbol: "", companyName: "", stockType: "Equity", qty: "", price: "", action: "BUY", date: "", id: null, }); const router = useRouter(); // ---------------- FETCH ---------------- useEffect(() => { const currentUser = getCurrentUser(); if (currentUser) { setUser(currentUser); fetchData(currentUser.uid); } setLoading(false); }, []); const fetchData = async (uid) => { const q = query( collection(db, "transactions"), where("userId", "==", uid), orderBy("createdAt", "asc") ); const snap = await getDocs(q); setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); }; // ---------------- COMPANY SUGGEST ---------------- const companyList = useMemo(() => { const map = {}; transactions.forEach((t) => { map[t.symbol] = t.companyName; }); return map; }, [transactions]); // ---------------- FIFO ENGINE ---------------- const holdings = useMemo(() => { const map = {}; transactions.forEach((tx) => { const qty = Number(tx.qty); const price = Number(tx.price); if (!map[tx.symbol]) { map[tx.symbol] = { companyName: tx.companyName, lots: [], qty: 0, invested: 0, realized: 0 }; } const stock = map[tx.symbol]; if (tx.action === "BUY") { stock.lots.push({ qty, price }); stock.qty += qty; stock.invested += qty * price; } if (tx.action === "SELL") { let remaining = qty; while (remaining > 0 && stock.lots.length > 0) { const firstLot = stock.lots[0]; if (firstLot.qty <= remaining) { stock.realized += firstLot.qty * (price - firstLot.price); stock.invested -= firstLot.qty * firstLot.price; remaining -= firstLot.qty; stock.qty -= firstLot.qty; stock.lots.shift(); } else { stock.realized += remaining * (price - firstLot.price); stock.invested -= remaining * firstLot.price; firstLot.qty -= remaining; stock.qty -= remaining; remaining = 0; } } } }); return Object.entries(map).map(([symbol, data]) => ({ symbol, ...data })); }, [transactions]); // ---------------- KPI ---------------- const totals = useMemo(() => { return holdings.reduce( (acc, h) => { if (h.qty > 0) acc.currentInvest += h.invested; acc.totalPL += h.realized; if (h.qty > 0) acc.totalStocks += 1; return acc; }, { currentInvest: 0, totalPL: 0, totalStocks: 0 } ); }, [holdings]); const totalInvest = transactions .filter((t) => t.action === "BUY") .reduce((sum, t) => sum + Number(t.qty) * Number(t.price), 0) || 0; // ---------------- SAVE TRADE ---------------- const saveTrade = async (e) => { e.preventDefault(); const symbol = form.symbol.toUpperCase(); const qty = Number(form.qty); const price = Number(form.price); if (form.action === "SELL") { const currentStock = holdings.find((h) => h.symbol === symbol); if (!currentStock || qty > currentStock.qty) { alert("Not enough stock to sell!"); return; } } if (form.id) { await updateDoc(doc(db, "transactions", form.id), { symbol, companyName: form.companyName, stockType: form.stockType, qty, price, action: form.action, createdAt: form.date ? new Date(form.date) : serverTimestamp(), }); } else { await addDoc(collection(db, "transactions"), { userId: user.uid, symbol, companyName: form.companyName, stockType: form.stockType, qty, price, action: form.action, createdAt: form.date ? new Date(form.date) : serverTimestamp(), }); } setForm({ symbol: "", companyName: "", stockType: "Equity", qty: "", price: "", action: "BUY", date: "", id: null }); fetchData(user.uid); if (user) { await logToolUsage({ userId: user.uid, tool: form.id ? "My Financials - Edit Trade" : "My Financials - Add Trade", }); } }; // ---------------- DELETE ---------------- const deleteTrade = async (id) => { if (!window.confirm("Delete this trade?")) return; await deleteDoc(doc(db, "transactions", id)); fetchData(user.uid); if (user) await logToolUsage({ userId: user.uid, tool: "My Financials - Delete Trade" }); }; // ---------------- EDIT ---------------- const editTrade = (t) => { setForm({ symbol: t.symbol, companyName: t.companyName, stockType: t.stockType, qty: t.qty, price: t.price, action: t.action, date: t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toISOString().slice(0, 16) : t.createdAt, id: t.id, }); window.scrollTo({ top: 0, behavior: "smooth" }); }; const formatDate = (createdAt) => { const d = new Date(createdAt?.seconds ? createdAt.seconds * 1000 : createdAt); return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }; if (loading) return <div className={styles.loader}>Loading portfolio…</div>; return ( <div className={styles.container}> <button className={styles.backBtn} onClick={() => router.back()}> ← Back </button> <h1 className={styles.pageTitle}>📈 Portfolio Manager</h1> {/* ── KPI CARDS ── */} <div className={styles.kpiGrid}> <div className={styles.card}> <span>Total Invested</span> <h2>₹{totalInvest.toLocaleString("en-IN")}</h2> </div> <div className={styles.card}> <span>Current Value</span> <h2>₹{totals.currentInvest.toLocaleString("en-IN")}</h2> </div> <div className={styles.card}> <span>Realised P&amp;L</span> <h2 style={{ color: totals.totalPL >= 0 ? "var(--buy)" : "var(--sell)" }}> {totals.totalPL >= 0 ? "+" : ""}₹{totals.totalPL.toLocaleString("en-IN")} </h2> </div> <div className={styles.card}> <span>Active Positions</span> <h2>{totals.totalStocks}</h2> </div> </div> {/* ── FORM ── */} <form onSubmit={saveTrade} className={styles.addForm}> <input list="symbolList" placeholder="Symbol (e.g. INFY)" value={form.symbol} onChange={(e) => { const val = e.target.value.toUpperCase(); setForm({ ...form, symbol: val, companyName: companyList[val] || "" }); }} required /> <datalist id="symbolList"> {Object.keys(companyList).map((s) => <option key={s} value={s} />)} </datalist> <input placeholder="Company Name" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} required /> <select value={form.stockType} onChange={(e) => setForm({ ...form, stockType: e.target.value })}> <option>Equity</option> <option>ETF</option> <option>Crypto</option> </select> <input type="number" placeholder="Qty" value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} required /> <input type="number" placeholder="Price (₹)" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required /> <input type="datetime-local" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /> <select value={form.action} onChange={(e) => setForm({ ...form, action: e.target.value })}> <option value="BUY">BUY</option> <option value="SELL">SELL</option> </select> <button type="submit">{form.id ? "Update Trade" : "Add Trade"}</button> </form> {/* ── TRANSACTION TABLE ── */} <div className={styles.tableWrapper}> <h3>Transaction History</h3> <div className={styles.scrollTable}> <table className={styles.table}> <thead> <tr> <th></th> <th>Company</th> <th>Symbol</th> <th>Type</th> <th>Action</th> <th>Qty</th> <th>Price</th> <th>Total</th> <th>Date</th> <th>Actions</th> </tr> </thead> <tbody> {transactions.map((t, i) => ( <tr key={i}> <td>{t.action === "BUY" ? "🟢" : "🔴"}</td> <td>{t.companyName}</td> <td style={{ fontFamily: "'DM Mono', monospace", color: "#e2e8f0" }}>{t.symbol}</td> <td>{t.stockType}</td> <td style={{ fontWeight: 700, color: t.action === "BUY" ? "var(--buy)" : "var(--sell)", fontFamily: "'DM Mono', monospace", fontSize: "12px", letterSpacing: "0.06em" }}> {t.action} </td> <td>{t.qty}</td> <td>₹{Number(t.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td> <td>₹{(Number(t.qty) * Number(t.price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td> <td style={{ color: "var(--text2)", whiteSpace: "nowrap" }}>{formatDate(t.createdAt)}</td> <td style={{ whiteSpace: "nowrap" }}> <button className={styles.editBtn} onClick={() => editTrade(t)}>Edit</button> <button className={styles.deleteBtn} onClick={() => deleteTrade(t.id)}>Delete</button> </td> </tr> ))} {transactions.length === 0 && ( <tr> <td colSpan={10} style={{ textAlign: "center", padding: "40px", color: "var(--text2)" }}> No transactions yet. Add your first trade above. </td> </tr> )} </tbody> </table> </div> </div> </div> ); }
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { logToolUsage } from "@/lib/firestore";
+
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+  orderBy,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { getCurrentUser } from "@/lib/firebaseAuth";
+import styles from "./myfinancials.module.css";
+
+export default function FinancialsPage() {
+  const [user, setUser] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [form, setForm] = useState({
+    symbol: "",
+    companyName: "",
+    stockType: "Equity",
+    qty: "",
+    price: "",
+    action: "BUY",
+    date: "",
+    brokerage: "",
+    stt: "",
+    otherCharges: "",
+    id: null,
+  });
+
+  const router = useRouter();
+
+  // ---------------- FETCH ----------------
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      setUser(currentUser);
+      fetchData(currentUser.uid);
+    }
+    setLoading(false);
+  }, []);
+
+  const fetchData = async (uid) => {
+    const q = query(
+      collection(db, "transactions"),
+      where("userId", "==", uid),
+      orderBy("createdAt", "asc")
+    );
+    const snap = await getDocs(q);
+    setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  };
+
+  // ---------------- COMPANY SUGGEST ----------------
+  const companyList = useMemo(() => {
+    const map = {};
+    transactions.forEach((t) => { map[t.symbol] = t.companyName; });
+    return map;
+  }, [transactions]);
+
+  // ---------------- FIFO ENGINE ----------------
+  const holdings = useMemo(() => {
+    const map = {};
+    transactions.forEach((tx) => {
+      const qty = Number(tx.qty);
+      const price = Number(tx.price);
+      const totalCharges =
+        Number(tx.brokerage || 0) + Number(tx.stt || 0) + Number(tx.otherCharges || 0);
+
+      if (!map[tx.symbol]) {
+        map[tx.symbol] = {
+          companyName: tx.companyName,
+          lots: [],
+          qty: 0,
+          invested: 0,
+          realized: 0,
+          totalCharges: 0,
+        };
+      }
+      const stock = map[tx.symbol];
+      stock.totalCharges += totalCharges;
+
+      if (tx.action === "BUY") {
+        stock.lots.push({ qty, price });
+        stock.qty += qty;
+        stock.invested += qty * price;
+      }
+      if (tx.action === "SELL") {
+        let remaining = qty;
+        while (remaining > 0 && stock.lots.length > 0) {
+          const firstLot = stock.lots[0];
+          if (firstLot.qty <= remaining) {
+            stock.realized += firstLot.qty * (price - firstLot.price);
+            stock.invested -= firstLot.qty * firstLot.price;
+            remaining -= firstLot.qty;
+            stock.qty -= firstLot.qty;
+            stock.lots.shift();
+          } else {
+            stock.realized += remaining * (price - firstLot.price);
+            stock.invested -= remaining * firstLot.price;
+            firstLot.qty -= remaining;
+            stock.qty -= remaining;
+            remaining = 0;
+          }
+        }
+      }
+    });
+    return Object.entries(map).map(([symbol, data]) => ({ symbol, ...data }));
+  }, [transactions]);
+
+  // ---------------- KPI ----------------
+  const totals = useMemo(() => {
+    return holdings.reduce(
+      (acc, h) => {
+        if (h.qty > 0) acc.currentInvest += h.invested;
+        acc.totalPL += h.realized;
+        if (h.qty > 0) acc.totalStocks += 1;
+        acc.totalCharges += h.totalCharges;
+        return acc;
+      },
+      { currentInvest: 0, totalPL: 0, totalStocks: 0, totalCharges: 0 }
+    );
+  }, [holdings]);
+
+  const totalInvest =
+    transactions
+      .filter((t) => t.action === "BUY")
+      .reduce((sum, t) => sum + Number(t.qty) * Number(t.price), 0) || 0;
+
+  const totalChargesAll = transactions.reduce(
+    (sum, t) =>
+      sum + Number(t.brokerage || 0) + Number(t.stt || 0) + Number(t.otherCharges || 0),
+    0
+  );
+
+  // Net P&L = Realized P&L - Total Charges
+  const netPL = totals.totalPL - totalChargesAll;
+
+  // ---------------- SAVE TRADE ----------------
+  const saveTrade = async (e) => {
+    e.preventDefault();
+    const symbol = form.symbol.toUpperCase();
+    const qty = Number(form.qty);
+    const price = Number(form.price);
+
+    if (form.action === "SELL") {
+      const currentStock = holdings.find((h) => h.symbol === symbol);
+      if (!currentStock || qty > currentStock.qty) {
+        alert("Not enough stock to sell!");
+        return;
+      }
+    }
+
+    const payload = {
+      symbol,
+      companyName: form.companyName,
+      stockType: form.stockType,
+      qty,
+      price,
+      action: form.action,
+      brokerage: Number(form.brokerage || 0),
+      stt: Number(form.stt || 0),
+      otherCharges: Number(form.otherCharges || 0),
+      createdAt: form.date ? new Date(form.date) : serverTimestamp(),
+    };
+
+    if (form.id) {
+      await updateDoc(doc(db, "transactions", form.id), payload);
+    } else {
+      await addDoc(collection(db, "transactions"), {
+        userId: user.uid,
+        ...payload,
+      });
+    }
+
+    setForm({
+      symbol: "",
+      companyName: "",
+      stockType: "Equity",
+      qty: "",
+      price: "",
+      action: "BUY",
+      date: "",
+      brokerage: "",
+      stt: "",
+      otherCharges: "",
+      id: null,
+    });
+    fetchData(user.uid);
+
+    if (user) {
+      await logToolUsage({
+        userId: user.uid,
+        tool: form.id ? "My Financials - Edit Trade" : "My Financials - Add Trade",
+      });
+    }
+  };
+
+  // ---------------- DELETE ----------------
+  const deleteTrade = async (id) => {
+    if (!window.confirm("Delete this trade?")) return;
+    await deleteDoc(doc(db, "transactions", id));
+    fetchData(user.uid);
+    if (user) await logToolUsage({ userId: user.uid, tool: "My Financials - Delete Trade" });
+  };
+
+  // ---------------- EDIT ----------------
+  const editTrade = (t) => {
+    setForm({
+      symbol: t.symbol,
+      companyName: t.companyName,
+      stockType: t.stockType,
+      qty: t.qty,
+      price: t.price,
+      action: t.action,
+      brokerage: t.brokerage || "",
+      stt: t.stt || "",
+      otherCharges: t.otherCharges || "",
+      date: t.createdAt?.seconds
+        ? new Date(t.createdAt.seconds * 1000).toISOString().slice(0, 16)
+        : t.createdAt,
+      id: t.id,
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const formatDate = (createdAt) => {
+    const d = new Date(createdAt?.seconds ? createdAt.seconds * 1000 : createdAt);
+    return d.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  if (loading) return <div className={styles.loader}>Loading portfolio…</div>;
+
+  return (
+    <div className={styles.container}>
+      <button className={styles.backBtn} onClick={() => router.back()}>
+        ← Back
+      </button>
+
+      <h1 className={styles.pageTitle}>📈 Portfolio Manager</h1>
+
+      {/* ── KPI CARDS ── */}
+      <div className={styles.kpiGrid}>
+        <div className={styles.card}>
+          <span>Total Invested</span>
+          <h2>₹{totalInvest.toLocaleString("en-IN")}</h2>
+        </div>
+        <div className={styles.card}>
+          <span>Current Value</span>
+          <h2>₹{totals.currentInvest.toLocaleString("en-IN")}</h2>
+        </div>
+        <div className={`${styles.card} ${totals.totalPL >= 0 ? styles.cardPositive : styles.cardNegative}`}>
+          <span>Realised P&amp;L</span>
+          <h2 style={{ color: totals.totalPL >= 0 ? "var(--buy)" : "var(--sell)" }}>
+            {totals.totalPL >= 0 ? "+" : ""}₹{totals.totalPL.toLocaleString("en-IN")}
+          </h2>
+        </div>
+        <div className={`${styles.card} ${styles.cardCharges}`}>
+          <span>Total Charges</span>
+          <h2 style={{ color: "var(--charges)" }}>
+            −₹{totalChargesAll.toLocaleString("en-IN")}
+          </h2>
+        </div>
+        <div className={`${styles.card} ${netPL >= 0 ? styles.cardPositive : styles.cardNegative}`}>
+          <span>Net P&amp;L (after charges)</span>
+          <h2 style={{ color: netPL >= 0 ? "var(--buy)" : "var(--sell)" }}>
+            {netPL >= 0 ? "+" : ""}₹{netPL.toLocaleString("en-IN")}
+          </h2>
+        </div>
+        <div className={styles.card}>
+          <span>Active Positions</span>
+          <h2>{totals.totalStocks}</h2>
+        </div>
+      </div>
+
+      {/* ── FORM ── */}
+      <div className={styles.formCard}>
+        <h3 className={styles.formTitle}>
+          {form.id ? "✏️ Edit Trade" : "➕ Add Trade"}
+        </h3>
+        <form onSubmit={saveTrade} className={styles.addForm}>
+
+          {/* Row 1: Trade details */}
+          <div className={styles.formRow}>
+            <div className={styles.formGroup}>
+              <label>Symbol</label>
+              <input
+                list="symbolList"
+                placeholder="e.g. INFY"
+                value={form.symbol}
+                onChange={(e) => {
+                  const val = e.target.value.toUpperCase();
+                  setForm({ ...form, symbol: val, companyName: companyList[val] || "" });
+                }}
+                required
+              />
+              <datalist id="symbolList">
+                {Object.keys(companyList).map((s) => <option key={s} value={s} />)}
+              </datalist>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Company Name</label>
+              <input
+                placeholder="Company Name"
+                value={form.companyName}
+                onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Type</label>
+              <select value={form.stockType} onChange={(e) => setForm({ ...form, stockType: e.target.value })}>
+                <option>Equity</option>
+                <option>ETF</option>
+                <option>Crypto</option>
+              </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Action</label>
+              <select
+                value={form.action}
+                onChange={(e) => setForm({ ...form, action: e.target.value })}
+                className={form.action === "BUY" ? styles.selectBuy : styles.selectSell}
+              >
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+              </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Quantity</label>
+              <input
+                type="number"
+                placeholder="0"
+                value={form.qty}
+                onChange={(e) => setForm({ ...form, qty: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Price (₹)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Date & Time</label>
+              <input
+                type="datetime-local"
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Charges */}
+          <div className={styles.chargesDivider}>
+            <span>💸 Charges (optional)</span>
+          </div>
+          <div className={styles.formRow}>
+            <div className={styles.formGroup}>
+              <label>Brokerage (₹)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={form.brokerage}
+                onChange={(e) => setForm({ ...form, brokerage: e.target.value })}
+                min="0"
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>STT (₹)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={form.stt}
+                onChange={(e) => setForm({ ...form, stt: e.target.value })}
+                min="0"
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Other Charges (₹)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={form.otherCharges}
+                onChange={(e) => setForm({ ...form, otherCharges: e.target.value })}
+                min="0"
+              />
+            </div>
+
+            {/* Live charges preview */}
+            {(form.brokerage || form.stt || form.otherCharges) && (
+              <div className={styles.chargesPreview}>
+                <span>Total Charges</span>
+                <strong>
+                  ₹{(
+                    Number(form.brokerage || 0) +
+                    Number(form.stt || 0) +
+                    Number(form.otherCharges || 0)
+                  ).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </strong>
+              </div>
+            )}
+          </div>
+
+          <div className={styles.formActions}>
+            {form.id && (
+              <button
+                type="button"
+                className={styles.cancelBtn}
+                onClick={() =>
+                  setForm({
+                    symbol: "", companyName: "", stockType: "Equity",
+                    qty: "", price: "", action: "BUY", date: "",
+                    brokerage: "", stt: "", otherCharges: "", id: null,
+                  })
+                }
+              >
+                Cancel
+              </button>
+            )}
+            <button type="submit" className={styles.submitBtn}>
+              {form.id ? "Update Trade" : "Add Trade"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* ── TRANSACTION TABLE ── */}
+      <div className={styles.tableWrapper}>
+        <h3>Transaction History</h3>
+        <div className={styles.scrollTable}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Company</th>
+                <th>Symbol</th>
+                <th>Type</th>
+                <th>Action</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Total</th>
+                <th>Brokerage</th>
+                <th>STT</th>
+                <th>Other</th>
+                <th>Charges</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((t, i) => {
+                const charges =
+                  Number(t.brokerage || 0) + Number(t.stt || 0) + Number(t.otherCharges || 0);
+                return (
+                  <tr key={i}>
+                    <td>{t.action === "BUY" ? "🟢" : "🔴"}</td>
+                    <td>{t.companyName}</td>
+                    <td className={styles.monoCell}>{t.symbol}</td>
+                    <td>{t.stockType}</td>
+                    <td>
+                      <span className={t.action === "BUY" ? styles.badgeBuy : styles.badgeSell}>
+                        {t.action}
+                      </span>
+                    </td>
+                    <td className={styles.monoCell}>{t.qty}</td>
+                    <td className={styles.monoCell}>₹{Number(t.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className={styles.monoCell}>₹{(Number(t.qty) * Number(t.price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className={styles.monoCell}>
+                      {t.brokerage > 0 ? `₹${Number(t.brokerage).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={styles.monoCell}>
+                      {t.stt > 0 ? `₹${Number(t.stt).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={styles.monoCell}>
+                      {t.otherCharges > 0 ? `₹${Number(t.otherCharges).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={`${styles.monoCell} ${styles.chargesCell}`}>
+                      {charges > 0 ? `₹${charges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={styles.dateCell}>{formatDate(t.createdAt)}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className={styles.editBtn} onClick={() => editTrade(t)}>Edit</button>
+                      <button className={styles.deleteBtn} onClick={() => deleteTrade(t.id)}>Delete</button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {transactions.length === 0 && (
+                <tr>
+                  <td colSpan={14} className={styles.emptyRow}>
+                    No transactions yet. Add your first trade above.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
