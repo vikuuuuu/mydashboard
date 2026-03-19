@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";import { useRouter } from "next/navigation";
 import { logToolUsage } from "@/lib/firestore";
 
 import {
@@ -415,7 +414,7 @@ export default function FinancialsPage() {
                 <input
                   type="number"
                   placeholder="0.00"
-                
+                  min="0"
                   value={form[field.key]}
                   onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
                 />
@@ -446,69 +445,293 @@ export default function FinancialsPage() {
         </form>
       </div>
 
-      {/* ── TRANSACTION TABLE ── */}
-      <div className={styles.tableWrapper}>
-        <div className={styles.tableHeader}>
-          <h3>Transaction History</h3>
+      <TableSection
+        transactions={transactions}
+        holdings={holdings}
+        editTrade={editTrade}
+        deleteTrade={deleteTrade}
+        formatDate={formatDate}
+        fmt={fmt}
+        sumAllCharges={sumAllCharges}
+      />
+    </div>
+  );
+}
+
+// ─── TABLE SECTION (tabs + filters + export) ──────────────
+function TableSection({ transactions, holdings, editTrade, deleteTrade, formatDate, fmt, sumAllCharges }) {
+  const [tab, setTab]           = useState("ALL");   // ALL | BUY | SELL
+  const [search, setSearch]     = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo]     = useState("");
+  const [sortKey, setSortKey]   = useState("date");  // date | name | symbol | qty | value
+  const [sortDir, setSortDir]   = useState("desc");  // asc | desc
+
+  // ── filtered + sorted list ──
+  const filtered = useMemo(() => {
+    let list = [...transactions];
+
+    // tab filter
+    if (tab !== "ALL") list = list.filter((t) => t.action === tab);
+
+    // search filter (company name or symbol)
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.companyName?.toLowerCase().includes(q) ||
+          t.symbol?.toLowerCase().includes(q),
+      );
+    }
+
+    // date range
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      list = list.filter((t) => {
+        const d = new Date(t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt);
+        return d >= from;
+      });
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      list = list.filter((t) => {
+        const d = new Date(t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt);
+        return d <= to;
+      });
+    }
+
+    // sort
+    list.sort((a, b) => {
+      let va, vb;
+      if (sortKey === "date") {
+        va = a.createdAt?.seconds ? a.createdAt.seconds : new Date(a.createdAt).getTime() / 1000;
+        vb = b.createdAt?.seconds ? b.createdAt.seconds : new Date(b.createdAt).getTime() / 1000;
+      } else if (sortKey === "name")   { va = a.companyName?.toLowerCase(); vb = b.companyName?.toLowerCase(); }
+      else if (sortKey === "symbol")   { va = a.symbol?.toLowerCase();      vb = b.symbol?.toLowerCase(); }
+      else if (sortKey === "qty")      { va = Number(a.qty);                vb = Number(b.qty); }
+      else if (sortKey === "value")    { va = Number(a.qty) * Number(a.price); vb = Number(b.qty) * Number(b.price); }
+      if (va < vb) return sortDir === "asc" ? -1 : 1;
+      if (va > vb) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [transactions, tab, search, dateFrom, dateTo, sortKey, sortDir]);
+
+  // ── sort toggle ──
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  const sortIcon = (key) => {
+    if (sortKey !== key) return <span className={styles.sortNeutral}>⇅</span>;
+    return sortDir === "asc"
+      ? <span className={styles.sortActive}>↑</span>
+      : <span className={styles.sortActive}>↓</span>;
+  };
+
+  // ── CSV export ──
+  const exportCSV = () => {
+    const headers = [
+      "Action","Company","Symbol","Type","Qty","Price","Trade Value",
+      "Brokerage","Exch.Charges","GST","Stamp Duty",
+      "Groww DP","STT","CDSL DP",
+      "Total Charges","Net Amount","Date",
+    ];
+    const rows = filtered.map((t) => {
+      const charges    = sumAllCharges(t);
+      const tradeValue = Number(t.qty) * Number(t.price);
+      const netAmount  = t.action === "BUY" ? tradeValue + charges : tradeValue - charges;
+      const d = new Date(t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt);
+      return [
+        t.action, t.companyName, t.symbol, t.stockType,
+        t.qty, t.price, tradeValue.toFixed(2),
+        t.brokerage || 0, t.exchangeCharges || 0, t.gst || 0, t.stampDuty || 0,
+        t.growwDpCharges || 0, t.stt || 0, t.cdslDpCharges || 0,
+        charges.toFixed(2), netAmount.toFixed(2),
+        d.toLocaleDateString("en-IN"),
+      ];
+    });
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `transactions_${tab.toLowerCase()}_${Date.now()}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const isBuyTab  = tab === "BUY";
+  const isSellTab = tab === "SELL";
+
+  return (
+    <div className={styles.tableWrapper}>
+
+      {/* ── TOP BAR: Tabs + Export ── */}
+      <div className={styles.tableTopBar}>
+        <div className={styles.tabGroup}>
+          <button
+            className={`${styles.tabBtn} ${tab === "ALL" ? styles.tabAll : ""}`}
+            onClick={() => setTab("ALL")}
+          >
+            All <span className={styles.tabCount}>{transactions.length}</span>
+          </button>
+          <button
+            className={`${styles.tabBtn} ${tab === "BUY" ? styles.tabBuyActive : ""}`}
+            onClick={() => setTab("BUY")}
+          >
+            🟢 Buy <span className={styles.tabCount}>{transactions.filter((t) => t.action === "BUY").length}</span>
+          </button>
+          <button
+            className={`${styles.tabBtn} ${tab === "SELL" ? styles.tabSellActive : ""}`}
+            onClick={() => setTab("SELL")}
+          >
+            🔴 Sell <span className={styles.tabCount}>{transactions.filter((t) => t.action === "SELL").length}</span>
+          </button>
         </div>
-        <div className={styles.scrollTable}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th></th>
-                <th>Company</th>
-                <th>Symbol</th>
-                <th>Type</th>
-                <th>Action</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Trade Value</th>
-                {/* BUY-only */}
+
+        <button className={styles.exportBtn} onClick={exportCSV}>
+          ↓ Export CSV
+        </button>
+      </div>
+
+      {/* ── FILTER BAR ── */}
+      <div className={styles.filterBar}>
+        <div className={styles.filterSearch}>
+          <span className={styles.filterIcon}>🔍</span>
+          <input
+            className={styles.filterInput}
+            placeholder="Search company or symbol…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className={styles.filterClear} onClick={() => setSearch("")}>✕</button>
+          )}
+        </div>
+
+        <div className={styles.filterDateGroup}>
+          <label className={styles.filterLabel}>From</label>
+          <input type="date" className={styles.filterDate} value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)} />
+        </div>
+
+        <div className={styles.filterDateGroup}>
+          <label className={styles.filterLabel}>To</label>
+          <input type="date" className={styles.filterDate} value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+
+        <div className={styles.filterSortGroup}>
+          <label className={styles.filterLabel}>Sort by</label>
+          <select
+            className={styles.filterSelect}
+            value={sortKey}
+            onChange={(e) => { setSortKey(e.target.value); setSortDir("asc"); }}
+          >
+            <option value="date">Date</option>
+            <option value="name">Company Name</option>
+            <option value="symbol">Symbol</option>
+            <option value="qty">Quantity</option>
+            <option value="value">Trade Value</option>
+          </select>
+          <button
+            className={styles.sortDirBtn}
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            title={sortDir === "asc" ? "Ascending" : "Descending"}
+          >
+            {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
+          </button>
+        </div>
+
+        {(search || dateFrom || dateTo) && (
+          <button className={styles.clearAllBtn} onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); }}>
+            Clear All
+          </button>
+        )}
+
+        <span className={styles.resultCount}>
+          {filtered.length} of {transactions.length} records
+        </span>
+      </div>
+
+      {/* ── TABLE ── */}
+      <div className={styles.scrollTable}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th></th>
+              <th onClick={() => toggleSort("name")} className={styles.thSort}>
+                Company {sortIcon("name")}
+              </th>
+              <th onClick={() => toggleSort("symbol")} className={styles.thSort}>
+                Symbol {sortIcon("symbol")}
+              </th>
+              <th>Type</th>
+              {tab === "ALL" && <th>Action</th>}
+              <th onClick={() => toggleSort("qty")} className={styles.thSort}>
+                Qty {sortIcon("qty")}
+              </th>
+              <th>Price</th>
+              <th onClick={() => toggleSort("value")} className={styles.thSort}>
+                Trade Value {sortIcon("value")}
+              </th>
+
+              {/* BUY-only charge columns — show when tab is ALL or BUY */}
+              {(tab === "ALL" || tab === "BUY") && <>
                 <th className={styles.thBuy}>Brokerage</th>
                 <th className={styles.thBuy}>Exch. Charges</th>
                 <th className={styles.thBuy}>GST</th>
                 <th className={styles.thBuy}>Stamp Duty</th>
-                {/* SELL-only */}
+              </>}
+
+              {/* SELL-only charge columns — show when tab is ALL or SELL */}
+              {(tab === "ALL" || tab === "SELL") && <>
+                <th className={styles.thSell}>Groww DP</th>
                 <th className={styles.thSell}>STT</th>
                 <th className={styles.thSell}>CDSL DP</th>
-                <th className={styles.thSell}>Groww DP</th>
-                {/* Common total */}
-                <th className={styles.thCharges}>Total Charges</th>
-                <th className={styles.thFinal}>Net Amount</th>
-                <th>Date</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t, i) => {
-                const charges    = sumAllCharges(t);
-                const tradeValue = Number(t.qty) * Number(t.price);
-                // BUY: you pay tradeValue + charges; SELL: you receive tradeValue - charges
-                const netAmount  = t.action === "BUY"
-                  ? tradeValue + charges
-                  : tradeValue - charges;
-                const isBuy = t.action === "BUY";
+                <th className={styles.thSell}>GST (Sell)</th>
+              </>}
 
-                return (
-                  <tr key={i}>
-                    <td>{isBuy ? "🟢" : "🔴"}</td>
-                    <td>{t.companyName}</td>
-                    <td className={styles.monoCell}>{t.symbol}</td>
-                    <td>{t.stockType}</td>
+              <th className={styles.thCharges}>Total Charges</th>
+              <th className={styles.thFinal}>Net Amount</th>
+              <th onClick={() => toggleSort("date")} className={styles.thSort}>
+                Date {sortIcon("date")}
+              </th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((t, i) => {
+              const charges    = sumAllCharges(t);
+              const tradeValue = Number(t.qty) * Number(t.price);
+              const netAmount  = t.action === "BUY" ? tradeValue + charges : tradeValue - charges;
+              const isBuy      = t.action === "BUY";
+
+              return (
+                <tr key={i}>
+                  <td>{isBuy ? "🟢" : "🔴"}</td>
+                  <td>{t.companyName}</td>
+                  <td className={styles.monoCell}>{t.symbol}</td>
+                  <td>{t.stockType}</td>
+                  {tab === "ALL" && (
                     <td>
                       <span className={isBuy ? styles.badgeBuy : styles.badgeSell}>
                         {t.action}
                       </span>
                     </td>
-                    <td className={styles.monoCell}>{t.qty}</td>
-                    <td className={styles.monoCell}>
-                      ₹{Number(t.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className={styles.monoCell}>
-                      ₹{tradeValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </td>
+                  )}
+                  <td className={styles.monoCell}>{t.qty}</td>
+                  <td className={styles.monoCell}>
+                    ₹{Number(t.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className={styles.monoCell}>
+                    ₹{tradeValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </td>
 
-                    {/* BUY-only cols */}
+                  {/* BUY-only cols */}
+                  {(tab === "ALL" || tab === "BUY") && <>
                     <td className={`${styles.monoCell} ${styles.buyCol}`}>
                       {isBuy ? (fmt(t.brokerage) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
@@ -521,8 +744,13 @@ export default function FinancialsPage() {
                     <td className={`${styles.monoCell} ${styles.buyCol}`}>
                       {isBuy ? (fmt(t.stampDuty) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
+                  </>}
 
-                    {/* SELL-only cols */}
+                  {/* SELL-only cols */}
+                  {(tab === "ALL" || tab === "SELL") && <>
+                    <td className={`${styles.monoCell} ${styles.sellCol}`}>
+                      {!isBuy ? (fmt(t.growwDpCharges) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
+                    </td>
                     <td className={`${styles.monoCell} ${styles.sellCol}`}>
                       {!isBuy ? (fmt(t.stt) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
@@ -530,36 +758,38 @@ export default function FinancialsPage() {
                       {!isBuy ? (fmt(t.cdslDpCharges) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
                     <td className={`${styles.monoCell} ${styles.sellCol}`}>
-                      {!isBuy ? (fmt(t.growwDpCharges) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
+                      {!isBuy ? (fmt(t.gst) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
+                  </>}
 
-                    {/* Totals */}
-                    <td className={`${styles.monoCell} ${styles.chargesCell}`}>
-                      {charges > 0
-                        ? `₹${charges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
-                        : <span className={styles.nilCell}>—</span>}
-                    </td>
-                    <td className={`${styles.monoCell} ${styles.finalCell}`}>
-                      ₹{netAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className={styles.dateCell}>{formatDate(t.createdAt)}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      <button className={styles.editBtn} onClick={() => editTrade(t)}>Edit</button>
-                      <button className={styles.deleteBtn} onClick={() => deleteTrade(t.id)}>Delete</button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {transactions.length === 0 && (
-                <tr>
-                  <td colSpan={19} className={styles.emptyRow}>
-                    No transactions yet. Add your first trade above.
+                  {/* Totals */}
+                  <td className={`${styles.monoCell} ${styles.chargesCell}`}>
+                    {charges > 0
+                      ? `₹${charges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+                      : <span className={styles.nilCell}>—</span>}
+                  </td>
+                  <td className={`${styles.monoCell} ${styles.finalCell}`}>
+                    ₹{netAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className={styles.dateCell}>{formatDate(t.createdAt)}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className={styles.editBtn} onClick={() => editTrade(t)}>Edit</button>
+                    <button className={styles.deleteBtn} onClick={() => deleteTrade(t.id)}>Delete</button>
                   </td>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={20} className={styles.emptyRow}>
+                  {transactions.length === 0
+                    ? "No transactions yet. Add your first trade above."
+                    : "No records match your filters."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
