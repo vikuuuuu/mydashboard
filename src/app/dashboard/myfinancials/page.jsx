@@ -20,24 +20,35 @@ import { db } from "@/lib/firebase";
 import { getCurrentUser } from "@/lib/firebaseAuth";
 import styles from "./myfinancials.module.css";
 
+const EMPTY_FORM = {
+  symbol: "",
+  companyName: "",
+  stockType: "Equity",
+  qty: "",
+  price: "",
+  action: "BUY",
+  date: "",
+  brokerage: "",
+  stt: "",
+  exchangeCharges: "",
+  gst: "",
+  stampDuty: "",
+  id: null,
+};
+
+// Helper: sum all 5 charges for a transaction object
+const sumCharges = (t) =>
+  Number(t.brokerage || 0) +
+  Number(t.stt || 0) +
+  Number(t.exchangeCharges || 0) +
+  Number(t.gst || 0) +
+  Number(t.stampDuty || 0);
+
 export default function FinancialsPage() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const [form, setForm] = useState({
-    symbol: "",
-    companyName: "",
-    stockType: "Equity",
-    qty: "",
-    price: "",
-    action: "BUY",
-    date: "",
-    brokerage: "",
-    stt: "",
-    otherCharges: "",
-    id: null,
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const router = useRouter();
 
@@ -74,8 +85,7 @@ export default function FinancialsPage() {
     transactions.forEach((tx) => {
       const qty = Number(tx.qty);
       const price = Number(tx.price);
-      const totalCharges =
-        Number(tx.brokerage || 0) + Number(tx.stt || 0) + Number(tx.otherCharges || 0);
+      const charges = sumCharges(tx);
 
       if (!map[tx.symbol]) {
         map[tx.symbol] = {
@@ -88,7 +98,7 @@ export default function FinancialsPage() {
         };
       }
       const stock = map[tx.symbol];
-      stock.totalCharges += totalCharges;
+      stock.totalCharges += charges;
 
       if (tx.action === "BUY") {
         stock.lots.push({ qty, price });
@@ -137,14 +147,17 @@ export default function FinancialsPage() {
       .filter((t) => t.action === "BUY")
       .reduce((sum, t) => sum + Number(t.qty) * Number(t.price), 0) || 0;
 
-  const totalChargesAll = transactions.reduce(
-    (sum, t) =>
-      sum + Number(t.brokerage || 0) + Number(t.stt || 0) + Number(t.otherCharges || 0),
-    0
-  );
+  const totalChargesAll = transactions.reduce((sum, t) => sum + sumCharges(t), 0);
 
-  // Net P&L = Realized P&L - Total Charges
   const netPL = totals.totalPL - totalChargesAll;
+
+  // Live form charges total
+  const formChargesTotal =
+    Number(form.brokerage || 0) +
+    Number(form.stt || 0) +
+    Number(form.exchangeCharges || 0) +
+    Number(form.gst || 0) +
+    Number(form.stampDuty || 0);
 
   // ---------------- SAVE TRADE ----------------
   const saveTrade = async (e) => {
@@ -170,32 +183,19 @@ export default function FinancialsPage() {
       action: form.action,
       brokerage: Number(form.brokerage || 0),
       stt: Number(form.stt || 0),
-      otherCharges: Number(form.otherCharges || 0),
+      exchangeCharges: Number(form.exchangeCharges || 0),
+      gst: Number(form.gst || 0),
+      stampDuty: Number(form.stampDuty || 0),
       createdAt: form.date ? new Date(form.date) : serverTimestamp(),
     };
 
     if (form.id) {
       await updateDoc(doc(db, "transactions", form.id), payload);
     } else {
-      await addDoc(collection(db, "transactions"), {
-        userId: user.uid,
-        ...payload,
-      });
+      await addDoc(collection(db, "transactions"), { userId: user.uid, ...payload });
     }
 
-    setForm({
-      symbol: "",
-      companyName: "",
-      stockType: "Equity",
-      qty: "",
-      price: "",
-      action: "BUY",
-      date: "",
-      brokerage: "",
-      stt: "",
-      otherCharges: "",
-      id: null,
-    });
+    setForm(EMPTY_FORM);
     fetchData(user.uid);
 
     if (user) {
@@ -225,7 +225,9 @@ export default function FinancialsPage() {
       action: t.action,
       brokerage: t.brokerage || "",
       stt: t.stt || "",
-      otherCharges: t.otherCharges || "",
+      exchangeCharges: t.exchangeCharges || "",
+      gst: t.gst || "",
+      stampDuty: t.stampDuty || "",
       date: t.createdAt?.seconds
         ? new Date(t.createdAt.seconds * 1000).toISOString().slice(0, 16)
         : t.createdAt,
@@ -237,21 +239,21 @@ export default function FinancialsPage() {
   const formatDate = (createdAt) => {
     const d = new Date(createdAt?.seconds ? createdAt.seconds * 1000 : createdAt);
     return d.toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
     });
   };
+
+  const fmt = (val) =>
+    Number(val) > 0
+      ? `₹${Number(val).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+      : null;
 
   if (loading) return <div className={styles.loader}>Loading portfolio…</div>;
 
   return (
     <div className={styles.container}>
-      <button className={styles.backBtn} onClick={() => router.back()}>
-        ← Back
-      </button>
+      <button className={styles.backBtn} onClick={() => router.back()}>← Back</button>
 
       <h1 className={styles.pageTitle}>📈 Portfolio Manager</h1>
 
@@ -274,7 +276,7 @@ export default function FinancialsPage() {
         <div className={`${styles.card} ${styles.cardCharges}`}>
           <span>Total Charges</span>
           <h2 style={{ color: "var(--charges)" }}>
-            −₹{totalChargesAll.toLocaleString("en-IN")}
+            −₹{totalChargesAll.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
           </h2>
         </div>
         <div className={`${styles.card} ${netPL >= 0 ? styles.cardPositive : styles.cardNegative}`}>
@@ -348,33 +350,20 @@ export default function FinancialsPage() {
 
             <div className={styles.formGroup}>
               <label>Quantity</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={form.qty}
-                onChange={(e) => setForm({ ...form, qty: e.target.value })}
-                required
-              />
+              <input type="number" placeholder="0" value={form.qty}
+                onChange={(e) => setForm({ ...form, qty: e.target.value })} required />
             </div>
 
             <div className={styles.formGroup}>
               <label>Price (₹)</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-                required
-              />
+              <input type="number" placeholder="0.00" value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })} required />
             </div>
 
             <div className={styles.formGroup}>
-              <label>Date & Time</label>
-              <input
-                type="datetime-local"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-              />
+              <label>Date &amp; Time</label>
+              <input type="datetime-local" value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })} />
             </div>
           </div>
 
@@ -382,50 +371,44 @@ export default function FinancialsPage() {
           <div className={styles.chargesDivider}>
             <span>💸 Charges (optional)</span>
           </div>
+
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
               <label>Brokerage (₹)</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={form.brokerage}
-                onChange={(e) => setForm({ ...form, brokerage: e.target.value })}
-                min="0"
-              />
+              <input type="number" placeholder="0.00" min="0" value={form.brokerage}
+                onChange={(e) => setForm({ ...form, brokerage: e.target.value })} />
             </div>
 
             <div className={styles.formGroup}>
               <label>STT (₹)</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={form.stt}
-                onChange={(e) => setForm({ ...form, stt: e.target.value })}
-                min="0"
-              />
+              <input type="number" placeholder="0.00" min="0" value={form.stt}
+                onChange={(e) => setForm({ ...form, stt: e.target.value })} />
             </div>
 
             <div className={styles.formGroup}>
-              <label>Other Charges (₹)</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={form.otherCharges}
-                onChange={(e) => setForm({ ...form, otherCharges: e.target.value })}
-                min="0"
-              />
+              <label>Exch. Transaction Charges (₹)</label>
+              <input type="number" placeholder="0.00" min="0" value={form.exchangeCharges}
+                onChange={(e) => setForm({ ...form, exchangeCharges: e.target.value })} />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>GST (₹)</label>
+              <input type="number" placeholder="0.00" min="0" value={form.gst}
+                onChange={(e) => setForm({ ...form, gst: e.target.value })} />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Stamp Duty (₹)</label>
+              <input type="number" placeholder="0.00" min="0" value={form.stampDuty}
+                onChange={(e) => setForm({ ...form, stampDuty: e.target.value })} />
             </div>
 
             {/* Live charges preview */}
-            {(form.brokerage || form.stt || form.otherCharges) && (
+            {formChargesTotal > 0 && (
               <div className={styles.chargesPreview}>
                 <span>Total Charges</span>
                 <strong>
-                  ₹{(
-                    Number(form.brokerage || 0) +
-                    Number(form.stt || 0) +
-                    Number(form.otherCharges || 0)
-                  ).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  ₹{formChargesTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </strong>
               </div>
             )}
@@ -433,17 +416,7 @@ export default function FinancialsPage() {
 
           <div className={styles.formActions}>
             {form.id && (
-              <button
-                type="button"
-                className={styles.cancelBtn}
-                onClick={() =>
-                  setForm({
-                    symbol: "", companyName: "", stockType: "Equity",
-                    qty: "", price: "", action: "BUY", date: "",
-                    brokerage: "", stt: "", otherCharges: "", id: null,
-                  })
-                }
-              >
+              <button type="button" className={styles.cancelBtn} onClick={() => setForm(EMPTY_FORM)}>
                 Cancel
               </button>
             )}
@@ -456,7 +429,9 @@ export default function FinancialsPage() {
 
       {/* ── TRANSACTION TABLE ── */}
       <div className={styles.tableWrapper}>
-        <h3>Transaction History</h3>
+        <div className={styles.tableHeader}>
+          <h3>Transaction History</h3>
+        </div>
         <div className={styles.scrollTable}>
           <table className={styles.table}>
             <thead>
@@ -468,19 +443,20 @@ export default function FinancialsPage() {
                 <th>Action</th>
                 <th>Qty</th>
                 <th>Price</th>
-                <th>Total</th>
+                <th>Total Value</th>
                 <th>Brokerage</th>
                 <th>STT</th>
-                <th>Other</th>
-                <th>Charges</th>
+                <th>Exch. Charges</th>
+                <th>GST</th>
+                <th>Stamp Duty</th>
+                <th className={styles.thCharges}>Total Charges</th>
                 <th>Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {transactions.map((t, i) => {
-                const charges =
-                  Number(t.brokerage || 0) + Number(t.stt || 0) + Number(t.otherCharges || 0);
+                const charges = sumCharges(t);
                 return (
                   <tr key={i}>
                     <td>{t.action === "BUY" ? "🟢" : "🔴"}</td>
@@ -493,19 +469,31 @@ export default function FinancialsPage() {
                       </span>
                     </td>
                     <td className={styles.monoCell}>{t.qty}</td>
-                    <td className={styles.monoCell}>₹{Number(t.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    <td className={styles.monoCell}>₹{(Number(t.qty) * Number(t.price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                     <td className={styles.monoCell}>
-                      {t.brokerage > 0 ? `₹${Number(t.brokerage).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : <span className={styles.nilCell}>—</span>}
+                      ₹{Number(t.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
                     <td className={styles.monoCell}>
-                      {t.stt > 0 ? `₹${Number(t.stt).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : <span className={styles.nilCell}>—</span>}
+                      ₹{(Number(t.qty) * Number(t.price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
                     <td className={styles.monoCell}>
-                      {t.otherCharges > 0 ? `₹${Number(t.otherCharges).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : <span className={styles.nilCell}>—</span>}
+                      {fmt(t.brokerage) || <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={styles.monoCell}>
+                      {fmt(t.stt) || <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={styles.monoCell}>
+                      {fmt(t.exchangeCharges) || <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={styles.monoCell}>
+                      {fmt(t.gst) || <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={styles.monoCell}>
+                      {fmt(t.stampDuty) || <span className={styles.nilCell}>—</span>}
                     </td>
                     <td className={`${styles.monoCell} ${styles.chargesCell}`}>
-                      {charges > 0 ? `₹${charges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : <span className={styles.nilCell}>—</span>}
+                      {charges > 0
+                        ? `₹${charges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+                        : <span className={styles.nilCell}>—</span>}
                     </td>
                     <td className={styles.dateCell}>{formatDate(t.createdAt)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
@@ -517,7 +505,7 @@ export default function FinancialsPage() {
               })}
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan={14} className={styles.emptyRow}>
+                  <td colSpan={16} className={styles.emptyRow}>
                     No transactions yet. Add your first trade above.
                   </td>
                 </tr>
