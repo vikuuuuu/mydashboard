@@ -20,6 +20,38 @@ import { db } from "@/lib/firebase";
 import { getCurrentUser } from "@/lib/firebaseAuth";
 import styles from "./myfinancials.module.css";
 
+// ─── Charge fields per action ─────────────────────────────
+//  BUY  : Brokerage, Exchange Transaction Charges, GST, Stamp Duty
+//  SELL : Groww DP Charges, Brokerage, Exchange Transaction Charges,
+//         STT (Securities Transaction Tax), CDSL DP Charges, GST
+//
+//  NOTE: Groww DP Charges (₹16.50 flat/scrip/day) is Groww's own
+//        depository participant fee shown above the "Charges" section.
+//        CDSL DP Charges (₹3.50) is the actual CDSL depository charge.
+//        Both apply only on SELL.
+const CHARGE_FIELDS = {
+  BUY: [
+    { key: "brokerage",        label: "Brokerage" },
+    { key: "exchangeCharges",  label: "Exch. Transaction Charges" },
+    { key: "gst",              label: "GST" },
+    { key: "stampDuty",        label: "Stamp Duty" },
+  ],
+  SELL: [
+    { key: "growwDpCharges",   label: "Groww DP Charges" },
+    { key: "brokerage",        label: "Brokerage" },
+    { key: "exchangeCharges",  label: "Exch. Transaction Charges" },
+    { key: "stt",              label: "STT (Securities Transaction Tax)" },
+    { key: "cdslDpCharges",    label: "CDSL DP Charges" },
+    { key: "gst",              label: "GST" },
+  ],
+};
+
+// All possible charge keys (union of BUY + SELL)
+const ALL_CHARGE_KEYS = [
+  "brokerage", "exchangeCharges", "gst", "stampDuty",
+  "stt", "cdslDpCharges", "growwDpCharges",
+];
+
 const EMPTY_FORM = {
   symbol: "",
   companyName: "",
@@ -28,21 +60,24 @@ const EMPTY_FORM = {
   price: "",
   action: "BUY",
   date: "",
+  // charges (all default "")
   brokerage: "",
-  stt: "",
   exchangeCharges: "",
   gst: "",
   stampDuty: "",
+  stt: "",
+  cdslDpCharges: "",
+  growwDpCharges: "",
   id: null,
 };
 
-// Helper: sum all 5 charges for a transaction object
-const sumCharges = (t) =>
-  Number(t.brokerage || 0) +
-  Number(t.stt || 0) +
-  Number(t.exchangeCharges || 0) +
-  Number(t.gst || 0) +
-  Number(t.stampDuty || 0);
+// Sum only the charge keys relevant to a given action
+const sumChargesForAction = (t, action) =>
+  CHARGE_FIELDS[action].reduce((s, f) => s + Number(t[f.key] || 0), 0);
+
+// Sum all stored charges regardless of action (for totals)
+const sumAllCharges = (t) =>
+  ALL_CHARGE_KEYS.reduce((s, k) => s + Number(t[k] || 0), 0);
 
 export default function FinancialsPage() {
   const [user, setUser] = useState(null);
@@ -66,7 +101,7 @@ export default function FinancialsPage() {
     const q = query(
       collection(db, "transactions"),
       where("userId", "==", uid),
-      orderBy("createdAt", "asc")
+      orderBy("createdAt", "asc"),
     );
     const snap = await getDocs(q);
     setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -83,9 +118,9 @@ export default function FinancialsPage() {
   const holdings = useMemo(() => {
     const map = {};
     transactions.forEach((tx) => {
-      const qty = Number(tx.qty);
+      const qty   = Number(tx.qty);
       const price = Number(tx.price);
-      const charges = sumCharges(tx);
+      const charges = sumAllCharges(tx);
 
       if (!map[tx.symbol]) {
         map[tx.symbol] = {
@@ -102,24 +137,24 @@ export default function FinancialsPage() {
 
       if (tx.action === "BUY") {
         stock.lots.push({ qty, price });
-        stock.qty += qty;
+        stock.qty     += qty;
         stock.invested += qty * price;
       }
       if (tx.action === "SELL") {
         let remaining = qty;
         while (remaining > 0 && stock.lots.length > 0) {
-          const firstLot = stock.lots[0];
-          if (firstLot.qty <= remaining) {
-            stock.realized += firstLot.qty * (price - firstLot.price);
-            stock.invested -= firstLot.qty * firstLot.price;
-            remaining -= firstLot.qty;
-            stock.qty -= firstLot.qty;
+          const lot = stock.lots[0];
+          if (lot.qty <= remaining) {
+            stock.realized  += lot.qty * (price - lot.price);
+            stock.invested  -= lot.qty * lot.price;
+            remaining       -= lot.qty;
+            stock.qty       -= lot.qty;
             stock.lots.shift();
           } else {
-            stock.realized += remaining * (price - firstLot.price);
-            stock.invested -= remaining * firstLot.price;
-            firstLot.qty -= remaining;
-            stock.qty -= remaining;
+            stock.realized  += remaining * (price - lot.price);
+            stock.invested  -= remaining * lot.price;
+            lot.qty         -= remaining;
+            stock.qty       -= remaining;
             remaining = 0;
           }
         }
@@ -129,63 +164,57 @@ export default function FinancialsPage() {
   }, [transactions]);
 
   // ---------------- KPI ----------------
-  const totals = useMemo(() => {
-    return holdings.reduce(
+  const totals = useMemo(() =>
+    holdings.reduce(
       (acc, h) => {
-        if (h.qty > 0) acc.currentInvest += h.invested;
-        acc.totalPL += h.realized;
-        if (h.qty > 0) acc.totalStocks += 1;
+        if (h.qty > 0) { acc.currentInvest += h.invested; acc.totalStocks += 1; }
+        acc.totalPL      += h.realized;
         acc.totalCharges += h.totalCharges;
         return acc;
       },
-      { currentInvest: 0, totalPL: 0, totalStocks: 0, totalCharges: 0 }
-    );
-  }, [holdings]);
+      { currentInvest: 0, totalPL: 0, totalStocks: 0, totalCharges: 0 },
+    ),
+  [holdings]);
 
   const totalInvest =
     transactions
       .filter((t) => t.action === "BUY")
-      .reduce((sum, t) => sum + Number(t.qty) * Number(t.price), 0) || 0;
+      .reduce((s, t) => s + Number(t.qty) * Number(t.price), 0) || 0;
 
-  const totalChargesAll = transactions.reduce((sum, t) => sum + sumCharges(t), 0);
-
+  const totalChargesAll = transactions.reduce((s, t) => s + sumAllCharges(t), 0);
   const netPL = totals.totalPL - totalChargesAll;
 
-  // Live form charges total
-  const formChargesTotal =
-    Number(form.brokerage || 0) +
-    Number(form.stt || 0) +
-    Number(form.exchangeCharges || 0) +
-    Number(form.gst || 0) +
-    Number(form.stampDuty || 0);
+  // Live form charges total (only fields visible for current action)
+  const formChargesTotal = CHARGE_FIELDS[form.action]
+    .reduce((s, f) => s + Number(form[f.key] || 0), 0);
 
   // ---------------- SAVE TRADE ----------------
   const saveTrade = async (e) => {
     e.preventDefault();
     const symbol = form.symbol.toUpperCase();
-    const qty = Number(form.qty);
-    const price = Number(form.price);
+    const qty    = Number(form.qty);
+    const price  = Number(form.price);
 
     if (form.action === "SELL") {
-      const currentStock = holdings.find((h) => h.symbol === symbol);
-      if (!currentStock || qty > currentStock.qty) {
-        alert("Not enough stock to sell!");
-        return;
-      }
+      const h = holdings.find((h) => h.symbol === symbol);
+      if (!h || qty > h.qty) { alert("Not enough stock to sell!"); return; }
     }
+
+    // Build charge payload — zero out fields not applicable to this action
+    const chargePayload = {};
+    ALL_CHARGE_KEYS.forEach((k) => {
+      const relevant = CHARGE_FIELDS[form.action].some((f) => f.key === k);
+      chargePayload[k] = relevant ? Number(form[k] || 0) : 0;
+    });
 
     const payload = {
       symbol,
       companyName: form.companyName,
-      stockType: form.stockType,
+      stockType:   form.stockType,
       qty,
       price,
       action: form.action,
-      brokerage: Number(form.brokerage || 0),
-      stt: Number(form.stt || 0),
-      exchangeCharges: Number(form.exchangeCharges || 0),
-      gst: Number(form.gst || 0),
-      stampDuty: Number(form.stampDuty || 0),
+      ...chargePayload,
       createdAt: form.date ? new Date(form.date) : serverTimestamp(),
     };
 
@@ -197,13 +226,10 @@ export default function FinancialsPage() {
 
     setForm(EMPTY_FORM);
     fetchData(user.uid);
-
-    if (user) {
-      await logToolUsage({
-        userId: user.uid,
-        tool: form.id ? "My Financials - Edit Trade" : "My Financials - Add Trade",
-      });
-    }
+    if (user) await logToolUsage({
+      userId: user.uid,
+      tool: form.id ? "My Financials - Edit Trade" : "My Financials - Add Trade",
+    });
   };
 
   // ---------------- DELETE ----------------
@@ -217,17 +243,19 @@ export default function FinancialsPage() {
   // ---------------- EDIT ----------------
   const editTrade = (t) => {
     setForm({
-      symbol: t.symbol,
-      companyName: t.companyName,
-      stockType: t.stockType,
-      qty: t.qty,
-      price: t.price,
-      action: t.action,
-      brokerage: t.brokerage || "",
-      stt: t.stt || "",
+      symbol:          t.symbol,
+      companyName:     t.companyName,
+      stockType:       t.stockType,
+      qty:             t.qty,
+      price:           t.price,
+      action:          t.action,
+      brokerage:       t.brokerage       || "",
       exchangeCharges: t.exchangeCharges || "",
-      gst: t.gst || "",
-      stampDuty: t.stampDuty || "",
+      gst:             t.gst             || "",
+      stampDuty:       t.stampDuty       || "",
+      stt:             t.stt             || "",
+      cdslDpCharges:   t.cdslDpCharges   || "",
+      growwDpCharges:  t.growwDpCharges  || "",
       date: t.createdAt?.seconds
         ? new Date(t.createdAt.seconds * 1000).toISOString().slice(0, 16)
         : t.createdAt,
@@ -367,41 +395,32 @@ export default function FinancialsPage() {
             </div>
           </div>
 
-          {/* Row 2: Charges */}
+          {/* Row 2: Charges — dynamic based on BUY / SELL */}
           <div className={styles.chargesDivider}>
-            <span>💸 Charges (optional)</span>
+            <span className={form.action === "BUY" ? styles.chargesLabelBuy : styles.chargesLabelSell}>
+              💸 {form.action === "BUY" ? "BUY Charges" : "SELL Charges"} (optional)
+            </span>
+          </div>
+
+          <div className={styles.chargesHelp}>
+            {form.action === "BUY"
+              ? "Applicable: Brokerage · Exchange Transaction Charges · GST · Stamp Duty"
+              : "Applicable: Brokerage · Exchange Transaction Charges · STT · CDSL DP Charges · GST"}
           </div>
 
           <div className={styles.formRow}>
-            <div className={styles.formGroup}>
-              <label>Brokerage (₹)</label>
-              <input type="number" placeholder="0.00" min="0" value={form.brokerage}
-                onChange={(e) => setForm({ ...form, brokerage: e.target.value })} />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>STT (₹)</label>
-              <input type="number" placeholder="0.00" min="0" value={form.stt}
-                onChange={(e) => setForm({ ...form, stt: e.target.value })} />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>Exch. Transaction Charges (₹)</label>
-              <input type="number" placeholder="0.00" min="0" value={form.exchangeCharges}
-                onChange={(e) => setForm({ ...form, exchangeCharges: e.target.value })} />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>GST (₹)</label>
-              <input type="number" placeholder="0.00" min="0" value={form.gst}
-                onChange={(e) => setForm({ ...form, gst: e.target.value })} />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label>Stamp Duty (₹)</label>
-              <input type="number" placeholder="0.00" min="0" value={form.stampDuty}
-                onChange={(e) => setForm({ ...form, stampDuty: e.target.value })} />
-            </div>
+            {CHARGE_FIELDS[form.action].map((field) => (
+              <div className={styles.formGroup} key={field.key}>
+                <label>{field.label} (₹)</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                
+                  value={form[field.key]}
+                  onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
+                />
+              </div>
+            ))}
 
             {/* Live charges preview */}
             {formChargesTotal > 0 && (
@@ -443,28 +462,41 @@ export default function FinancialsPage() {
                 <th>Action</th>
                 <th>Qty</th>
                 <th>Price</th>
-                <th>Total Value</th>
-                <th>Brokerage</th>
-                <th>STT</th>
-                <th>Exch. Charges</th>
-                <th>GST</th>
-                <th>Stamp Duty</th>
+                <th>Trade Value</th>
+                {/* BUY-only */}
+                <th className={styles.thBuy}>Brokerage</th>
+                <th className={styles.thBuy}>Exch. Charges</th>
+                <th className={styles.thBuy}>GST</th>
+                <th className={styles.thBuy}>Stamp Duty</th>
+                {/* SELL-only */}
+                <th className={styles.thSell}>STT</th>
+                <th className={styles.thSell}>CDSL DP</th>
+                <th className={styles.thSell}>Groww DP</th>
+                {/* Common total */}
                 <th className={styles.thCharges}>Total Charges</th>
+                <th className={styles.thFinal}>Net Amount</th>
                 <th>Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {transactions.map((t, i) => {
-                const charges = sumCharges(t);
+                const charges    = sumAllCharges(t);
+                const tradeValue = Number(t.qty) * Number(t.price);
+                // BUY: you pay tradeValue + charges; SELL: you receive tradeValue - charges
+                const netAmount  = t.action === "BUY"
+                  ? tradeValue + charges
+                  : tradeValue - charges;
+                const isBuy = t.action === "BUY";
+
                 return (
                   <tr key={i}>
-                    <td>{t.action === "BUY" ? "🟢" : "🔴"}</td>
+                    <td>{isBuy ? "🟢" : "🔴"}</td>
                     <td>{t.companyName}</td>
                     <td className={styles.monoCell}>{t.symbol}</td>
                     <td>{t.stockType}</td>
                     <td>
-                      <span className={t.action === "BUY" ? styles.badgeBuy : styles.badgeSell}>
+                      <span className={isBuy ? styles.badgeBuy : styles.badgeSell}>
                         {t.action}
                       </span>
                     </td>
@@ -473,27 +505,42 @@ export default function FinancialsPage() {
                       ₹{Number(t.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
                     <td className={styles.monoCell}>
-                      ₹{(Number(t.qty) * Number(t.price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      ₹{tradeValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
-                    <td className={styles.monoCell}>
-                      {fmt(t.brokerage) || <span className={styles.nilCell}>—</span>}
+
+                    {/* BUY-only cols */}
+                    <td className={`${styles.monoCell} ${styles.buyCol}`}>
+                      {isBuy ? (fmt(t.brokerage) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
-                    <td className={styles.monoCell}>
-                      {fmt(t.stt) || <span className={styles.nilCell}>—</span>}
+                    <td className={`${styles.monoCell} ${styles.buyCol}`}>
+                      {isBuy ? (fmt(t.exchangeCharges) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
-                    <td className={styles.monoCell}>
-                      {fmt(t.exchangeCharges) || <span className={styles.nilCell}>—</span>}
+                    <td className={`${styles.monoCell} ${styles.buyCol}`}>
+                      {isBuy ? (fmt(t.gst) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
-                    <td className={styles.monoCell}>
-                      {fmt(t.gst) || <span className={styles.nilCell}>—</span>}
+                    <td className={`${styles.monoCell} ${styles.buyCol}`}>
+                      {isBuy ? (fmt(t.stampDuty) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
-                    <td className={styles.monoCell}>
-                      {fmt(t.stampDuty) || <span className={styles.nilCell}>—</span>}
+
+                    {/* SELL-only cols */}
+                    <td className={`${styles.monoCell} ${styles.sellCol}`}>
+                      {!isBuy ? (fmt(t.stt) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
                     </td>
+                    <td className={`${styles.monoCell} ${styles.sellCol}`}>
+                      {!isBuy ? (fmt(t.cdslDpCharges) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
+                    </td>
+                    <td className={`${styles.monoCell} ${styles.sellCol}`}>
+                      {!isBuy ? (fmt(t.growwDpCharges) || <span className={styles.nilCell}>—</span>) : <span className={styles.naCell}>N/A</span>}
+                    </td>
+
+                    {/* Totals */}
                     <td className={`${styles.monoCell} ${styles.chargesCell}`}>
                       {charges > 0
                         ? `₹${charges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
                         : <span className={styles.nilCell}>—</span>}
+                    </td>
+                    <td className={`${styles.monoCell} ${styles.finalCell}`}>
+                      ₹{netAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
                     <td className={styles.dateCell}>{formatDate(t.createdAt)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
@@ -505,7 +552,7 @@ export default function FinancialsPage() {
               })}
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan={16} className={styles.emptyRow}>
+                  <td colSpan={19} className={styles.emptyRow}>
                     No transactions yet. Add your first trade above.
                   </td>
                 </tr>
