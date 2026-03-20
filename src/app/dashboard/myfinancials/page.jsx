@@ -414,7 +414,7 @@ export default function FinancialsPage() {
                 <input
                   type="number"
                   placeholder="0.00"
-                  min="0"
+                  
                   value={form[field.key]}
                   onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
                 />
