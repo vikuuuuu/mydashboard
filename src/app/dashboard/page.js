@@ -16,13 +16,14 @@ const TOOLS = [
     desc: "Track investments & profit",
   },
   { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images to PDF" },
+
   {
-    id: "image-resize-pixal",
-    title: "Image Resize Pixal",
-    desc: "Resize images to specific dimensions",
+    id: "all-in-one-img",
+    title: "All-in-One Image Tool",
+    desc: "Convert, resize, crop, rotate, compress, add filters, and watermark images",
   },
-  { id: "img-convert", title: "Image type Convert", desc: "Convert images to different types" },
-  { id: "img-compress", title: "Image Compress", desc: "Compress images to reduce file size" },
+  { id: "pdftool", title: "pdftool", desc: "Capture video frames" },
+
   { id: "video-to-img", title: "Video to Image", desc: "Capture video frames" },
   { id: "webchat", title: "Web Chat", desc: "Real-time messaging" },
 
