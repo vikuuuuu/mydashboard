@@ -123,7 +123,7 @@ const askNotificationPermission = async () => {
   return perm === "granted";
 };
 
-// Send notification — desktop + mobile
+// Send notification — works in foreground + background + when tab is closed
 const sendBrowserNotification = (title, body, options = {}) => {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   playNotifSound(options.sound || "message");
@@ -131,27 +131,39 @@ const sendBrowserNotification = (title, body, options = {}) => {
   const isCall = options.requireInteraction;
   const notifOpts = {
     body,
-    icon: "/icon-192.png",
+    icon: options.icon || "/icon-192.png",
     badge: "/favicon.ico",
     tag: options.tag || "chat-msg",
     requireInteraction: isCall || false,
     silent: false,
     vibrate: isCall ? [400, 200, 400, 200, 400] : [200, 100, 200],
     data: options.data || {},
-    actions: isCall
-      ? [{ action: "accept", title: "Accept" }, { action: "decline", title: "Decline" }]
-      : [{ action: "reply", title: "Reply" }, { action: "mark_read", title: "Mark read" }],
     timestamp: Date.now(),
   };
 
+  // Method 1: SW showNotification — works in background + when tab hidden
   if (_swReg) {
     _swReg.showNotification(title, notifOpts).catch(() => {
-      new Notification(title, notifOpts);
+      // Fallback to basic Notification
+      const n = new Notification(title, notifOpts);
+      if (!isCall) setTimeout(() => n.close(), 6000);
     });
-  } else {
+    return;
+  }
+
+  // Method 2: SW message — for cases SW is registered but not active yet
+  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({
+      type: "SHOW_NOTIFICATION", title, body, options: notifOpts,
+    });
+    return;
+  }
+
+  // Method 3: Direct Notification API (foreground only)
+  try {
     const n = new Notification(title, notifOpts);
     if (!isCall) setTimeout(() => n.close(), 6000);
-  }
+  } catch {}
 };
 
 // ════════════════════════════════════════════════════════════
@@ -363,14 +375,20 @@ function CallingScreen({ otherUser, callType, onCancel }) {
 // ════════════════════════════════════════════════════════════
 //  VIDEO CALL UI
 // ════════════════════════════════════════════════════════════
-function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCameraOff, isSpeakerOff, onToggleMute, onToggleCamera, onToggleSpeaker, onEnd, otherUser }) {
+function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCameraOff, isSpeakerOff, onToggleMute, onToggleCamera, onToggleSpeaker, onEnd, otherUser, callType }) {
   const localRef  = useRef();
   const remoteRef = useRef();
   const [showCtrls, setShowCtrls] = useState(true);
   const ctrlTimer = useRef();
+  const isAudio = callType === "audio";
 
   useEffect(() => { if (localRef.current && localStream)   localRef.current.srcObject  = localStream;  }, [localStream]);
-  useEffect(() => { if (remoteRef.current && remoteStream) { remoteRef.current.srcObject = remoteStream; remoteRef.current.muted = !!isSpeakerOff; } }, [remoteStream, isSpeakerOff]);
+  useEffect(() => {
+    if (remoteRef.current && remoteStream) {
+      remoteRef.current.srcObject = remoteStream;
+      remoteRef.current.muted = !!isSpeakerOff;
+    }
+  }, [remoteStream, isSpeakerOff]);
 
   const showControls = () => {
     setShowCtrls(true);
@@ -380,9 +398,50 @@ function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCamer
 
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
+  // ── AUDIO CALL UI ── (no video, just avatar)
+  if (isAudio) {
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:3000, background:"linear-gradient(160deg,#0a1628,#0d2137)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
+        {/* Hidden audio element for remote stream */}
+        <audio ref={remoteRef} autoPlay style={{ display:"none" }} />
+        <Avatar name={otherUser?.name||"?"} photoURL={otherUser?.photoURL} size={110} online />
+        <div style={{ color:"#fff", fontSize:22, fontWeight:700, fontFamily:"'Nunito', sans-serif", marginTop:8 }}>{otherUser?.name}</div>
+        <div style={{ color:"#25D366", fontSize:14, fontFamily:"'Nunito', sans-serif" }}>{fmt(callDuration)}</div>
+        {/* Audio wave animation */}
+        <div style={{ display:"flex", gap:4, alignItems:"flex-end", height:32, marginTop:8 }}>
+          {[1,2,3,4,5].map(i => (
+            <div key={i} style={{ width:4, borderRadius:2, background:"rgba(37,211,102,0.7)",
+              animation:`audioWave 1s ${i*0.12}s infinite ease-in-out`,
+              height: isMuted ? 4 : undefined,
+            }} />
+          ))}
+        </div>
+        {/* Controls */}
+        <div style={{ display:"flex", gap:24, marginTop:32, alignItems:"center" }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+            <button onClick={onToggleSpeaker} style={{ width:52, height:52, borderRadius:"50%", background: isSpeakerOff?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.2)", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}>
+              <SpeakerIcon off={isSpeakerOff} />
+            </button>
+            <span style={{ color:"rgba(255,255,255,0.6)", fontSize:11, fontFamily:"'Nunito', sans-serif" }}>{isSpeakerOff?"Off":"Speaker"}</span>
+          </div>
+          <button onClick={onEnd} style={{ width:68, height:68, borderRadius:"50%", background:"#ef4444", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", boxShadow:"0 4px 24px rgba(239,68,68,0.6)" }}>
+            <EndCallIcon />
+          </button>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+            <button onClick={onToggleMute} style={{ width:52, height:52, borderRadius:"50%", background: isMuted?"#ef4444":"rgba(255,255,255,0.2)", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}>
+              <MicIcon muted={isMuted} />
+            </button>
+            <span style={{ color:"rgba(255,255,255,0.6)", fontSize:11, fontFamily:"'Nunito', sans-serif" }}>{isMuted?"Unmute":"Mute"}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div onMouseMove={showControls} onClick={showControls} style={{ position:"fixed", inset:0, zIndex:3000, background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <video ref={remoteRef} autoPlay playsInline style={{ width:"100%", height:"100%", objectFit:"cover", background:"#111" }} />
+      {/* FIX: object-fit contain prevents zoom — shows full video */}
+      <video ref={remoteRef} autoPlay playsInline style={{ width:"100%", height:"100%", objectFit:"contain", background:"#111" }} />
       {!remoteStream && (
         <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, background:"linear-gradient(160deg,#0a1628,#0d2137)" }}>
           <Avatar name={otherUser?.name||"?"} photoURL={otherUser?.photoURL} size={100} />
@@ -517,16 +576,21 @@ function useVideoCall({ currentUser, chat, addToast }) {
     return () => unsub();
   }, [currentUser?.uid]); // NO callState in deps
 
-  const getMedia = async () => {
+  // type: "video" = camera+mic, "audio" = mic only
+  const getMedia = async (type = "video") => {
+    const constraints = type === "audio"
+      ? { video: false, audio: true }
+      : { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: true };
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const s = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = s; setLocalStream(s); return s;
     } catch {
       try {
+        // Fallback: audio only if video fails
         const s = await navigator.mediaDevices.getUserMedia({ audio: true });
         localStreamRef.current = s; setLocalStream(s); return s;
       } catch {
-        addToast({ id: Date.now(), icon: "⚠️", title: "Permission Denied", body: "Camera/mic access blocked.", color: "#ef4444" });
+        addToast({ id: Date.now(), icon: "⚠️", title: "Permission Denied", body: "Mic/camera access blocked.", color: "#ef4444" });
         throw new Error("No media");
       }
     }
@@ -550,7 +614,7 @@ function useVideoCall({ currentUser, chat, addToast }) {
     callTypeRef.current = type;
     setCallState("calling");
     try {
-      const stream = await getMedia();
+      const stream = await getMedia(type);  // pass type: audio=mic only, video=cam+mic
       const pc     = buildPC(stream);
       pcRef.current = pc;
 
@@ -608,7 +672,7 @@ function useVideoCall({ currentUser, chat, addToast }) {
     callTypeRef.current = callType || "video";
     setCallState("connected");
     try {
-      const stream = await getMedia();
+      const stream = await getMedia(callType || "video");  // audio call = mic only
       const pc     = buildPC(stream);
       pcRef.current = pc;
 
@@ -704,6 +768,7 @@ function useVideoCall({ currentUser, chat, addToast }) {
   return {
     callState, incomingData, localStream, remoteStream,
     isMuted, isCameraOff, isSpeakerOff, callDuration,
+    callType: callTypeRef.current,  // expose current call type
     startCall, acceptCall, rejectCall,
     endCall: () => cleanupCall(true, "answered"),
     toggleMute:    () => { localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !t.enabled; }); setIsMuted(m => !m); },
@@ -1115,7 +1180,8 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
         <VideoCallUI localStream={vc.localStream} remoteStream={vc.remoteStream} callDuration={vc.callDuration}
           isMuted={vc.isMuted} isCameraOff={vc.isCameraOff} isSpeakerOff={vc.isSpeakerOff}
           onToggleMute={vc.toggleMute} onToggleCamera={vc.toggleCamera} onToggleSpeaker={vc.toggleSpeaker}
-          onEnd={vc.endCall} otherUser={displayUser} />
+          onEnd={vc.endCall} otherUser={displayUser}
+          callType={vc.callType || "video"} />
       )}
 
       {/* ── Context menu ── */}
@@ -1385,6 +1451,10 @@ export default function WhatsAppUI({ onBackToDashboard }) {
         @keyframes pulseGreen {
           0%,100% { transform:scale(1); box-shadow:0 4px 20px rgba(37,211,102,0.4); }
           50% { transform:scale(1.06); box-shadow:0 4px 30px rgba(37,211,102,0.7); }
+        }
+        @keyframes audioWave {
+          0%,100% { height:6px; }
+          50% { height:28px; }
         }
       `}</style>
 
