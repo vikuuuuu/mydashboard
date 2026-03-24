@@ -7,8 +7,14 @@ import { LayoutDashboardIcon, LogOut, User } from "lucide-react";
 import { APP_VERSION, LASTUPDATE_DATE } from "@/lib/appVersion";
 import Avatar from "../../../public/avatar.png";
 
-// ✅ Firebase Realtime Database import — apne project ke hisaab se path adjust karein
-import { getDatabase, ref, onValue } from "firebase/database";
+// ✅ Firestore imports (Realtime DB nahi, Firestore hai aapka)
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  onSnapshot,
+} from "firebase/firestore";
 
 const TOOLS = [
   { id: "Notes", title: "Notes", desc: "Create & Export Notes" },
@@ -29,8 +35,7 @@ const TOOLS = [
     id: "webchat",
     title: "Web Chat",
     desc: "Real-time messaging",
-    // ✅ isWebchat flag — badge sirf isi card pe dikhega
-    isWebchat: true,
+    isWebchat: true, // ✅ badge sirf isi card pe
   },
   {
     id: "private_video_chat",
@@ -43,8 +48,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [openMenu, setOpenMenu] = useState(false);
-
-  // ✅ Badge counts state
   const [unreadCount, setUnreadCount] = useState(0);
   const [missedCallCount, setMissedCallCount] = useState(0);
 
@@ -52,55 +55,59 @@ export default function DashboardPage() {
     const currentUser = getCurrentUser();
     if (!currentUser) {
       router.replace("/login");
-    } else {
-      setUser(currentUser);
-
-      // ✅ Firebase se unread messages count listen karein
-      // Path: "webchat/unread/{userId}" — apne DB structure ke hisaab se change karein
-      const db = getDatabase();
-
-      const unreadRef = ref(db, `webchat/unread/${currentUser.uid}`);
-      const unreadUnsub = onValue(unreadRef, (snapshot) => {
-        const val = snapshot.val();
-        // val ek number ho sakta hai ya object {chatId: count, ...}
-        if (typeof val === "number") {
-          setUnreadCount(val);
-        } else if (val && typeof val === "object") {
-          // Sabhi chats ke unread sum karein
-          const total = Object.values(val).reduce(
-            (acc, n) => acc + (typeof n === "number" ? n : 0),
-            0
-          );
-          setUnreadCount(total);
-        } else {
-          setUnreadCount(0);
-        }
-      });
-
-      // ✅ Firebase se missed calls count listen karein
-      // Path: "webchat/missedCalls/{userId}" — apne DB structure ke hisaab se change karein
-      const missedRef = ref(db, `webchat/missedCalls/${currentUser.uid}`);
-      const missedUnsub = onValue(missedRef, (snapshot) => {
-        const val = snapshot.val();
-        if (typeof val === "number") {
-          setMissedCallCount(val);
-        } else if (val && typeof val === "object") {
-          const total = Object.values(val).reduce(
-            (acc, n) => acc + (typeof n === "number" ? n : 0),
-            0
-          );
-          setMissedCallCount(total);
-        } else {
-          setMissedCallCount(0);
-        }
-      });
-
-      // Cleanup listeners on unmount
-      return () => {
-        unreadUnsub();
-        missedUnsub();
-      };
+      return;
     }
+
+    setUser(currentUser);
+
+    const db = getFirestore();
+    const uid = currentUser.uid;
+    const messagesRef = collection(db, "messages");
+
+    // ─────────────────────────────────────────────────
+    // ✅ UNREAD MESSAGES
+    // Condition: participants mein current user ho
+    //            + read == false
+    //            + type == "chat"  ← screenshot mein type field hai
+    //            + senderId != uid (apne bheje messages count nahi)
+    // ─────────────────────────────────────────────────
+    const unreadQuery = query(
+      messagesRef,
+      where("participants", "array-contains", uid),
+      where("read", "==", false),
+      where("type", "==", "chat")
+    );
+
+    const unreadUnsub = onSnapshot(unreadQuery, (snapshot) => {
+      const count = snapshot.docs.filter(
+        (doc) => doc.data().senderId !== uid
+      ).length;
+      setUnreadCount(count);
+    });
+
+    // ─────────────────────────────────────────────────
+    // ✅ MISSED CALLS
+    // Screenshot se: type="call", callStatus="missed"
+    // senderId != uid → matlab dusre ne call kiya tha, aapne miss kiya
+    // ─────────────────────────────────────────────────
+    const missedQuery = query(
+      messagesRef,
+      where("participants", "array-contains", uid),
+      where("type", "==", "call"),
+      where("callStatus", "==", "missed")
+    );
+
+    const missedUnsub = onSnapshot(missedQuery, (snapshot) => {
+      const count = snapshot.docs.filter(
+        (doc) => doc.data().senderId !== uid
+      ).length;
+      setMissedCallCount(count);
+    });
+
+    return () => {
+      unreadUnsub();
+      missedUnsub();
+    };
   }, [router]);
 
   const handleLogout = () => {
@@ -155,17 +162,14 @@ export default function DashboardPage() {
             {/* ✅ Sirf webchat card pe badges dikhao */}
             {tool.isWebchat && (
               <div className={styles.badgeRow}>
-                {/* Unread Messages Badge */}
                 {unreadCount > 0 && (
                   <span className={styles.badgeUnread} title="Unread messages">
-                    💬 {unreadCount > 99 ? "99+" : unreadCount}
+                    💬 {unreadCount > 99 ? "99+" : unreadCount} Unread
                   </span>
                 )}
-
-                {/* Missed Calls Badge */}
                 {missedCallCount > 0 && (
                   <span className={styles.badgeMissed} title="Missed calls">
-                    📵 {missedCallCount > 99 ? "99+" : missedCallCount}
+                    📵 {missedCallCount > 99 ? "99+" : missedCallCount} Missed
                   </span>
                 )}
               </div>
