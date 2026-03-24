@@ -296,3 +296,75 @@
     display: none; /* hide email on mobile */
   }
 }
+
+
+/* ====================================================
+   WEBCHAT CARD BADGES — dashboard.module.css mein add karein
+   ==================================================== */
+
+/* Badge container — unread aur missed calls ek row mein */
+.badgeRow {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 4px 0;
+  flex-wrap: wrap;
+}
+
+/* Common badge style */
+.badgeUnread,
+.badgeMissed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  animation: badgePop 0.3s ease;
+}
+
+/* Unread messages — blue/green theme */
+.badgeUnread {
+  background-color: #e8f5e9;
+  color: #1b5e20;
+  border: 1.5px solid #66bb6a;
+}
+
+/* Missed calls — red theme */
+.badgeMissed {
+  background-color: #ffebee;
+  color: #b71c1c;
+  border: 1.5px solid #ef5350;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .badgeUnread {
+    background-color: #1b3a1f;
+    color: #a5d6a7;
+    border-color: #388e3c;
+  }
+
+  .badgeMissed {
+    background-color: #3b1a1a;
+    color: #ef9a9a;
+    border-color: #c62828;
+  }
+}
+
+/* Pop animation jab count update ho */
+@keyframes badgePop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
