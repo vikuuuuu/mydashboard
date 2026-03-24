@@ -7,7 +7,6 @@ import { LayoutDashboardIcon, LogOut, User } from "lucide-react";
 import { APP_VERSION, LASTUPDATE_DATE } from "@/lib/appVersion";
 import Avatar from "../../../public/avatar.png";
 
-// ✅ Firestore imports (Realtime DB nahi, Firestore hai aapka)
 import {
   getFirestore,
   collection,
@@ -35,7 +34,7 @@ const TOOLS = [
     id: "webchat",
     title: "Web Chat",
     desc: "Real-time messaging",
-    isWebchat: true, // ✅ badge sirf isi card pe
+    isWebchat: true,
   },
   {
     id: "private_video_chat",
@@ -57,39 +56,45 @@ export default function DashboardPage() {
       router.replace("/login");
       return;
     }
-
     setUser(currentUser);
 
     const db = getFirestore();
     const uid = currentUser.uid;
     const messagesRef = collection(db, "messages");
 
-    // ─────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════
     // ✅ UNREAD MESSAGES
-    // Condition: participants mein current user ho
-    //            + read == false
-    //            + type == "chat"  ← screenshot mein type field hai
-    //            + senderId != uid (apne bheje messages count nahi)
-    // ─────────────────────────────────────────────────
+    // messages collection mein:
+    //   - participants array mein current user ho
+    //   - read === false  (dusre ne bheja, humne padha nahi)
+    //   - type !== "call" (sirf chat messages, calls nahi)
+    // senderId !== uid filter in-memory (Firestore != operator
+    // array-contains ke saath ek hi query mein nahi chalta)
+    // ══════════════════════════════════════════════════
     const unreadQuery = query(
       messagesRef,
       where("participants", "array-contains", uid),
-      where("read", "==", false),
-      where("type", "==", "chat")
+      where("read", "==", false)
     );
 
     const unreadUnsub = onSnapshot(unreadQuery, (snapshot) => {
-      const count = snapshot.docs.filter(
-        (doc) => doc.data().senderId !== uid
-      ).length;
+      const count = snapshot.docs.filter((doc) => {
+        const d = doc.data();
+        // Apne bheje messages skip karo
+        // Call type ke messages skip karo (woh alag badge mein hain)
+        return d.senderId !== uid && d.type !== "call";
+      }).length;
       setUnreadCount(count);
     });
 
-    // ─────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════
     // ✅ MISSED CALLS
-    // Screenshot se: type="call", callStatus="missed"
-    // senderId != uid → matlab dusre ne call kiya tha, aapne miss kiya
-    // ─────────────────────────────────────────────────
+    // messages collection mein:
+    //   - participants array mein current user ho
+    //   - type === "call"
+    //   - callStatus === "missed"
+    //   - senderId !== uid (incoming missed call, outgoing nahi)
+    // ══════════════════════════════════════════════════
     const missedQuery = query(
       messagesRef,
       where("participants", "array-contains", uid),
@@ -159,16 +164,16 @@ export default function DashboardPage() {
             <h3>{tool.title}</h3>
             <p>{tool.desc}</p>
 
-            {/* ✅ Sirf webchat card pe badges dikhao */}
+            {/* ✅ Webchat card pe badges */}
             {tool.isWebchat && (
               <div className={styles.badgeRow}>
                 {unreadCount > 0 && (
-                  <span className={styles.badgeUnread} title="Unread messages">
+                  <span className={styles.badgeUnread}>
                     💬 {unreadCount > 99 ? "99+" : unreadCount} Unread
                   </span>
                 )}
                 {missedCallCount > 0 && (
-                  <span className={styles.badgeMissed} title="Missed calls">
+                  <span className={styles.badgeMissed}>
                     📵 {missedCallCount > 99 ? "99+" : missedCallCount} Missed
                   </span>
                 )}
