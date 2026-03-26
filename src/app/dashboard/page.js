@@ -48,7 +48,8 @@ export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [openMenu, setOpenMenu] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [missedCallCount, setMissedCallCount] = useState(0);
+  const [missedVoiceCount, setMissedVoiceCount] = useState(0);   // ✅ NEW
+  const [missedVideoCount, setMissedVideoCount] = useState(0);   // ✅ NEW
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -63,13 +64,7 @@ export default function DashboardPage() {
     const messagesRef = collection(db, "messages");
 
     // ══════════════════════════════════════════════════
-    // ✅ UNREAD MESSAGES
-    // messages collection mein:
-    //   - participants array mein current user ho
-    //   - read === false  (dusre ne bheja, humne padha nahi)
-    //   - type !== "call" (sirf chat messages, calls nahi)
-    // senderId !== uid filter in-memory (Firestore != operator
-    // array-contains ke saath ek hi query mein nahi chalta)
+    // ✅ UNREAD MESSAGES (chat messages only, not calls)
     // ══════════════════════════════════════════════════
     const unreadQuery = query(
       messagesRef,
@@ -80,38 +75,54 @@ export default function DashboardPage() {
     const unreadUnsub = onSnapshot(unreadQuery, (snapshot) => {
       const count = snapshot.docs.filter((doc) => {
         const d = doc.data();
-        // Apne bheje messages skip karo
-        // Call type ke messages skip karo (woh alag badge mein hain)
         return d.senderId !== uid && d.type !== "call";
       }).length;
       setUnreadCount(count);
     });
 
     // ══════════════════════════════════════════════════
-    // ✅ MISSED CALLS
-    // messages collection mein:
-    //   - participants array mein current user ho
-    //   - type === "call"
-    //   - callStatus === "missed"
-    //   - senderId !== uid (incoming missed call, outgoing nahi)
+    // ✅ MISSED VOICE CALLS
+    // callType === "voice" (ya "audio") — apne Firestore
+    // field name ke hisaab se adjust karein
     // ══════════════════════════════════════════════════
-    const missedQuery = query(
+    const missedVoiceQuery = query(
       messagesRef,
       where("participants", "array-contains", uid),
       where("type", "==", "call"),
-      where("callStatus", "==", "missed")
+      where("callStatus", "==", "missed"),
+      where("callType", "==", "voice")   // ✅ voice calls only
     );
 
-    const missedUnsub = onSnapshot(missedQuery, (snapshot) => {
+    const missedVoiceUnsub = onSnapshot(missedVoiceQuery, (snapshot) => {
       const count = snapshot.docs.filter(
         (doc) => doc.data().senderId !== uid
       ).length;
-      setMissedCallCount(count);
+      setMissedVoiceCount(count);
+    });
+
+    // ══════════════════════════════════════════════════
+    // ✅ MISSED VIDEO CALLS
+    // callType === "video"
+    // ══════════════════════════════════════════════════
+    const missedVideoQuery = query(
+      messagesRef,
+      where("participants", "array-contains", uid),
+      where("type", "==", "call"),
+      where("callStatus", "==", "missed"),
+      where("callType", "==", "video")   // ✅ video calls only
+    );
+
+    const missedVideoUnsub = onSnapshot(missedVideoQuery, (snapshot) => {
+      const count = snapshot.docs.filter(
+        (doc) => doc.data().senderId !== uid
+      ).length;
+      setMissedVideoCount(count);
     });
 
     return () => {
       unreadUnsub();
-      missedUnsub();
+      missedVoiceUnsub();
+      missedVideoUnsub();
     };
   }, [router]);
 
@@ -164,17 +175,27 @@ export default function DashboardPage() {
             <h3>{tool.title}</h3>
             <p>{tool.desc}</p>
 
-            {/* ✅ Webchat card pe badges */}
+            {/* ✅ WebChat card — Teen alag badges */}
             {tool.isWebchat && (
               <div className={styles.badgeRow}>
+                {/* 💬 Unread Messages */}
                 {unreadCount > 0 && (
-                  <span className={styles.badgeUnread}>
-                    💬 {unreadCount > 99 ? "99+" : unreadCount} Unread
+                  <span className={`${styles.badge} ${styles.badgeUnread}`}>
+                    💬 {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
-                {missedCallCount > 0 && (
-                  <span className={styles.badgeMissed}>
-                    📵 {missedCallCount > 99 ? "99+" : missedCallCount} Missed
+
+                {/* 📞 Missed Voice Calls */}
+                {missedVoiceCount > 0 && (
+                  <span className={`${styles.badge} ${styles.badgeVoice}`}>
+                    📞 {missedVoiceCount > 99 ? "99+" : missedVoiceCount}
+                  </span>
+                )}
+
+                {/* 📹 Missed Video Calls */}
+                {missedVideoCount > 0 && (
+                  <span className={`${styles.badge} ${styles.badgeVideo}`}>
+                    📹 {missedVideoCount > 99 ? "99+" : missedVideoCount}
                   </span>
                 )}
               </div>
