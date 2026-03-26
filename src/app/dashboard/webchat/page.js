@@ -8,6 +8,8 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 
+
+
 // ════════════════════════════════════════════════════════════
 //  HELPERS
 // ════════════════════════════════════════════════════════════
@@ -472,6 +474,7 @@ function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCamer
 //  useVideoCall HOOK — with camera flip support
 // ════════════════════════════════════════════════════════════
 function useVideoCall({ currentUser, chat, addToast }) {
+   const wasConnectedRef = useRef(false);
   const [callState,    setCallState   ] = useState("idle");
   const [incomingData, setIncomingData] = useState(null);
   const [localStream,  setLocalStream ] = useState(null);
@@ -544,7 +547,7 @@ function useVideoCall({ currentUser, chat, addToast }) {
     setRemoteStream(remote);
     pc.ontrack = e => e.streams[0].getTracks().forEach(t => remote.addTrack(t));
     pc.onconnectionstatechange = () => {
-      if (["disconnected","failed"].includes(pc.connectionState)) cleanupCall(true, "answered");
+      if (["disconnected","failed"].includes(pc.connectionState)) cleanupCall(true, wasConnectedRef.current ? "answered" : "missed");
     };
     return pc;
   };
@@ -580,7 +583,9 @@ function useVideoCall({ currentUser, chat, addToast }) {
         const d = snap.data();
         if (d?.answer && !pc.currentRemoteDescription) {
           await pc.setRemoteDescription(new RTCSessionDescription(d.answer));
+         
           setCallState("connected");
+          wasConnectedRef.current = true;
           callStartRef.current = Date.now();
           clearInterval(durationIv.current);
           durationIv.current = setInterval(() => setCallDuration(x => x + 1), 1000);
@@ -601,7 +606,8 @@ function useVideoCall({ currentUser, chat, addToast }) {
     const { roomId, callType } = incomingData;
     callTypeRef.current = callType || "video";
     setIsFrontCam(true);
-    setCallState("connected");
+   setCallState("connected");
+wasConnectedRef.current = true;
     try {
       const stream = await getMedia(callType || "video", "user");
       const pc     = buildPC(stream);
@@ -630,22 +636,31 @@ function useVideoCall({ currentUser, chat, addToast }) {
     } catch { setCallState("idle"); }
   }, [incomingData, currentUser]);
 
-  const rejectCall = useCallback(async () => {
-    if (incomingData?.roomId) {
-      await updateDoc(doc(db, "rooms", incomingData.roomId), { status: "ended" }).catch(() => {});
-      if (chat?.id && currentUser?.uid) {
-        await addDoc(collection(db, "messages"), {
-          chatId: chat.id, participants: chat.participants,
-          senderId: incomingData.callerId,
-          type: "call", callType: incomingData.callType || "video",
-          callStatus: "missed", callDuration: null,
-          createdAt: serverTimestamp(), read: false,
-        }).catch(() => {});
-      }
-    }
-    await deleteDoc(doc(db, "users", currentUser.uid, "callSignal", "incoming")).catch(() => {});
-    setCallState("idle"); setIncomingData(null);
-  }, [incomingData, currentUser, chat]);
+ const rejectCall = useCallback(async () => {
+  if (incomingData?.roomId) {
+    await updateDoc(doc(db, "rooms", incomingData.roomId), {
+      status: "ended",
+    }).catch(() => {});
+
+    // ✅ MISSED CALL ENTRY
+    await addDoc(collection(db, "messages"), {
+      chatId: chat.id,
+      participants: chat.participants,
+      senderId: incomingData.callerId,
+      type: "call",
+      callType: incomingData.callType || "video",
+      callStatus: "missed",
+      callDuration: null,
+      createdAt: serverTimestamp(),
+      read: false,
+    }).catch(() => {});
+  }
+
+  await deleteDoc(doc(db, "users", currentUser.uid, "callSignal", "incoming")).catch(() => {});
+
+  setCallState("idle");
+  setIncomingData(null);
+}, [incomingData, currentUser, chat]);
 
   // ✅ Flip camera — stop current tracks, get new stream, replace tracks in PC
   const flipCamera = useCallback(async () => {
@@ -677,48 +692,87 @@ function useVideoCall({ currentUser, chat, addToast }) {
     }
   }, [isFrontCam, addToast]);
 
-  const cleanupCall = useCallback(async (notify = true, status = "answered") => {
-    clearInterval(durationIv.current);
-    localStreamRef.current?.getTracks().forEach(t => t.stop());
-    try { pcRef.current?.close(); } catch {}
-    pcRef.current = null;
-    unsubsRef.current.forEach(u => u?.());
-    unsubsRef.current = [];
-    if (notify && roomDocRef.current) {
-      await updateDoc(roomDocRef.current, { status: "ended" }).catch(() => {});
-    }
-    if (notify && otherUserId) {
-      await setDoc(doc(db, "users", otherUserId, "callSignal", "incoming"), { status: "ended" }).catch(() => {});
-    }
-    if (currentUser?.uid) {
-      await deleteDoc(doc(db, "users", currentUser.uid, "callSignal", "incoming")).catch(() => {});
-    }
-    if (notify && chat?.id) {
-      const dur = callStartRef.current ? Math.floor((Date.now() - callStartRef.current)/1000) : 0;
-      const mm  = String(Math.floor(dur/60)).padStart(2,"0");
-      const ss  = String(dur%60).padStart(2,"0");
-      await addDoc(collection(db, "messages"), {
-        chatId: chat.id, participants: chat.participants,
-        senderId: currentUser.uid, type: "call",
-        callType: callTypeRef.current, callStatus: status,
-        callDuration: dur > 0 ? `${mm}:${ss}` : null,
-        createdAt: serverTimestamp(), read: false,
-      }).catch(() => {});
-    }
-    localStreamRef.current = null;
-    roomDocRef.current = null;
-    callStartRef.current = null;
-    setLocalStream(null); setRemoteStream(null);
-    setCallState("idle"); setIncomingData(null);
-    setCallDuration(0); setIsMuted(false); setIsCameraOff(false); setIsFrontCam(true);
-  }, [otherUserId, currentUser, chat]);
+ const cleanupCall = useCallback(async (notify = true, status = "answered") => {
+  clearInterval(durationIv.current);
 
+  // stop media
+  localStreamRef.current?.getTracks().forEach(t => t.stop());
+
+  try { pcRef.current?.close(); } catch {}
+  pcRef.current = null;
+
+  unsubsRef.current.forEach(u => u?.());
+  unsubsRef.current = [];
+
+  // update room
+  if (notify && roomDocRef.current) {
+    await updateDoc(roomDocRef.current, { status: "ended" }).catch(() => {});
+  }
+
+  // notify other user
+  if (notify && otherUserId) {
+    await setDoc(doc(db, "users", otherUserId, "callSignal", "incoming"), {
+      status: "ended",
+    }).catch(() => {});
+  }
+
+  // clear own signal
+  if (currentUser?.uid) {
+    await deleteDoc(doc(db, "users", currentUser.uid, "callSignal", "incoming")).catch(() => {});
+  }
+
+  // ✅ SAVE CORRECT CALL LOG
+  if (notify && chat?.id) {
+    const duration = callStartRef.current
+      ? Math.floor((Date.now() - callStartRef.current) / 1000)
+      : 0;
+
+    const mm = String(Math.floor(duration / 60)).padStart(2, "0");
+    const ss = String(duration % 60).padStart(2, "0");
+
+    // 🔥 MAIN FIX (USE PASSED STATUS)
+    const finalStatus = duration > 0 ? "answered" : status;
+
+    await addDoc(collection(db, "messages"), {
+      chatId: chat.id,
+      participants: chat.participants,
+      senderId: currentUser.uid,
+      type: "call",
+      callType: callTypeRef.current,
+
+      callStatus: finalStatus,   // ✅ FIXED
+      callDuration: duration > 0 ? `${mm}:${ss}` : null,
+
+      createdAt: serverTimestamp(),
+      read: false,
+    }).catch(() => {});
+  }
+
+  // reset everything
+  wasConnectedRef.current = false;
+  callStartRef.current = null;
+
+  localStreamRef.current = null;
+  roomDocRef.current = null;
+
+  setLocalStream(null);
+  setRemoteStream(null);
+  setCallState("idle");
+  setIncomingData(null);
+  setCallDuration(0);
+  setIsMuted(false);
+  setIsCameraOff(false);
+
+}, [otherUserId, currentUser, chat]);  
   return {
     callState, incomingData, localStream, remoteStream,
     isMuted, isCameraOff, isSpeakerOff, isFrontCam, callDuration,
     callType: callTypeRef.current,
     startCall, acceptCall, rejectCall,
-    endCall:       () => cleanupCall(true, "answered"),
+endCall: () => {
+  const status = wasConnectedRef.current ? "answered" : "missed";
+  cleanupCall(true, status);
+},
     toggleMute:    () => { localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !t.enabled; }); setIsMuted(m => !m); },
     toggleCamera:  () => { localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = !t.enabled; }); setIsCameraOff(c => !c); },
     toggleSpeaker: () => setIsSpeakerOff(s => !s),
