@@ -86,12 +86,13 @@ export default function DashboardPage() {
     // field name ke hisaab se adjust karein
     // ══════════════════════════════════════════════════
     const missedVoiceQuery = query(
-      messagesRef,
-      where("participants", "array-contains", uid),
-      where("type", "==", "call"),
-      where("callStatus", "==", "missed"),
-      where("callType", "==", "audio")
-    );
+  messagesRef,
+  where("participants", "array-contains", uid),
+  where("type", "==", "call"),
+  where("callStatus", "==", "missed"),
+  where("callType", "==", "audio"),
+  where("read", "==", false) // 🔥 ADD THIS
+);
 
     const missedVoiceUnsub = onSnapshot(missedVoiceQuery, (snapshot) => {
       const count = snapshot.docs.filter(
@@ -104,13 +105,14 @@ export default function DashboardPage() {
     // ✅ MISSED VIDEO CALLS
     // callType === "video"
     // ══════════════════════════════════════════════════
-    const missedVideoQuery = query(
-      messagesRef,
-      where("participants", "array-contains", uid),
-      where("type", "==", "call"),
-      where("callStatus", "==", "missed"),
-      where("callType", "==", "video")   // ✅ video calls only
-    );
+   const missedVideoQuery = query(
+  messagesRef,
+  where("participants", "array-contains", uid),
+  where("type", "==", "call"),
+  where("callStatus", "==", "missed"),
+  where("callType", "==", "video"),
+  where("read", "==", false) // 🔥 ADD THIS
+);
 
     const missedVideoUnsub = onSnapshot(missedVideoQuery, (snapshot) => {
       const count = snapshot.docs.filter(
