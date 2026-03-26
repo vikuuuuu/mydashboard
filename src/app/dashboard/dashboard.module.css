@@ -13,7 +13,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: white;
+  background: #fff;
   padding: 18px 24px;
   border-radius: 14px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
@@ -32,28 +32,24 @@
 }
 
 /* ======================
-   PROFILE
+   PROFILE (FINAL CLEAN)
 ====================== */
 .profile {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
-  background: #f1f5f9;
-  padding: 6px 20px;
-  border-radius: 40px;
-  transition: 0.3s;
   border: 1px solid #8e95ac;
-}
-
-.profile:hover {
-  background: #e2e8f0;
+  background: #ffffff;
+  padding: 4px 10px;
+  border-radius: 50px;
+  box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.08);
 }
 
 .profile img {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -61,26 +57,28 @@
 .profile span {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #0f172a;
-  margin-right: 10px;
+  color: #334155;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ======================
-   DROPDOWN
+   DROPDOWN (FINAL)
 ====================== */
 .dropdown {
   position: absolute;
-  top: 50px;
+  top: 40px;
   right: 0;
-  background: white;
+  background: #ffffff;
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  width: 160px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+  min-width: 160px;
   padding: 6px;
-  animation: fadeIn 0.2s ease-in-out;
-  z-index: 100;
   display: none;
+  z-index: 1000;
 }
 
 .profile:hover .dropdown {
@@ -91,12 +89,12 @@
   width: 100%;
   background: none;
   border: none;
-  padding: 10px;
+  padding: 10px 12px;
+  text-align: left;
   border-radius: 8px;
   font-size: 0.85rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-weight: 600;
+  color: #0f172a;
   cursor: pointer;
 }
 
@@ -105,8 +103,12 @@
 }
 
 .dropdown button:last-child {
-  color: #dc2626;
+  color: #b91c1c;
 }
+
+/* ======================
+   CARDS
+====================== */
 .cardGrid {
   max-width: 1100px;
   margin: 0 auto;
@@ -140,137 +142,63 @@
   font-size: 0.9rem;
 }
 
-.openText {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #2563eb;
-}
-
-.loader {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  font-size: 1.1rem;
-}
 /* ======================
-/page Checking Session 
+   BADGES (THEME BASED)
 ====================== */
-
-.checkingSession {
+.badgeRow {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  height: 100vh;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
   background: #f1f5f9;
-  font-size: 1rem;
-  color: #64748b;
-  gap: 16px;
-}
-
-/* Spinner */
-.loaderSession {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e2e8f0;
-  border-top: 4px solid #2563eb;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  100% {
-    transform: rotate(360deg);
-  }
-}
-/* ======================
-   PROFILE DROPDOWN
-====================== */
-
-.profile {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  border: 1px solid #8e95ac;
-  background: #ffffff;
-  color: #fff;
-  /* border: none; */
-  padding: 1px 3px;
-  border-radius: 50px;
-  cursor: pointer;
-  box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.1);
-}
-
-.profile img {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid #e5e7eb;
-}
-
-.profile span {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #334155;
-  max-width: 140px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ======================
-   DROPDOWN MENU
-====================== */
-
-.dropdown {
-  position: absolute;
-  top: 40px;
-  right: 0;
-  background: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
-  min-width: 160px;
-  padding: 6px;
-  display: none;
-  z-index: 1000;
-}
-
-/* Show dropdown on hover (desktop) */
-.profile:hover .dropdown {
-  display: block;
-}
-
-/* ======================
-   DROPDOWN ITEMS
-====================== */
-
-.dropdown button {
-  width: 100%;
-  background: none;
-  border: none;
-  padding: 10px 12px;
-  text-align: left;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
   color: #0f172a;
-  cursor: pointer;
+  border: 1px solid #e2e8f0;
 }
 
-.dropdown button:hover {
-  background: #f1f5f9;
+/* subtle variation */
+.badgeUnread {
+  background: #e2e8f0;
 }
 
-/* Logout button special */
-.dropdown button:last-child {
-  color: #b91c1c;
+.badgeVoice {
+  background: #f8fafc;
 }
 
-/* ===== FOOTER VERSION ===== */
+.badgeVideo {
+  background: #e2e8f0;
+}
+
+/* hover */
+.badge:hover {
+  background: #e2e8f0;
+}
+
+/* OPTIONAL PRO STYLE (left indicator) */
+.badgeUnread {
+  border-left: 3px solid #2563eb;
+}
+
+.badgeVoice {
+  border-left: 3px solid #16a34a;
+}
+
+.badgeVideo {
+  border-left: 3px solid #dc2626;
+}
+
+/* ======================
+   FOOTER
+====================== */
 .footer {
   margin-top: 40px;
   padding: 12px 0;
@@ -288,124 +216,20 @@
 }
 
 /* ======================
-   MOBILE SUPPORT
+   LOADER
 ====================== */
+.loader {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+}
 
+/* ======================
+   MOBILE
+====================== */
 @media (max-width: 640px) {
   .profile span {
-    display: none; /* hide email on mobile */
+    display: none;
   }
 }
-
-
-/* ====================================================
-   WEBCHAT CARD BADGES — dashboard.module.css mein add karein
-   ==================================================== */
-
-/* Badge container — unread aur missed calls ek row mein */
-.badgeRow {
-  display: flex;
-  gap: 8px;
-  margin: 8px 0 4px 0;
-  flex-wrap: wrap;
-}
-
-/* Common badge style */
-.badgeUnread,
-.badgeMissed {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-  animation: badgePop 0.3s ease;
-}
-
-/* Unread messages — blue/green theme */
-.badgeUnread {
-  background-color: #e8f5e9;
-  color: #1b5e20;
-  border: 1.5px solid #66bb6a;
-}
-
-/* Missed calls — red theme */
-.badgeMissed {
-  background-color: #ffebee;
-  color: #b71c1c;
-  border: 1.5px solid #ef5350;
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .badgeUnread {
-    background-color: #1b3a1f;
-    color: #a5d6a7;
-    border-color: #388e3c;
-  }
-
-  .badgeMissed {
-    background-color: #3b1a1a;
-    color: #ef9a9a;
-    border-color: #c62828;
-  }
-}
-
-/* Pop animation jab count update ho */
-@keyframes badgePop {
-  0% {
-    transform: scale(0.7);
-    opacity: 0;
-  }
-  70% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Badge Row */
-.badgeRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 8px 0 4px;
-}
-
-/* Base badge style */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-/* 💬 Unread Messages — Blue */
-.badgeUnread {
-  background: #1d4ed8;
-  color: #fff;
-}
-
-/* 📞 Missed Voice — Green */
-.badgeVoice {
-  background: #15803d;
-  color: #fff;
-}
-
-/* 📹 Missed Video — Red */
-.badgeVideo {
-  background: #dc2626;
-  color: #fff;
-}
-
-
-
