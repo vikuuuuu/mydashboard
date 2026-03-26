@@ -50,11 +50,8 @@ const ICE_SERVERS = {
 const EMOJI_LIST = ["❤️", "😂", "😮", "😢", "🙏", "👍"];
 
 // ════════════════════════════════════════════════════════════
-//  NOTIFICATION SYSTEM — WhatsApp Web style
-//  Works on Desktop + Mobile browsers
+//  NOTIFICATION SYSTEM
 // ════════════════════════════════════════════════════════════
-
-// Notification sound via Web Audio API
 const playNotifSound = (type = "message") => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -68,32 +65,27 @@ const playNotifSound = (type = "message") => {
       osc.frequency.setValueAtTime(520, ctx.currentTime + 0.15);
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
     } else {
       osc.type = "sine";
       osc.frequency.setValueAtTime(880, ctx.currentTime);
       osc.frequency.setValueAtTime(660, ctx.currentTime + 0.1);
       gain.gain.setValueAtTime(0.15, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.25);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.25);
     }
   } catch (_) {}
 };
 
 let _swReg = null;
 
-// Register Service Worker from /sw-notifications.js (copy to public/)
 const registerSW = async () => {
   if (!("serviceWorker" in navigator)) return null;
   try {
-    // Try file-based SW first (better for mobile)
     const reg = await navigator.serviceWorker.register("/sw-notifications.js", { scope: "/" });
     await navigator.serviceWorker.ready;
     return reg;
   } catch {
-    // Fallback: inline SW via blob URL
     try {
       const swCode = [
         'self.addEventListener("install",()=>self.skipWaiting());',
@@ -114,7 +106,6 @@ const registerSW = async () => {
   }
 };
 
-// Request permission + setup SW
 const askNotificationPermission = async () => {
   if (!("Notification" in window)) return false;
   let perm = Notification.permission;
@@ -123,43 +114,27 @@ const askNotificationPermission = async () => {
   return perm === "granted";
 };
 
-// Send notification — works in foreground + background + when tab is closed
 const sendBrowserNotification = (title, body, options = {}) => {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   playNotifSound(options.sound || "message");
-
   const isCall = options.requireInteraction;
   const notifOpts = {
-    body,
-    icon: options.icon || "/icon-192.png",
-    badge: "/favicon.ico",
-    tag: options.tag || "chat-msg",
-    requireInteraction: isCall || false,
-    silent: false,
-    vibrate: isCall ? [400, 200, 400, 200, 400] : [200, 100, 200],
-    data: options.data || {},
-    timestamp: Date.now(),
+    body, icon: options.icon || "/icon-192.png", badge: "/favicon.ico",
+    tag: options.tag || "chat-msg", requireInteraction: isCall || false,
+    silent: false, vibrate: isCall ? [400, 200, 400, 200, 400] : [200, 100, 200],
+    data: options.data || {}, timestamp: Date.now(),
   };
-
-  // Method 1: SW showNotification — works in background + when tab hidden
   if (_swReg) {
     _swReg.showNotification(title, notifOpts).catch(() => {
-      // Fallback to basic Notification
       const n = new Notification(title, notifOpts);
       if (!isCall) setTimeout(() => n.close(), 6000);
     });
     return;
   }
-
-  // Method 2: SW message — for cases SW is registered but not active yet
   if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({
-      type: "SHOW_NOTIFICATION", title, body, options: notifOpts,
-    });
+    navigator.serviceWorker.controller.postMessage({ type: "SHOW_NOTIFICATION", title, body, options: notifOpts });
     return;
   }
-
-  // Method 3: Direct Notification API (foreground only)
   try {
     const n = new Notification(title, notifOpts);
     if (!isCall) setTimeout(() => n.close(), 6000);
@@ -167,33 +142,37 @@ const sendBrowserNotification = (title, body, options = {}) => {
 };
 
 // ════════════════════════════════════════════════════════════
-//  ICONS (SVG — no external deps)
+//  ICONS (SVG)
 // ════════════════════════════════════════════════════════════
-const BackIcon  = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>;
-const SearchIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-const CloseIcon  = ({ s = 18 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-const VideoIcon  = ({ s = 20 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>;
-const PhoneIcon  = ({ s = 20 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>;
+const BackIcon    = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>;
+const SearchIcon  = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+const CloseIcon   = ({ s = 18 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+const VideoIcon   = ({ s = 20 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>;
+const PhoneIcon   = ({ s = 20 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>;
 const EndCallIcon = () => <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>;
-
-const MicIcon = ({ muted }) => muted
+const MicIcon     = ({ muted }) => muted
   ? <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>
   : <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>;
-
-const CamIcon = ({ off }) => off
+const CamIcon     = ({ off }) => off
   ? <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M21 6.5l-4-4-14.5 14.5 2 2L8 15.5V17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5l-1-1zM16 13.85L8.15 6H16v7.85zM3 7v10a1 1 0 0 0 1 1h1.85l-2-2H4V7.85l-1-1V7z"/></svg>
   : <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>;
-
 const SpeakerIcon = ({ off }) => off
   ? <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
   : <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>;
+const FlipCamIcon = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-5 11.5V14H9v2.5L5.5 13 9 9.5V12h6V9.5l3.5 3.5-3.5 3.5z"/></svg>;
+const ReplyIcon   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>;
+const ForwardIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11z"/></svg>;
+const EditIcon    = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>;
+const DeleteIcon  = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>;
+const CopyIcon    = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>;
+const SendIcon    = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>;
 
 // ════════════════════════════════════════════════════════════
 //  AVATAR
 // ════════════════════════════════════════════════════════════
 function Avatar({ name = "?", photoURL = null, size = 40, online = false }) {
   const colors = ["#25D366","#128C7E","#075E54","#34B7F1","#aebac1","#FF6B6B","#6C5CE7"];
-  const color  = colors[name.charCodeAt(0) % colors.length];
+  const color  = colors[(name.charCodeAt(0) || 0) % colors.length];
   return (
     <div style={{ position: "relative", flexShrink: 0 }}>
       {photoURL
@@ -216,7 +195,7 @@ function TypingDots() {
 }
 
 // ════════════════════════════════════════════════════════════
-//  IN-APP TOAST (message & call notifications)
+//  TOAST
 // ════════════════════════════════════════════════════════════
 function ToastContainer({ toasts, onDismiss }) {
   return (
@@ -240,37 +219,53 @@ function ToastContainer({ toasts, onDismiss }) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  CONTEXT MENU
+//  CONTEXT MENU — with Reply, Forward, Edit, Copy, Delete
 // ════════════════════════════════════════════════════════════
-function ContextMenu({ x, y, isMine, msgId, onDelete, onReact, onClose }) {
+function ContextMenu({ x, y, isMine, msgId, msgText, onDelete, onReact, onReply, onForward, onEdit, onClose }) {
   const ref = useRef();
   useEffect(() => {
     const fn = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
     document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
+    document.addEventListener("touchstart", fn);
+    return () => { document.removeEventListener("mousedown", fn); document.removeEventListener("touchstart", fn); };
   }, [onClose]);
+
+  // Adjust position so menu doesn't overflow screen
+  const [pos, setPos] = useState({ top: y, left: x });
+  useEffect(() => {
+    const menuH = 280, menuW = 200;
+    const top  = Math.min(y, window.innerHeight - menuH - 10);
+    const left = Math.min(x, window.innerWidth  - menuW - 10);
+    setPos({ top: Math.max(top, 10), left: Math.max(left, 10) });
+  }, [x, y]);
+
   return (
-    <div ref={ref} style={{ position:"fixed", top:y, left:x, background:"#fff", borderRadius:12, boxShadow:"0 4px 24px rgba(0,0,0,0.18)", zIndex:1000, overflow:"hidden", minWidth:180, animation:"menuPop 0.15s ease" }}>
-      <div style={{ display:"flex", gap:4, padding:"10px 12px", borderBottom:"1px solid #f0f2f5" }}>
+    <div ref={ref} style={{ position:"fixed", top:pos.top, left:pos.left, background:"#fff", borderRadius:14, boxShadow:"0 4px 28px rgba(0,0,0,0.2)", zIndex:2000, overflow:"hidden", minWidth:190, animation:"menuPop 0.15s ease" }}>
+      {/* Emoji reactions */}
+      <div style={{ display:"flex", gap:2, padding:"10px 10px 8px", borderBottom:"1px solid #f0f2f5" }}>
         {EMOJI_LIST.map(emoji => (
           <button key={emoji} onClick={() => { onReact(emoji); onClose(); }}
             style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", borderRadius:8, padding:"2px 4px", transition:"transform 0.1s" }}
-            onMouseEnter={e => e.currentTarget.style.transform="scale(1.3)"}
+            onMouseEnter={e => e.currentTarget.style.transform="scale(1.35)"}
             onMouseLeave={e => e.currentTarget.style.transform="scale(1)"}>
             {emoji}
           </button>
         ))}
       </div>
+      {/* Actions */}
       {[
-        { label:"Reply",   icon:"↩️" },
-        { label:"Copy",    icon:"📋", action: () => {} },
-        ...(isMine ? [{ label:"Delete", icon:"🗑️", danger:true, action: onDelete }] : []),
-      ].map(({ label, icon, danger, action }) => (
-        <button key={label} onClick={() => { action?.(); onClose(); }}
+        { label:"Reply",   icon:<ReplyIcon />,   action: () => { onReply(); onClose(); }, show: true },
+        { label:"Forward", icon:<ForwardIcon />, action: () => { onForward(); onClose(); }, show: true },
+        { label:"Copy",    icon:<CopyIcon />,    action: () => { navigator.clipboard?.writeText(msgText || ""); onClose(); }, show: !!(msgText) },
+        { label:"Edit",    icon:<EditIcon />,    action: () => { onEdit(); onClose(); }, show: isMine && !!(msgText) },
+        { label:"Delete",  icon:<DeleteIcon />,  action: () => { onDelete(); onClose(); }, danger: true, show: isMine },
+      ].filter(a => a.show).map(({ label, icon, danger, action }) => (
+        <button key={label} onClick={action}
           style={{ display:"flex", alignItems:"center", gap:12, width:"100%", background:"none", border:"none", padding:"11px 16px", cursor:"pointer", textAlign:"left", color: danger?"#ef4444":"#111b21", fontSize:14, fontFamily:"'Nunito', sans-serif", transition:"background 0.15s" }}
           onMouseEnter={e => e.currentTarget.style.background="#f0f2f5"}
           onMouseLeave={e => e.currentTarget.style.background="none"}>
-          <span style={{ fontSize:16 }}>{icon}</span>{label}
+          <span style={{ color: danger?"#ef4444":"#8696a0", display:"flex", alignItems:"center" }}>{icon}</span>
+          {label}
         </button>
       ))}
     </div>
@@ -278,25 +273,21 @@ function ContextMenu({ x, y, isMine, msgId, onDelete, onReact, onClose }) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  CALL LOG BUBBLE — shown in chat for missed/answered calls
+//  CALL LOG BUBBLE
 // ════════════════════════════════════════════════════════════
 function CallLogBubble({ msg, isMine }) {
-  const missed  = msg.callStatus === "missed";
+  const missed   = msg.callStatus === "missed";
   const callType = msg.callType === "video" ? "Video" : "Audio";
-  const icon    = msg.callType === "video" ? "📹" : "📞";
-  const color   = missed ? "#ef4444" : "#25D366";
-  const label   = isMine
-    ? (missed ? `Missed ${callType} Call` : `${callType} Call`)
-    : (missed ? `Missed ${callType} Call` : `${callType} Call`);
-  const sub     = isMine
+  const color    = missed ? "#ef4444" : "#25D366";
+  const label    = missed ? `Missed ${callType} Call` : `${callType} Call`;
+  const sub      = isMine
     ? (missed ? "Not answered" : `Duration: ${msg.callDuration || "0:00"}`)
     : (missed ? "Tap to call back" : `Duration: ${msg.callDuration || "0:00"}`);
-
   return (
     <div style={{ display:"flex", justifyContent: isMine?"flex-end":"flex-start", padding:"4px 10px", marginBottom:3 }}>
       <div style={{ background: isMine?"#d9fdd3":"#fff", borderRadius:14, padding:"10px 14px", boxShadow:"0 1px 2px rgba(0,0,0,0.1)", display:"flex", alignItems:"center", gap:10, minWidth:200 }}>
         <div style={{ width:38, height:38, borderRadius:"50%", background:`${color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
-          {missed ? "📵" : icon}
+          {missed ? "📵" : (callType === "Video" ? "📹" : "📞")}
         </div>
         <div style={{ flex:1 }}>
           <div style={{ fontSize:14, fontWeight:700, color, fontFamily:"'Nunito', sans-serif" }}>{label}</div>
@@ -317,9 +308,7 @@ function IncomingCallScreen({ callerName, callerPhoto, callType, onAccept, onRej
       {[1,2,3].map(i => (
         <div key={i} style={{ position:"absolute", top:"30%", left:"50%", transform:"translate(-50%,-50%)", width:80+i*40, height:80+i*40, borderRadius:"50%", border:"2px solid rgba(37,211,102,0.25)", animation:`ripple 2s ${i*0.4}s infinite ease-out`, pointerEvents:"none" }} />
       ))}
-      <div style={{ zIndex:1, position:"relative", marginBottom:8 }}>
-        <Avatar name={callerName} photoURL={callerPhoto} size={96} />
-      </div>
+      <div style={{ zIndex:1, position:"relative", marginBottom:8 }}><Avatar name={callerName} photoURL={callerPhoto} size={96} /></div>
       <div style={{ textAlign:"center", zIndex:1 }}>
         <div style={{ color:"#fff", fontSize:26, fontWeight:700, fontFamily:"'Nunito', sans-serif", marginBottom:6 }}>{callerName}</div>
         <div style={{ color:"#25D366", fontSize:15, letterSpacing:1, fontFamily:"'Nunito', sans-serif" }}>
@@ -345,7 +334,7 @@ function IncomingCallScreen({ callerName, callerPhoto, callType, onAccept, onRej
 }
 
 // ════════════════════════════════════════════════════════════
-//  CALLING SCREEN (outgoing wait)
+//  CALLING SCREEN (outgoing)
 // ════════════════════════════════════════════════════════════
 function CallingScreen({ otherUser, callType, onCancel }) {
   const [dots, setDots] = useState("");
@@ -358,13 +347,9 @@ function CallingScreen({ otherUser, callType, onCancel }) {
       {[1,2,3].map(i => (
         <div key={i} style={{ position:"absolute", top:"30%", left:"50%", transform:"translate(-50%,-50%)", width:80+i*40, height:80+i*40, borderRadius:"50%", border:"2px solid rgba(37,211,102,0.2)", animation:`ripple 2.5s ${i*0.5}s infinite ease-out`, pointerEvents:"none" }} />
       ))}
-      <div style={{ zIndex:1, position:"relative", marginBottom:8 }}>
-        <Avatar name={otherUser?.name || "?"} photoURL={otherUser?.photoURL} size={96} />
-      </div>
+      <div style={{ zIndex:1, position:"relative", marginBottom:8 }}><Avatar name={otherUser?.name || "?"} photoURL={otherUser?.photoURL} size={96} /></div>
       <div style={{ color:"#fff", fontSize:24, fontWeight:700, fontFamily:"'Nunito', sans-serif", zIndex:1 }}>{otherUser?.name}</div>
-      <div style={{ color:"#8696a0", fontSize:15, fontFamily:"'Nunito', sans-serif", zIndex:1 }}>
-        {callType === "video" ? "📹 Video" : "📞 Audio"} · Calling{dots}
-      </div>
+      <div style={{ color:"#8696a0", fontSize:15, fontFamily:"'Nunito', sans-serif", zIndex:1 }}>{callType === "video" ? "📹 Video" : "📞 Audio"} · Calling{dots}</div>
       <button onClick={onCancel} style={{ marginTop:32, width:64, height:64, borderRadius:"50%", background:"#ef4444", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", boxShadow:"0 4px 20px rgba(239,68,68,0.5)", zIndex:1 }}>
         <EndCallIcon />
       </button>
@@ -373,16 +358,16 @@ function CallingScreen({ otherUser, callType, onCancel }) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  VIDEO CALL UI
+//  VIDEO CALL UI — with back camera flip
 // ════════════════════════════════════════════════════════════
-function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCameraOff, isSpeakerOff, onToggleMute, onToggleCamera, onToggleSpeaker, onEnd, otherUser, callType }) {
+function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCameraOff, isSpeakerOff, isFrontCam, onToggleMute, onToggleCamera, onToggleSpeaker, onFlipCamera, onEnd, otherUser, callType }) {
   const localRef  = useRef();
   const remoteRef = useRef();
   const [showCtrls, setShowCtrls] = useState(true);
   const ctrlTimer = useRef();
   const isAudio = callType === "audio";
 
-  useEffect(() => { if (localRef.current && localStream)   localRef.current.srcObject  = localStream;  }, [localStream]);
+  useEffect(() => { if (localRef.current && localStream) localRef.current.srcObject = localStream; }, [localStream]);
   useEffect(() => {
     if (remoteRef.current && remoteStream) {
       remoteRef.current.srcObject = remoteStream;
@@ -395,28 +380,21 @@ function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCamer
     clearTimeout(ctrlTimer.current);
     ctrlTimer.current = setTimeout(() => setShowCtrls(false), 3500);
   };
-
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
-  // ── AUDIO CALL UI ── (no video, just avatar)
+  // ── AUDIO CALL UI ──
   if (isAudio) {
     return (
       <div style={{ position:"fixed", inset:0, zIndex:3000, background:"linear-gradient(160deg,#0a1628,#0d2137)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
-        {/* Hidden audio element for remote stream */}
         <audio ref={remoteRef} autoPlay style={{ display:"none" }} />
         <Avatar name={otherUser?.name||"?"} photoURL={otherUser?.photoURL} size={110} online />
         <div style={{ color:"#fff", fontSize:22, fontWeight:700, fontFamily:"'Nunito', sans-serif", marginTop:8 }}>{otherUser?.name}</div>
         <div style={{ color:"#25D366", fontSize:14, fontFamily:"'Nunito', sans-serif" }}>{fmt(callDuration)}</div>
-        {/* Audio wave animation */}
         <div style={{ display:"flex", gap:4, alignItems:"flex-end", height:32, marginTop:8 }}>
           {[1,2,3,4,5].map(i => (
-            <div key={i} style={{ width:4, borderRadius:2, background:"rgba(37,211,102,0.7)",
-              animation:`audioWave 1s ${i*0.12}s infinite ease-in-out`,
-              height: isMuted ? 4 : undefined,
-            }} />
+            <div key={i} style={{ width:4, borderRadius:2, background:"rgba(37,211,102,0.7)", animation: isMuted ? "none" : `audioWave 1s ${i*0.12}s infinite ease-in-out`, height: isMuted ? 4 : undefined }} />
           ))}
         </div>
-        {/* Controls */}
         <div style={{ display:"flex", gap:24, marginTop:32, alignItems:"center" }}>
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
             <button onClick={onToggleSpeaker} style={{ width:52, height:52, borderRadius:"50%", background: isSpeakerOff?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.2)", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}>
@@ -439,8 +417,8 @@ function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCamer
   }
 
   return (
-    <div onMouseMove={showControls} onClick={showControls} style={{ position:"fixed", inset:0, zIndex:3000, background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
-      {/* FIX: object-fit contain prevents zoom — shows full video */}
+    <div onMouseMove={showControls} onClick={showControls}
+      style={{ position:"fixed", inset:0, zIndex:3000, background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
       <video ref={remoteRef} autoPlay playsInline style={{ width:"100%", height:"100%", objectFit:"contain", background:"#111" }} />
       {!remoteStream && (
         <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, background:"linear-gradient(160deg,#0a1628,#0d2137)" }}>
@@ -449,11 +427,11 @@ function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCamer
           <div style={{ color:"#8696a0", fontSize:14, fontFamily:"'Nunito', sans-serif" }}>Connecting…</div>
         </div>
       )}
-      {/* PiP */}
+      {/* PiP local */}
       <div style={{ position:"absolute", bottom:100, right:16, width:110, height:155, borderRadius:16, overflow:"hidden", border:"2px solid rgba(255,255,255,0.3)", boxShadow:"0 4px 20px rgba(0,0,0,0.5)", background:"#222" }}>
         {isCameraOff
           ? <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", background:"#1a1a1a" }}><span style={{ fontSize:32 }}>🚫</span></div>
-          : <video ref={localRef} autoPlay playsInline muted style={{ width:"100%", height:"100%", objectFit:"cover", transform:"scaleX(-1)" }} />
+          : <video ref={localRef} autoPlay playsInline muted style={{ width:"100%", height:"100%", objectFit:"cover", transform: isFrontCam ? "scaleX(-1)" : "scaleX(1)" }} />
         }
       </div>
       {/* Top bar */}
@@ -465,10 +443,10 @@ function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCamer
         <Avatar name={otherUser?.name||"?"} photoURL={otherUser?.photoURL} size={36} />
       </div>
       {/* Bottom controls */}
-      <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"16px 0 36px", background:"linear-gradient(to top,rgba(0,0,0,0.7),transparent)", display:"flex", justifyContent:"center", alignItems:"center", gap:20, opacity: showCtrls?1:0, transition:"opacity 0.3s" }}>
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"16px 0 36px", background:"linear-gradient(to top,rgba(0,0,0,0.7),transparent)", display:"flex", justifyContent:"center", alignItems:"center", gap:16, flexWrap:"wrap", opacity: showCtrls?1:0, transition:"opacity 0.3s" }}>
         {[
-          { onClick:onToggleSpeaker, active:!isSpeakerOff, label:isSpeakerOff?"Speaker Off":"Speaker",  icon:<SpeakerIcon off={isSpeakerOff} /> },
-          { onClick:onToggleMute,    active:!isMuted,       label:isMuted?"Unmute":"Mute",               icon:<MicIcon muted={isMuted} /> },
+          { onClick:onToggleSpeaker, active:!isSpeakerOff, label:isSpeakerOff?"Speaker Off":"Speaker", icon:<SpeakerIcon off={isSpeakerOff} /> },
+          { onClick:onToggleMute,    active:!isMuted,       label:isMuted?"Unmute":"Mute",              icon:<MicIcon muted={isMuted} /> },
         ].map(({ onClick, active, label, icon }) => (
           <div key={label} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
             <button onClick={onClick} style={{ width:48, height:48, borderRadius:"50%", background: active?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.08)", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", backdropFilter:"blur(4px)", transition:"background 0.2s" }}>{icon}</button>
@@ -478,115 +456,78 @@ function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCamer
         <button onClick={onEnd} style={{ width:64, height:64, borderRadius:"50%", background:"#ef4444", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", boxShadow:"0 4px 20px rgba(239,68,68,0.5)" }}><EndCallIcon /></button>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
           <button onClick={onToggleCamera} style={{ width:48, height:48, borderRadius:"50%", background: !isCameraOff?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.08)", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}><CamIcon off={isCameraOff} /></button>
-          <span style={{ color:"rgba(255,255,255,0.6)", fontSize:11, fontFamily:"'Nunito', sans-serif" }}>{isCameraOff?"Camera Off":"Camera"}</span>
+          <span style={{ color:"rgba(255,255,255,0.6)", fontSize:11, fontFamily:"'Nunito', sans-serif" }}>{isCameraOff?"Cam Off":"Cam"}</span>
         </div>
-        <div style={{ width:48 }} />
+        {/* ✅ Camera flip button */}
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+          <button onClick={onFlipCamera} style={{ width:48, height:48, borderRadius:"50%", background:"rgba(255,255,255,0.2)", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}><FlipCamIcon /></button>
+          <span style={{ color:"rgba(255,255,255,0.6)", fontSize:11, fontFamily:"'Nunito', sans-serif" }}>{isFrontCam?"Back Cam":"Front Cam"}</span>
+        </div>
       </div>
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════
-//  useVideoCall HOOK
-//  ─ startCall / acceptCall / rejectCall / endCall
-//  ─ saves call log to Firestore chat messages
-//  ─ sends browser notification on incoming call
+//  useVideoCall HOOK — with camera flip support
 // ════════════════════════════════════════════════════════════
 function useVideoCall({ currentUser, chat, addToast }) {
-  const [callState,       setCallState      ] = useState("idle");
-  const [incomingData,    setIncomingData   ] = useState(null);
-  const [localStream,     setLocalStream    ] = useState(null);
-  const [remoteStream,    setRemoteStream   ] = useState(null);
-  const [isMuted,         setIsMuted        ] = useState(false);
-  const [isCameraOff,     setIsCameraOff    ] = useState(false);
-  const [isSpeakerOff,    setIsSpeakerOff   ] = useState(false);
-  const [callDuration,    setCallDuration   ] = useState(0);
+  const [callState,    setCallState   ] = useState("idle");
+  const [incomingData, setIncomingData] = useState(null);
+  const [localStream,  setLocalStream ] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [isMuted,      setIsMuted     ] = useState(false);
+  const [isCameraOff,  setIsCameraOff ] = useState(false);
+  const [isSpeakerOff, setIsSpeakerOff] = useState(false);
+  const [isFrontCam,   setIsFrontCam  ] = useState(true);   // ✅ NEW
+  const [callDuration, setCallDuration] = useState(0);
 
-  const pcRef            = useRef(null);
-  const roomDocRef       = useRef(null);
-  const callStartRef     = useRef(null);
-  const localStreamRef   = useRef(null);
-  const durationIv       = useRef(null);
-  const unsubsRef        = useRef([]);
-  const callStateRef     = useRef("idle");
-  const callTypeRef      = useRef("video");
+  const pcRef          = useRef(null);
+  const roomDocRef     = useRef(null);
+  const callStartRef   = useRef(null);
+  const localStreamRef = useRef(null);
+  const durationIv     = useRef(null);
+  const unsubsRef      = useRef([]);
+  const callStateRef   = useRef("idle");
+  const callTypeRef    = useRef("video");
 
   useEffect(() => { callStateRef.current = callState; }, [callState]);
 
   const otherUserId = chat?.otherUser?.id;
 
-  // ── Save call log message to Firestore ──
-  const saveCallLog = useCallback(async (status) => {
-    if (!chat?.id || !currentUser?.uid) return;
-    const duration = callStartRef.current
-      ? Math.floor((Date.now() - callStartRef.current) / 1000)
-      : 0;
-    const mm = String(Math.floor(duration / 60)).padStart(2,"0");
-    const ss = String(duration % 60).padStart(2,"0");
-    await addDoc(collection(db, "messages"), {
-      chatId:      chat.id,
-      participants: chat.participants,
-      senderId:    currentUser.uid,
-      type:        "call",
-      callType:    callTypeRef.current,
-      callStatus:  status,          // "answered" | "missed"
-      callDuration: duration > 0 ? `${mm}:${ss}` : null,
-      createdAt:   serverTimestamp(),
-      read:        false,
-    }).catch(() => {});
-  }, [chat, currentUser]);
-
-  // ── Listen for incoming calls (global — attached once per user) ──
+  // ── Incoming call listener ──
   useEffect(() => {
     if (!currentUser?.uid) return;
     const signalRef = doc(db, "users", currentUser.uid, "callSignal", "incoming");
     const unsub = onSnapshot(signalRef, async snap => {
       if (!snap.exists()) return;
       const data = snap.data();
-
       if (data.status === "calling" && callStateRef.current === "idle") {
         setIncomingData(data);
         setCallState("incoming");
         callTypeRef.current = data.callType || "video";
-
-        // ── Browser notification for incoming call ──
-        const n = sendBrowserNotification(
+        sendBrowserNotification(
           `📞 Incoming ${data.callType === "video" ? "Video" : "Audio"} Call`,
           `from ${data.callerName || "Someone"}`,
-          {
-            requireInteraction: true,
-            tag: "incoming-call",
-            sound: "call",
-            data: { chatId: data.chatId, type: "call" },
-          }
+          { requireInteraction: true, tag: "incoming-call", sound: "call", data: { chatId: data.chatId, type: "call" } }
         );
-        // In-app toast as well
-        addToast({
-          id: Date.now(),
-          icon: data.callType === "video" ? "📹" : "📞",
-          title: `Incoming ${data.callType === "video" ? "Video" : "Audio"} Call`,
-          body: `from ${data.callerName || "Someone"}`,
-          color: "#25D366",
-        });
-
+        addToast({ id: Date.now(), icon: data.callType === "video" ? "📹" : "📞", title: `Incoming ${data.callType === "video" ? "Video" : "Audio"} Call`, body: `from ${data.callerName || "Someone"}`, color: "#25D366" });
       } else if (data.status === "ended" && callStateRef.current !== "idle") {
         cleanupCall(false);
       }
     }, err => console.warn("callSignal:", err.code));
     return () => unsub();
-  }, [currentUser?.uid]); // NO callState in deps
+  }, [currentUser?.uid]);
 
-  // type: "video" = camera+mic, "audio" = mic only
-  const getMedia = async (type = "video") => {
+  const getMedia = async (type = "video", facingMode = "user") => {
     const constraints = type === "audio"
       ? { video: false, audio: true }
-      : { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: true };
+      : { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode }, audio: true };
     try {
       const s = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = s; setLocalStream(s); return s;
     } catch {
       try {
-        // Fallback: audio only if video fails
         const s = await navigator.mediaDevices.getUserMedia({ audio: true });
         localStreamRef.current = s; setLocalStream(s); return s;
       } catch {
@@ -608,40 +549,33 @@ function useVideoCall({ currentUser, chat, addToast }) {
     return pc;
   };
 
-  // ── START CALL (caller) ──
   const startCall = useCallback(async (type = "video") => {
     if (!otherUserId || !currentUser?.uid) return;
     callTypeRef.current = type;
+    setIsFrontCam(true);
     setCallState("calling");
     try {
-      const stream = await getMedia(type);  // pass type: audio=mic only, video=cam+mic
+      const stream = await getMedia(type, "user");
       const pc     = buildPC(stream);
       pcRef.current = pc;
-
       const roomRef = await addDoc(collection(db, "rooms"), {
         callerId: currentUser.uid, calleeId: otherUserId,
         chatId: chat?.id, callType: type,
         createdAt: serverTimestamp(), status: "calling",
       });
       roomDocRef.current = roomRef;
-
       pc.onicecandidate = async e => {
         if (e.candidate) await addDoc(collection(db, "rooms", roomRef.id, "callerCandidates"), e.candidate.toJSON());
       };
-
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await updateDoc(roomRef, { offer: { type: offer.type, sdp: offer.sdp } });
-
-      // Signal callee
       await setDoc(doc(db, "users", otherUserId, "callSignal", "incoming"), {
         status: "calling", callerId: currentUser.uid,
         callerName: currentUser.name || "Unknown",
         callerPhoto: currentUser.photoURL || null,
         roomId: roomRef.id, chatId: chat?.id, callType: type,
       });
-
-      // Listen for answer
       const u1 = onSnapshot(roomRef, async snap => {
         const d = snap.data();
         if (d?.answer && !pc.currentRemoteDescription) {
@@ -653,50 +587,41 @@ function useVideoCall({ currentUser, chat, addToast }) {
         }
         if (d?.status === "ended") cleanupCall(false, "answered");
       });
-
-      // Listen for callee ICE
       const u2 = onSnapshot(collection(db, "rooms", roomRef.id, "calleeCandidates"), snap => {
         snap.docChanges().forEach(async ch => {
           if (ch.type === "added") await pc.addIceCandidate(new RTCIceCandidate(ch.doc.data())).catch(() => {});
         });
       });
-
       unsubsRef.current = [u1, u2];
     } catch { setCallState("idle"); }
   }, [otherUserId, currentUser, chat]);
 
-  // ── ACCEPT CALL (callee) ──
   const acceptCall = useCallback(async () => {
     if (!incomingData) return;
     const { roomId, callType } = incomingData;
     callTypeRef.current = callType || "video";
+    setIsFrontCam(true);
     setCallState("connected");
     try {
-      const stream = await getMedia(callType || "video");  // audio call = mic only
+      const stream = await getMedia(callType || "video", "user");
       const pc     = buildPC(stream);
       pcRef.current = pc;
-
       const roomRef = doc(db, "rooms", roomId);
       roomDocRef.current = roomRef;
-
       pc.onicecandidate = async e => {
         if (e.candidate) await addDoc(collection(db, "rooms", roomId, "calleeCandidates"), e.candidate.toJSON());
       };
-
       const snap = await getDoc(roomRef);
       const { offer } = snap.data();
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await updateDoc(roomRef, { answer: { type: answer.type, sdp: answer.sdp }, status: "connected" });
-
-      // Listen for caller ICE
       const u1 = onSnapshot(collection(db, "rooms", roomId, "callerCandidates"), snap => {
         snap.docChanges().forEach(async ch => {
           if (ch.type === "added") await pc.addIceCandidate(new RTCIceCandidate(ch.doc.data())).catch(() => {});
         });
       });
-
       unsubsRef.current = [u1];
       await deleteDoc(doc(db, "users", currentUser.uid, "callSignal", "incoming")).catch(() => {});
       callStartRef.current = Date.now();
@@ -705,15 +630,13 @@ function useVideoCall({ currentUser, chat, addToast }) {
     } catch { setCallState("idle"); }
   }, [incomingData, currentUser]);
 
-  // ── REJECT CALL ──
   const rejectCall = useCallback(async () => {
     if (incomingData?.roomId) {
       await updateDoc(doc(db, "rooms", incomingData.roomId), { status: "ended" }).catch(() => {});
-      // Save missed call log on callee side too
       if (chat?.id && currentUser?.uid) {
         await addDoc(collection(db, "messages"), {
           chatId: chat.id, participants: chat.participants,
-          senderId: incomingData.callerId, // caller's message
+          senderId: incomingData.callerId,
           type: "call", callType: incomingData.callType || "video",
           callStatus: "missed", callDuration: null,
           createdAt: serverTimestamp(), read: false,
@@ -724,7 +647,36 @@ function useVideoCall({ currentUser, chat, addToast }) {
     setCallState("idle"); setIncomingData(null);
   }, [incomingData, currentUser, chat]);
 
-  // ── CLEANUP ──
+  // ✅ Flip camera — stop current tracks, get new stream, replace tracks in PC
+  const flipCamera = useCallback(async () => {
+    if (callTypeRef.current === "audio") return;
+    const newFacing = isFrontCam ? "environment" : "user";
+    try {
+      // Stop old video track
+      localStreamRef.current?.getVideoTracks().forEach(t => t.stop());
+      // Get new stream with new facingMode
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newFacing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      // Replace track in RTCPeerConnection
+      if (pcRef.current) {
+        const sender = pcRef.current.getSenders().find(s => s.track?.kind === "video");
+        if (sender) await sender.replaceTrack(newVideoTrack);
+      }
+      // Replace track in local stream
+      if (localStreamRef.current) {
+        localStreamRef.current.getVideoTracks().forEach(t => localStreamRef.current.removeTrack(t));
+        localStreamRef.current.addTrack(newVideoTrack);
+        setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      }
+      setIsFrontCam(!isFrontCam);
+    } catch (err) {
+      addToast({ id: Date.now(), icon: "⚠️", title: "Camera Flip Failed", body: "Back camera not available.", color: "#f77f00" });
+    }
+  }, [isFrontCam, addToast]);
+
   const cleanupCall = useCallback(async (notify = true, status = "answered") => {
     clearInterval(durationIv.current);
     localStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -732,7 +684,6 @@ function useVideoCall({ currentUser, chat, addToast }) {
     pcRef.current = null;
     unsubsRef.current.forEach(u => u?.());
     unsubsRef.current = [];
-
     if (notify && roomDocRef.current) {
       await updateDoc(roomDocRef.current, { status: "ended" }).catch(() => {});
     }
@@ -742,8 +693,6 @@ function useVideoCall({ currentUser, chat, addToast }) {
     if (currentUser?.uid) {
       await deleteDoc(doc(db, "users", currentUser.uid, "callSignal", "incoming")).catch(() => {});
     }
-
-    // Save call log in chat
     if (notify && chat?.id) {
       const dur = callStartRef.current ? Math.floor((Date.now() - callStartRef.current)/1000) : 0;
       const mm  = String(Math.floor(dur/60)).padStart(2,"0");
@@ -756,41 +705,105 @@ function useVideoCall({ currentUser, chat, addToast }) {
         createdAt: serverTimestamp(), read: false,
       }).catch(() => {});
     }
-
     localStreamRef.current = null;
     roomDocRef.current = null;
     callStartRef.current = null;
     setLocalStream(null); setRemoteStream(null);
     setCallState("idle"); setIncomingData(null);
-    setCallDuration(0); setIsMuted(false); setIsCameraOff(false);
+    setCallDuration(0); setIsMuted(false); setIsCameraOff(false); setIsFrontCam(true);
   }, [otherUserId, currentUser, chat]);
 
   return {
     callState, incomingData, localStream, remoteStream,
-    isMuted, isCameraOff, isSpeakerOff, callDuration,
-    callType: callTypeRef.current,  // expose current call type
+    isMuted, isCameraOff, isSpeakerOff, isFrontCam, callDuration,
+    callType: callTypeRef.current,
     startCall, acceptCall, rejectCall,
-    endCall: () => cleanupCall(true, "answered"),
+    endCall:       () => cleanupCall(true, "answered"),
     toggleMute:    () => { localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !t.enabled; }); setIsMuted(m => !m); },
     toggleCamera:  () => { localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = !t.enabled; }); setIsCameraOff(c => !c); },
     toggleSpeaker: () => setIsSpeakerOff(s => !s),
+    flipCamera,
   };
 }
 
 // ════════════════════════════════════════════════════════════
-//  MESSAGE BUBBLE
+//  REPLY PREVIEW BAR (shown above input when replying)
 // ════════════════════════════════════════════════════════════
-function Bubble({ msg, isMine, senderName, onContextMenu, deletedIds }) {
+function ReplyPreviewBar({ replyTo, onCancel }) {
+  if (!replyTo) return null;
+  return (
+    <div style={{ background:"#f0f2f5", borderLeft:"4px solid #25D366", padding:"8px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, borderBottom:"1px solid #ddd", animation:"slideDown 0.15s ease" }}>
+      <div style={{ flex:1, overflow:"hidden" }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"#25D366", fontFamily:"'Nunito', sans-serif", marginBottom:2 }}>
+          {replyTo.isMine ? "You" : replyTo.senderName || "Them"}
+        </div>
+        <div style={{ fontSize:12, color:"#8696a0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", fontFamily:"'Nunito', sans-serif" }}>
+          {replyTo.text || "(message)"}
+        </div>
+      </div>
+      <button onClick={onCancel} style={{ background:"none", border:"none", cursor:"pointer", color:"#8696a0", display:"flex", alignItems:"center", padding:4, flexShrink:0 }}>
+        <CloseIcon s={18} />
+      </button>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+//  FORWARD MODAL — pick a chat to forward to
+// ════════════════════════════════════════════════════════════
+function ForwardModal({ chats, currentUser, msgText, onForward, onClose }) {
+  const [selected, setSelected] = useState(null);
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:2500, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background:"#fff", borderRadius:18, padding:0, width: Math.min(380, window.innerWidth - 32), maxHeight:"70vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 8px 40px rgba(0,0,0,0.22)", animation:"menuPop 0.2s ease" }}>
+        <div style={{ padding:"16px 20px", borderBottom:"1px solid #f0f2f5", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontWeight:700, fontSize:16, color:"#111b21", fontFamily:"'Nunito', sans-serif" }}>Forward Message</span>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"#8696a0" }}><CloseIcon s={20} /></button>
+        </div>
+        <div style={{ padding:"10px 16px 4px", background:"#f8f9fa", margin:"0 16px 8px", borderRadius:10, fontSize:13, color:"#54656f", fontFamily:"'Nunito', sans-serif", fontStyle:"italic" }}>
+          "{msgText?.slice(0,80)}{msgText?.length > 80 ? "…" : ""}"
+        </div>
+        <div style={{ flex:1, overflowY:"auto" }}>
+          {chats.map(c => (
+            <div key={c.id} onClick={() => setSelected(c.id === selected ? null : c.id)}
+              style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 20px", cursor:"pointer", background: selected === c.id ? "#e8f5e9" : "#fff", borderBottom:"1px solid #f0f2f5", transition:"background 0.15s" }}>
+              <Avatar name={c.otherUser?.name || "?"} photoURL={c.otherUser?.photoURL} size={40} />
+              <span style={{ fontWeight:600, fontSize:14, color:"#111b21", fontFamily:"'Nunito', sans-serif" }}>{c.otherUser?.name}</span>
+              {selected === c.id && <span style={{ marginLeft:"auto", color:"#25D366", fontSize:18 }}>✓</span>}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:"14px 20px", borderTop:"1px solid #f0f2f5" }}>
+          <button onClick={() => selected && onForward(selected)} disabled={!selected}
+            style={{ width:"100%", padding:"12px", borderRadius:24, background: selected?"#25D366":"#ccc", border:"none", cursor: selected?"pointer":"default", color:"#fff", fontWeight:700, fontSize:15, fontFamily:"'Nunito', sans-serif", transition:"background 0.2s" }}>
+            Forward
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+//  MESSAGE BUBBLE — with reply preview, edited label, reactions
+// ════════════════════════════════════════════════════════════
+function Bubble({ msg, isMine, senderName, onContextMenu, deletedIds, allMessages, userCache }) {
   const [hovered, setHovered] = useState(false);
   const isDeleted = deletedIds.has(msg.id);
 
-  // Call log bubble
   if (msg.type === "call") return <CallLogBubble msg={msg} isMine={isMine} />;
+
+  // Find replied-to message
+  const replyMsg = msg.replyTo ? allMessages.find(m => m.id === msg.replyTo) : null;
+  const replySenderName = replyMsg
+    ? (replyMsg.senderId === msg.senderId ? (isMine ? "You" : senderName) : (isMine ? senderName : "You"))
+    : null;
 
   return (
     <div style={{ display:"flex", justifyContent: isMine?"flex-end":"flex-start", marginBottom:3, padding:"2px 10px" }}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <div style={{ maxWidth:"72%", position:"relative" }}>
+        {/* Context menu trigger */}
         {hovered && !isDeleted && (
           <div style={{ position:"absolute", top:"50%", transform:"translateY(-50%)", [isMine?"left":"right"]:-36, display:"flex", alignItems:"center", animation:"fadeIn 0.15s ease" }}>
             <button onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onContextMenu(r.right, r.top); }}
@@ -798,13 +811,26 @@ function Bubble({ msg, isMine, senderName, onContextMenu, deletedIds }) {
           </div>
         )}
         <div style={{ background: isDeleted?"#f0f2f5":isMine?"#d9fdd3":"#fff", borderRadius: isMine?"18px 18px 4px 18px":"18px 18px 18px 4px", padding:"7px 12px 5px", boxShadow:"0 1px 2px rgba(0,0,0,0.1)" }}>
+          {/* Sender name (group or non-mine) */}
           {!isMine && senderName && !isDeleted && (
             <div style={{ color:"#25D366", fontSize:12, fontWeight:700, marginBottom:2, fontFamily:"'Nunito', sans-serif" }}>{senderName}</div>
           )}
+          {/* Reply preview inside bubble */}
+          {replyMsg && !isDeleted && (
+            <div style={{ background: isMine?"rgba(0,0,0,0.06)":"rgba(0,0,0,0.05)", borderLeft:"3px solid #25D366", borderRadius:"8px 8px 0 0", padding:"6px 10px", marginBottom:6, cursor:"default" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#25D366", fontFamily:"'Nunito', sans-serif", marginBottom:2 }}>{replySenderName}</div>
+              <div style={{ fontSize:12, color:"#54656f", fontFamily:"'Nunito', sans-serif", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {deletedIds.has(replyMsg.id) ? "🚫 Deleted message" : (replyMsg.text || "(message)")}
+              </div>
+            </div>
+          )}
+          {/* Message text */}
           <div style={{ color: isDeleted?"#8696a0":"#111b21", fontSize:14.5, lineHeight:1.45, wordBreak:"break-word", fontFamily:"'Nunito', sans-serif", fontStyle: isDeleted?"italic":"normal" }}>
             {isDeleted ? (isMine ? "🚫 You deleted this message" : "🚫 This message was deleted") : msg.text}
           </div>
+          {/* Time + edited + read receipt */}
           <div style={{ display:"flex", justifyContent:"flex-end", alignItems:"center", gap:4, marginTop:3 }}>
+            {msg.edited && !isDeleted && <span style={{ fontSize:10, color:"#8696a0", fontStyle:"italic" }}>edited</span>}
             <span style={{ color:"#8696a0", fontSize:11 }}>{formatTime(msg.createdAt)}</span>
             {isMine && !isDeleted && <span style={{ fontSize:13, color: msg.read?"#53bdeb":"#8696a0" }}>✓✓</span>}
           </div>
@@ -844,61 +870,27 @@ function ChatSearchBar({ value, onChange, onClose, onNext, onPrev, matchCount, c
       <input ref={inputRef} value={value} onChange={e => onChange(e.target.value)} placeholder="Search in chat…"
         style={{ flex:1, background:"#fff", border:"none", borderRadius:20, padding:"8px 14px", fontSize:14, outline:"none", fontFamily:"'Nunito', sans-serif", color:"#111b21" }} />
       {value && <span style={{ color:"#8696a0", fontSize:13, whiteSpace:"nowrap" }}>{matchCount===0?"No results":`${currentMatch+1} / ${matchCount}`}</span>}
-      <button onClick={onPrev}  disabled={!matchCount} style={{ background:"none", border:"none", cursor: matchCount?"pointer":"default", color: matchCount?"#54656f":"#ccc", fontSize:18, padding:2 }}>▲</button>
-      <button onClick={onNext}  disabled={!matchCount} style={{ background:"none", border:"none", cursor: matchCount?"pointer":"default", color: matchCount?"#54656f":"#ccc", fontSize:18, padding:2 }}>▼</button>
+      <button onClick={onPrev} disabled={!matchCount} style={{ background:"none", border:"none", cursor: matchCount?"pointer":"default", color: matchCount?"#54656f":"#ccc", fontSize:18, padding:2 }}>▲</button>
+      <button onClick={onNext} disabled={!matchCount} style={{ background:"none", border:"none", cursor: matchCount?"pointer":"default", color: matchCount?"#54656f":"#ccc", fontSize:18, padding:2 }}>▼</button>
       <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"#54656f", display:"flex", alignItems:"center" }}><CloseIcon /></button>
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════
-//  NOTIFICATION PERMISSION BAR — WhatsApp Web style
-//  Shows at top when permission not granted
+//  NOTIFICATION BAR
 // ════════════════════════════════════════════════════════════
 function NotificationBar({ onAllow, onDismiss }) {
   return (
-    <div style={{
-      position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
-      background: "#075E54",
-      padding: "10px 16px",
-      display: "flex", alignItems: "center", gap: 12,
-      boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-      animation: "slideDown 0.3s ease",
-      fontFamily: "'Nunito', sans-serif",
-    }}>
-      <div style={{ fontSize: 22, flexShrink: 0 }}>🔔</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>
-          Enable notifications
-        </div>
-        <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 12, marginTop: 2 }}>
-          Get notified for new messages and calls, even when this tab is not active
-        </div>
+    <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:9999, background:"#075E54", padding:"10px 16px", display:"flex", alignItems:"center", gap:12, boxShadow:"0 2px 8px rgba(0,0,0,0.3)", animation:"slideDown 0.3s ease", fontFamily:"'Nunito', sans-serif" }}>
+      <div style={{ fontSize:22, flexShrink:0 }}>🔔</div>
+      <div style={{ flex:1 }}>
+        <div style={{ color:"#fff", fontWeight:700, fontSize:14 }}>Enable notifications</div>
+        <div style={{ color:"rgba(255,255,255,0.75)", fontSize:12, marginTop:2 }}>Get notified for new messages and calls</div>
       </div>
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <button onClick={onAllow} style={{
-          background: "#25D366", color: "#fff",
-          border: "none", borderRadius: 20,
-          padding: "7px 18px", fontWeight: 700,
-          fontSize: 13, cursor: "pointer",
-          fontFamily: "'Nunito', sans-serif",
-          transition: "background 0.2s",
-          boxShadow: "0 2px 8px rgba(37,211,102,0.4)",
-        }}
-          onMouseEnter={e => e.currentTarget.style.background = "#1da851"}
-          onMouseLeave={e => e.currentTarget.style.background = "#25D366"}
-        >
-          Enable
-        </button>
-        <button onClick={onDismiss} style={{
-          background: "rgba(255,255,255,0.15)", color: "#fff",
-          border: "1px solid rgba(255,255,255,0.3)",
-          borderRadius: 20, padding: "7px 14px",
-          fontWeight: 600, fontSize: 13,
-          cursor: "pointer", fontFamily: "'Nunito', sans-serif",
-        }}>
-          Not now
-        </button>
+      <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+        <button onClick={onAllow} style={{ background:"#25D366", color:"#fff", border:"none", borderRadius:20, padding:"7px 18px", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"'Nunito', sans-serif" }}>Enable</button>
+        <button onClick={onDismiss} style={{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"1px solid rgba(255,255,255,0.3)", borderRadius:20, padding:"7px 14px", fontWeight:600, fontSize:13, cursor:"pointer", fontFamily:"'Nunito', sans-serif" }}>Not now</button>
       </div>
     </div>
   );
@@ -908,7 +900,7 @@ function NotificationBar({ onAllow, onDismiss }) {
 //  SIDEBAR
 // ════════════════════════════════════════════════════════════
 function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onBackToDashboard, typingMap }) {
-  const [search,        setSearch       ] = useState("");
+  const [search, setSearch]               = useState("");
   const [searchResults, setSearchResults] = useState([]);
 
   useEffect(() => {
@@ -943,7 +935,6 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
         </div>
         <button style={{ background:"none", border:"none", cursor:"pointer", color:"#54656f", fontSize:20 }}>⋮</button>
       </div>
-
       <div style={{ padding:"8px 12px", background:"#fff" }}>
         <div style={{ background:"#f0f2f5", borderRadius:10, display:"flex", alignItems:"center", padding:"7px 12px", gap:8 }}>
           <span style={{ color:"#8696a0", fontSize:15 }}>🔍</span>
@@ -952,7 +943,6 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
           {search && <button onClick={() => setSearch("")} style={{ background:"none", border:"none", cursor:"pointer", color:"#8696a0", display:"flex", alignItems:"center" }}><CloseIcon s={16} /></button>}
         </div>
       </div>
-
       <div style={{ flex:1, overflowY:"auto" }}>
         {list.length === 0 && <div style={{ color:"#8696a0", textAlign:"center", padding:30, fontSize:14 }}>{search?"No users found":"No chats yet"}</div>}
         {list.map(item => {
@@ -963,7 +953,6 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
           const isTyping = !isUser && typingMap?.[item.id];
           const lastTime = !isUser && item.lastMessageTime ? formatTime(item.lastMessageTime) : "";
           const sub      = isUser ? item.email : item.lastMessage || "No messages yet";
-
           return (
             <div key={item.id} onClick={() => isUser ? handleUserSelect(item) : onSelectChat(item)}
               style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 16px", cursor:"pointer", background: isActive?"#f0f2f5":"#fff", borderBottom:"1px solid #f0f2f5", transition:"background 0.15s" }}
@@ -991,9 +980,9 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
 }
 
 // ════════════════════════════════════════════════════════════
-//  CHAT PANEL
+//  CHAT PANEL — full featured
 // ════════════════════════════════════════════════════════════
-function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
+function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats }) {
   const [messages,      setMessages     ] = useState([]);
   const [text,          setText         ] = useState("");
   const [userCache,     setUserCache    ] = useState({});
@@ -1006,16 +995,19 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
   const [searchMatches, setSearchMatches] = useState([]);
   const [searchIndex,   setSearchIndex  ] = useState(0);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const [prevMsgLen,    setPrevMsgLen   ] = useState(0);
+  const [replyTo,       setReplyTo      ] = useState(null);   // ✅ reply state
+  const [editingMsg,    setEditingMsg   ] = useState(null);   // ✅ edit state
+  const [forwardMsg,    setForwardMsg   ] = useState(null);   // ✅ forward state
 
   const bottomRef        = useRef();
   const containerRef     = useRef();
+  const inputRef         = useRef();
   const typingTimeoutRef = useRef();
   const typingDocRef     = useRef();
 
   const vc = useVideoCall({ currentUser, chat, addToast });
 
-  // Listen other user data
+  // Other user data
   useEffect(() => {
     const id = chat?.otherUser?.id;
     if (!id) return;
@@ -1026,27 +1018,20 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
   useEffect(() => {
     if (!chat?.id) { setMessages([]); return; }
     typingDocRef.current = doc(db, "chats", chat.id, "typing", currentUser.uid);
-    const q = query(
-      collection(db, "messages"),
-      where("chatId", "==", chat.id),
-      orderBy("createdAt"),
-    );
+    const q = query(collection(db, "messages"), where("chatId", "==", chat.id), orderBy("createdAt"));
     return onSnapshot(q, async snap => {
       const list = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-
-      // Notify for new incoming messages while chat is open
-      if (list.length > prevMsgLen && prevMsgLen > 0) {
-        const newest = list[list.length - 1];
-        if (newest.senderId !== currentUser.uid && newest.type !== "call") {
-          const senderName = userCache[newest.senderId]?.name || otherUserData?.name || "Someone";
-          // In-app toast
-          addToast({ id: Date.now(), icon:"💬", title: senderName, body: newest.text, color:"#25D366" });
-          // Browser notification
-          sendBrowserNotification(senderName, newest.text, { tag:"new-message" });
+      setMessages(prev => {
+        if (prev.length > 0 && list.length > prev.length) {
+          const newest = list[list.length - 1];
+          if (newest && newest.senderId !== currentUser.uid && newest.type !== "call") {
+            const senderName = otherUserData?.name || "Someone";
+            addToast({ id: Date.now(), icon:"💬", title: senderName, body: newest.text, color:"#25D366" });
+            sendBrowserNotification(senderName, newest.text, { tag:"new-message" });
+          }
         }
-      }
-      setPrevMsgLen(list.length);
-      setMessages(list);
+        return list;
+      });
       list.forEach(async m => {
         if (m.senderId !== currentUser.uid && !m.read) {
           updateDoc(doc(db, "messages", m.id), { read:true }).catch(() => {});
@@ -1117,21 +1102,46 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
     typingTimeoutRef.current = setTimeout(async () => { await deleteDoc(typingDocRef.current).catch(() => {}); }, 3000);
   };
 
+  // ✅ Send message — handles normal, reply, edit modes
   const sendMessage = async () => {
     const trimmed = text.trim();
     if (!trimmed || !chat?.id) return;
     clearTimeout(typingTimeoutRef.current);
     if (typingDocRef.current) await deleteDoc(typingDocRef.current).catch(() => {});
-    await addDoc(collection(db, "messages"), {
-      chatId: chat.id, participants: chat.participants,
-      text: trimmed, senderId: currentUser.uid,
-      createdAt: serverTimestamp(), read: false,
-    });
+
+    if (editingMsg) {
+      // ── EDIT MODE ──
+      await updateDoc(doc(db, "messages", editingMsg.id), {
+        text: trimmed,
+        edited: true,
+        editedAt: serverTimestamp(),
+      }).catch(() => {});
+      setEditingMsg(null);
+    } else {
+      // ── SEND MODE (with optional reply) ──
+      const msgData = {
+        chatId:      chat.id,
+        participants: chat.participants,
+        text:        trimmed,
+        senderId:    currentUser.uid,
+        createdAt:   serverTimestamp(),
+        read:        false,
+      };
+      if (replyTo) {
+        msgData.replyTo       = replyTo.id;
+        msgData.replyToText   = replyTo.text;
+        msgData.replyToSender = replyTo.senderId;
+      }
+      await addDoc(collection(db, "messages"), msgData);
+      setReplyTo(null);
+    }
     setText("");
+    inputRef.current?.focus();
   };
 
   const handleKey = e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === "Escape") { setReplyTo(null); setEditingMsg(null); setText(""); }
   };
 
   const handleDelete = async msgId => {
@@ -1143,6 +1153,43 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
     await updateDoc(doc(db, "messages", msgId), { [`reactions.${currentUser.uid}`]: emoji }).catch(() => {});
   };
 
+  // ✅ Start editing a message
+  const handleEdit = (msg) => {
+    setEditingMsg(msg);
+    setText(msg.text);
+    setReplyTo(null);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      const len = msg.text.length;
+      inputRef.current?.setSelectionRange(len, len);
+    }, 50);
+  };
+
+  // ✅ Start replying to a message
+  const handleReply = (msg) => {
+    setReplyTo({ id:msg.id, text:msg.text, senderId:msg.senderId, isMine: msg.senderId === currentUser.uid, senderName: userCache[msg.senderId]?.name || otherUserData?.name });
+    setEditingMsg(null);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  // ✅ Forward message to another chat
+  const handleForwardConfirm = async (targetChatId) => {
+    if (!forwardMsg || !targetChatId) return;
+    const targetChat = allChats.find(c => c.id === targetChatId);
+    if (!targetChat) return;
+    await addDoc(collection(db, "messages"), {
+      chatId:      targetChatId,
+      participants: targetChat.participants,
+      text:        forwardMsg.text,
+      senderId:    currentUser.uid,
+      createdAt:   serverTimestamp(),
+      read:        false,
+      forwarded:   true,
+    });
+    setForwardMsg(null);
+    addToast({ id: Date.now(), icon:"↩️", title:"Message Forwarded", body:`Sent to ${targetChat.otherUser?.name}`, color:"#25D366" });
+  };
+
   // Build grouped list
   const grouped = [];
   let lastDate = null;
@@ -1152,9 +1199,9 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
     grouped.push({ type:"msg", msg:m });
   });
 
-  const displayUser = otherUserData || chat?.otherUser;
-  const isOnline    = displayUser?.online;
-  const statusText  = isTypingOther ? null : isOnline ? "Online" : formatLastSeen(displayUser?.lastSeen);
+  const displayUser    = otherUserData || chat?.otherUser;
+  const isOnline       = displayUser?.online;
+  const statusText     = isTypingOther ? null : isOnline ? "Online" : formatLastSeen(displayUser?.lastSeen);
   const currentMatchId = searchMatches[searchIndex]?.id;
 
   if (!chat) return (
@@ -1174,21 +1221,30 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
           callType={vc.incomingData?.callType||"video"} onAccept={vc.acceptCall} onReject={vc.rejectCall} />
       )}
       {vc.callState === "calling" && (
-        <CallingScreen otherUser={displayUser} callType={vc.incomingData?.callType || "video"} onCancel={() => { vc.endCall(); }} />
+        <CallingScreen otherUser={displayUser} callType={vc.callType} onCancel={() => vc.endCall()} />
       )}
       {vc.callState === "connected" && (
         <VideoCallUI localStream={vc.localStream} remoteStream={vc.remoteStream} callDuration={vc.callDuration}
-          isMuted={vc.isMuted} isCameraOff={vc.isCameraOff} isSpeakerOff={vc.isSpeakerOff}
+          isMuted={vc.isMuted} isCameraOff={vc.isCameraOff} isSpeakerOff={vc.isSpeakerOff} isFrontCam={vc.isFrontCam}
           onToggleMute={vc.toggleMute} onToggleCamera={vc.toggleCamera} onToggleSpeaker={vc.toggleSpeaker}
-          onEnd={vc.endCall} otherUser={displayUser}
-          callType={vc.callType || "video"} />
+          onFlipCamera={vc.flipCamera} onEnd={vc.endCall} otherUser={displayUser} callType={vc.callType} />
+      )}
+
+      {/* ── Forward modal ── */}
+      {forwardMsg && (
+        <ForwardModal chats={allChats.filter(c => c.id !== chat.id)} currentUser={currentUser}
+          msgText={forwardMsg.text} onForward={handleForwardConfirm} onClose={() => setForwardMsg(null)} />
       )}
 
       {/* ── Context menu ── */}
       {contextMenu && (
-        <ContextMenu x={contextMenu.x} y={contextMenu.y} isMine={contextMenu.isMine} msgId={contextMenu.msgId}
+        <ContextMenu x={contextMenu.x} y={contextMenu.y} isMine={contextMenu.isMine}
+          msgId={contextMenu.msgId} msgText={contextMenu.msgText}
           onDelete={() => handleDelete(contextMenu.msgId)}
           onReact={emoji => handleReact(contextMenu.msgId, emoji)}
+          onReply={() => { const m = messages.find(msg => msg.id === contextMenu.msgId); if(m) handleReply(m); }}
+          onForward={() => { const m = messages.find(msg => msg.id === contextMenu.msgId); if(m) setForwardMsg(m); }}
+          onEdit={() => { const m = messages.find(msg => msg.id === contextMenu.msgId); if(m) handleEdit(m); }}
           onClose={() => setContextMenu(null)} />
       )}
 
@@ -1203,21 +1259,18 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
           </div>
         </div>
         <div style={{ display:"flex", gap:4, flexShrink:0, alignItems:"center" }}>
-          {/* Audio call */}
           <button onClick={() => vc.startCall("audio")} title="Audio Call"
             style={{ background:"none", border:"none", cursor:"pointer", color:"#54656f", padding:7, borderRadius:8, display:"flex", alignItems:"center", transition:"background 0.15s, color 0.15s" }}
             onMouseEnter={e => { e.currentTarget.style.background="#e0f7ef"; e.currentTarget.style.color="#00a884"; }}
             onMouseLeave={e => { e.currentTarget.style.background="none"; e.currentTarget.style.color="#54656f"; }}>
             <PhoneIcon s={20} />
           </button>
-          {/* Video call */}
           <button onClick={() => vc.startCall("video")} title="Video Call"
             style={{ background:"none", border:"none", cursor:"pointer", color:"#54656f", padding:7, borderRadius:8, display:"flex", alignItems:"center", transition:"background 0.15s, color 0.15s" }}
             onMouseEnter={e => { e.currentTarget.style.background="#e0f7ef"; e.currentTarget.style.color="#00a884"; }}
             onMouseLeave={e => { e.currentTarget.style.background="none"; e.currentTarget.style.color="#54656f"; }}>
             <VideoIcon s={22} />
           </button>
-          {/* Search */}
           <button onClick={() => { setSearchOpen(s => !s); if (searchOpen) setSearchQuery(""); }}
             style={{ background: searchOpen?"#e0e0e0":"none", border:"none", cursor:"pointer", color:"#54656f", padding:7, borderRadius:8, display:"flex", alignItems:"center" }}>
             <SearchIcon />
@@ -1244,7 +1297,15 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
                 isMine={item.msg.senderId === currentUser?.uid}
                 senderName={userCache[item.msg.senderId]?.name}
                 deletedIds={deletedIds}
-                onContextMenu={(x, y) => setContextMenu({ msgId:item.msg.id, x: Math.min(x, window.innerWidth-200), y: Math.min(y, window.innerHeight-220), isMine: item.msg.senderId === currentUser?.uid })}
+                allMessages={messages}
+                userCache={userCache}
+                onContextMenu={(x, y) => setContextMenu({
+                  msgId: item.msg.id,
+                  msgText: item.msg.text,
+                  x: Math.min(x, window.innerWidth-200),
+                  y: Math.min(y, window.innerHeight-320),
+                  isMine: item.msg.senderId === currentUser?.uid,
+                })}
               />
             </div>
           )
@@ -1264,14 +1325,27 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast }) {
         </div>
       )}
 
-      {/* ── Input ── */}
+      {/* ── Reply/Edit preview bar ── */}
+      {editingMsg && (
+        <div style={{ background:"#f0f2f5", borderLeft:"4px solid #34B7F1", padding:"8px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, borderBottom:"1px solid #ddd" }}>
+          <div style={{ flex:1, overflow:"hidden" }}>
+            <div style={{ fontSize:12, fontWeight:700, color:"#34B7F1", fontFamily:"'Nunito', sans-serif", marginBottom:2 }}>Editing message</div>
+            <div style={{ fontSize:12, color:"#8696a0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", fontFamily:"'Nunito', sans-serif" }}>{editingMsg.text}</div>
+          </div>
+          <button onClick={() => { setEditingMsg(null); setText(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#8696a0", display:"flex", alignItems:"center", padding:4 }}><CloseIcon s={18} /></button>
+        </div>
+      )}
+      <ReplyPreviewBar replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+
+      {/* ── Input bar ── */}
       <div style={{ display:"flex", alignItems:"center", padding:"8px 12px", gap:10, background:"#f0f2f5", borderTop:"1px solid #ddd", flexShrink:0 }}>
         <button style={{ background:"none", border:"none", color:"#8696a0", fontSize:22, cursor:"pointer", padding:4, flexShrink:0 }}>😊</button>
         <button style={{ background:"none", border:"none", color:"#8696a0", fontSize:22, cursor:"pointer", padding:4, flexShrink:0 }}>📎</button>
-        <input value={text} onChange={e => handleTyping(e.target.value)} onKeyDown={handleKey} placeholder="Type a message"
+        <input ref={inputRef} value={text} onChange={e => handleTyping(e.target.value)} onKeyDown={handleKey}
+          placeholder={editingMsg ? "Edit message…" : replyTo ? "Type a reply…" : "Type a message"}
           style={{ flex:1, background:"#fff", border:"none", borderRadius:24, padding:"10px 16px", color:"#111b21", fontSize:14.5, outline:"none", fontFamily:"'Nunito', sans-serif", minWidth:0 }} />
         <button onClick={sendMessage} style={{ width:44, height:44, borderRadius:"50%", background: text.trim()?"#00a884":"#8696a0", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, transition:"background 0.2s", flexShrink:0, color:"#fff" }}>
-          {text.trim() ? "➤" : "🎤"}
+          {text.trim() ? <SendIcon /> : "🎤"}
         </button>
       </div>
     </div>
@@ -1288,40 +1362,20 @@ export default function WhatsAppUI({ onBackToDashboard }) {
   const [isMobile,    setIsMobile   ] = useState(false);
   const [typingMap,   setTypingMap  ] = useState({});
   const [toasts,      setToasts     ] = useState([]);
+  const [notifBarVisible, setNotifBarVisible] = useState(false);
 
   const typingUnsubsRef = useRef({});
   const prevMsgCountRef = useRef({});
-  const [notifBarVisible, setNotifBarVisible] = useState(false);
 
-  // Check notification permission — show bar if not granted
   useEffect(() => {
     if (!("Notification" in window)) return;
     if (Notification.permission === "default") {
-      // Show bar after 2s so UI loads first
       const t = setTimeout(() => setNotifBarVisible(true), 2000);
       return () => clearTimeout(t);
     } else if (Notification.permission === "granted") {
-      // Already granted — just register SW silently
       registerSW().then(reg => { if (reg) _swReg = reg; });
     }
   }, []);
-
-  // Listen for SW messages (notification action clicks)
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    const handler = e => {
-      if (e.data?.type === "NOTIFICATION_CLICK") {
-        // Focus the chat that was clicked
-        const chatId = e.data?.data?.chatId;
-        if (chatId) {
-          const chat = chats.find(c => c.id === chatId);
-          if (chat) handleSelectChat(chat);
-        }
-      }
-    };
-    navigator.serviceWorker.addEventListener("message", handler);
-    return () => navigator.serviceWorker.removeEventListener("message", handler);
-  }, [chats]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -1361,9 +1415,10 @@ export default function WhatsAppUI({ onBackToDashboard }) {
     });
   }, [currentUser]);
 
-  // Global message listener — notifications for background chats
+  // Global background message notifications
   useEffect(() => {
     if (!currentUser || !chats.length) return;
+    prevMsgCountRef.current = {};
     const unsubs = chats.map(chat => {
       if (!chat.id) return () => {};
       const q = query(collection(db, "messages"), where("chatId","==",chat.id), orderBy("createdAt","desc"), limit(5));
@@ -1372,24 +1427,20 @@ export default function WhatsAppUI({ onBackToDashboard }) {
         const prev    = prevMsgCountRef.current[chat.id] || 0;
         const newMsgs = msgs.filter(m => m.senderId !== currentUser.uid && !m.read && m.type !== "call");
         if (newMsgs.length > prev && activeChat?.id !== chat.id) {
-          const newest   = newMsgs[0];
-          const sender   = chat.otherUser?.name || "Someone";
-          const toastId  = Date.now();
+          const newest  = newMsgs[0];
+          const sender  = chat.otherUser?.name || "Someone";
+          const toastId = Date.now();
           addToast({ id:toastId, icon:"💬", title:sender, body:newest.text, color:"#25D366" });
-          sendBrowserNotification(sender, newest.text, {
-            tag: "msg-" + chat.id,
-            data: { chatId: chat.id },
-            icon: chat.otherUser?.photoURL || "/icon-192.png",
-          });
+          sendBrowserNotification(sender, newest.text, { tag: "msg-" + chat.id, data: { chatId: chat.id }, icon: chat.otherUser?.photoURL || "/icon-192.png" });
           setTimeout(() => removeToast(toastId), 5000);
         }
         prevMsgCountRef.current[chat.id] = newMsgs.length;
       });
     });
-    return () => unsubs.forEach(u => u());
+    return () => { unsubs.forEach(u => u()); prevMsgCountRef.current = {}; };
   }, [chats, currentUser, activeChat]);
 
-  // Typing listeners (stable)
+  // Typing listeners
   useEffect(() => {
     if (!currentUser) return;
     const ids = new Set(chats.map(c => c.id).filter(Boolean));
@@ -1407,7 +1458,7 @@ export default function WhatsAppUI({ onBackToDashboard }) {
     return () => { Object.values(typingUnsubsRef.current).forEach(u => u?.()); typingUnsubsRef.current = {}; };
   }, [chats, currentUser]);
 
-  const addToast    = useCallback(t => setToasts(p => [...p, t]), []);
+  const addToast    = useCallback(t => { setToasts(p => [...p, t]); setTimeout(() => removeToast(t.id), 5000); }, []);
   const removeToast = useCallback(id => setToasts(p => p.filter(t => t.id !== id)), []);
 
   const handleSelectChat = chat => {
@@ -1456,36 +1507,43 @@ export default function WhatsAppUI({ onBackToDashboard }) {
           0%,100% { height:6px; }
           50% { height:28px; }
         }
+        /* Responsive — mobile full screen */
+        @media (max-width: 767px) {
+          .chat-layout { flex-direction: column !important; }
+          .sidebar-panel { width: 100% !important; min-width: unset !important; border-right: none !important; }
+          .chat-panel-wrap { width: 100% !important; }
+          input, textarea, select { font-size: 16px !important; }
+        }
       `}</style>
 
-      {/* Notification permission bar */}
       {notifBarVisible && (
         <NotificationBar
           onAllow={async () => {
             setNotifBarVisible(false);
             const granted = await askNotificationPermission();
-            if (!granted) {
-              addToast({ id: Date.now(), icon: "⚠️", title: "Notifications blocked", body: "Please enable in browser settings", color: "#f77f00" });
-            }
+            if (!granted) addToast({ id: Date.now(), icon: "⚠️", title: "Notifications blocked", body: "Please enable in browser settings", color: "#f77f00" });
           }}
           onDismiss={() => setNotifBarVisible(false)}
         />
       )}
 
-      {/* Global toast container */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      <div style={{ display:"flex", height:"100vh", width:"100vw", fontFamily:"'Nunito', sans-serif", overflow:"hidden", background:"#f0f2f5" }}>
+      <div className="chat-layout" style={{ display:"flex", height:"100vh", width:"100vw", fontFamily:"'Nunito', sans-serif", overflow:"hidden", background:"#f0f2f5" }}>
         {showSidebar && (
-          <Sidebar chats={chats} currentUser={currentUser} onSelectChat={handleSelectChat}
-            activeChatId={activeChat?.id} isMobile={isMobile}
-            onBackToDashboard={onBackToDashboard || (() => window.history.back())}
-            typingMap={typingMap} />
+          <div className="sidebar-panel" style={{ width: isMobile?"100%":340, minWidth: isMobile?"unset":280, display:"flex", height:"100%", flexShrink:0 }}>
+            <Sidebar chats={chats} currentUser={currentUser} onSelectChat={handleSelectChat}
+              activeChatId={activeChat?.id} isMobile={isMobile}
+              onBackToDashboard={onBackToDashboard || (() => window.history.back())}
+              typingMap={typingMap} />
+          </div>
         )}
         {showChat && (
           activeChat ? (
-            <ChatPanel chat={activeChat} currentUser={currentUser} isMobile={isMobile}
-              onClose={() => setActiveChat(null)} addToast={addToast} />
+            <div className="chat-panel-wrap" style={{ flex:1, display:"flex", minWidth:0, overflow:"hidden" }}>
+              <ChatPanel chat={activeChat} currentUser={currentUser} isMobile={isMobile}
+                onClose={() => setActiveChat(null)} addToast={addToast} allChats={chats} />
+            </div>
           ) : !isMobile && (
             <div style={{ flex:1, background:"#f0f2f5", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12 }}>
               <div style={{ fontSize:64 }}>💬</div>
