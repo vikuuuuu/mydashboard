@@ -90,7 +90,7 @@ export default function DashboardPage() {
       where("participants", "array-contains", uid),
       where("type", "==", "call"),
       where("callStatus", "==", "missed"),
-      where("callType", "==", "voice")   // ✅ voice calls only
+      where("callType", "==", "audio")
     );
 
     const missedVoiceUnsub = onSnapshot(missedVoiceQuery, (snapshot) => {
