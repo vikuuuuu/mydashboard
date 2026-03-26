@@ -1,3 +1,6 @@
+/* ======================
+   PAGE
+====================== */
 .page {
   min-height: 100vh;
   background: linear-gradient(180deg, #f8fbff, #eef2ff);
@@ -13,7 +16,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #fff;
+  background: white;
   padding: 18px 24px;
   border-radius: 14px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
@@ -32,19 +35,23 @@
 }
 
 /* ======================
-   PROFILE (FINAL CLEAN)
+   PROFILE + DROPDOWN
 ====================== */
 .profile {
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
   border: 1px solid #8e95ac;
   background: #ffffff;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 50px;
-  box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.1);
+}
+
+.profile:hover {
+  background: #e2e8f0;
 }
 
 .profile img {
@@ -52,6 +59,7 @@
   height: 36px;
   border-radius: 50%;
   object-fit: cover;
+  border: 1px solid #e5e7eb;
 }
 
 .profile span {
@@ -64,21 +72,19 @@
   text-overflow: ellipsis;
 }
 
-/* ======================
-   DROPDOWN (FINAL)
-====================== */
+/* Dropdown */
 .dropdown {
   position: absolute;
-  top: 40px;
+  top: 50px;
   right: 0;
-  background: #ffffff;
+  background: white;
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
-  min-width: 160px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  width: 160px;
   padding: 6px;
   display: none;
-  z-index: 1000;
+  z-index: 100;
 }
 
 .profile:hover .dropdown {
@@ -89,12 +95,12 @@
   width: 100%;
   background: none;
   border: none;
-  padding: 10px 12px;
-  text-align: left;
+  padding: 10px;
   border-radius: 8px;
   font-size: 0.85rem;
-  font-weight: 600;
-  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
 }
 
@@ -142,8 +148,51 @@
   font-size: 0.9rem;
 }
 
+.openText {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2563eb;
+}
+
 /* ======================
-   BADGES (THEME BASED)
+   LOADER / SESSION
+====================== */
+.loader {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+}
+
+.checkingSession {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #f1f5f9;
+  font-size: 1rem;
+  color: #64748b;
+  gap: 16px;
+}
+
+.loaderSession {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top: 4px solid #2563eb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* ======================
+   BADGES
 ====================== */
 .badgeRow {
   display: flex;
@@ -165,7 +214,6 @@
   border: 1px solid #e2e8f0;
 }
 
-/* subtle variation */
 .badgeUnread {
   background: #e2e8f0;
 }
@@ -178,22 +226,8 @@
   background: #e2e8f0;
 }
 
-/* hover */
 .badge:hover {
   background: #e2e8f0;
-}
-
-/* OPTIONAL PRO STYLE (left indicator) */
-.badgeUnread {
-  border-left: 3px solid #2563eb;
-}
-
-.badgeVoice {
-  border-left: 3px solid #16a34a;
-}
-
-.badgeVideo {
-  border-left: 3px solid #dc2626;
 }
 
 /* ======================
@@ -216,20 +250,44 @@
 }
 
 /* ======================
-   LOADER
-====================== */
-.loader {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  font-size: 1.1rem;
-}
-
-/* ======================
-   MOBILE
+   RESPONSIVE
 ====================== */
 @media (max-width: 640px) {
   .profile span {
     display: none;
+  }
+}
+
+/* ======================
+   DARK MODE
+====================== */
+@media (prefers-color-scheme: dark) {
+  .badgeUnread {
+    background-color: #1b3a1f;
+    color: #a5d6a7;
+    border-color: #388e3c;
+  }
+
+  .badgeMissed {
+    background-color: #3b1a1a;
+    color: #ef9a9a;
+    border-color: #c62828;
+  }
+}
+
+/* ======================
+   ANIMATIONS
+====================== */
+@keyframes badgePop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
