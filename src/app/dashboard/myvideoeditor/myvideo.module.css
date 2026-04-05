@@ -1,0 +1,65 @@
+.dashboard {
+  padding: 20px;
+  background: #0f172a;
+  min-height: 100vh;
+  color: #e2e8f0;
+  font-family: "Segoe UI", sans-serif;
+}
+
+h1 {
+  margin-bottom: 20px;
+  color: #38bdf8;
+}
+
+.card {
+  background: #1e293b;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+input[type="file"],
+input[type="text"],
+input[type="range"] {
+  width: 100%;
+  margin-top: 10px;
+  margin-bottom: 15px;
+}
+
+.preview {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.overlay-text {
+  position: absolute;
+  bottom: 20px;
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+  width: 100%;
+}
+
+button {
+  background: linear-gradient(135deg, #22c55e, #4ade80);
+  border: none;
+  padding: 12px 20px;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+.download {
+  display: block;
+  margin-top: 15px;
+  color: #38bdf8;
+  text-decoration: none;
+}
