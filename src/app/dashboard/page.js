@@ -36,6 +36,11 @@ const TOOLS = [
     desc: "Real-time messaging",
     isWebchat: true,
   },
+   {
+    id: "myvideoeditor",
+    title: "My Video Editor",
+    desc: "Video Edit for short",
+  },
   {
     id: "private_video_chat",
     title: "Private Video Chat",
