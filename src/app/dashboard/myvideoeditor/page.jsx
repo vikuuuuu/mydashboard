@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import ReactPlayer from "react-player";
 import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
-import "./dashboard.css";
+import "./myvideo.modules.css";
 
 const ffmpeg = createFFmpeg({ log: true });
 
