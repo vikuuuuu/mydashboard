@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { logActivity } from "@/lib/activityLogger";
+import { logToolUsage } from "@/lib/firestore";
 import {
   getFirestore,
   collection,
@@ -79,6 +79,7 @@ export default function NotesDashboard() {
   /* ================= AUTH GUARD ================= */
   useEffect(() => {
     if (!user) router.replace("/login");
+    if (user) logToolUsage({ userId: user.uid, tool: "Notes Dashboard - Page Visit" });
   }, [user, router]);
 
   /* ================= LOAD DATA ================= */
@@ -187,16 +188,6 @@ export default function NotesDashboard() {
         });
         setActiveNote({ id: ref.id, title, content, label: activeLabel, pinned: false });
         setIsNewNote(false);
-
-        await logActivity({
-          userId: user.uid,
-          type: "note_create",
-          page: "/dashboard/Notes",
-          meta: {
-            noteId: ref.id,
-            title: title || "Untitled Note",
-          },
-        });
       }
       setLastSaved(new Date());
       loadNotes(activeFolder);
@@ -261,24 +252,6 @@ export default function NotesDashboard() {
   };
 
   const getLabelColor = (id) => LABEL_COLORS.find((c) => c.id === id)?.hex || "transparent";
-
-  const openNote = async (note) => {
-    setActiveNote(note);
-    setTitle(note.title || "");
-    setContent(note.content || "");
-    setActiveLabel(note.label || "none");
-    setIsNewNote(false);
-
-    await logActivity({
-      userId: user.uid,
-      type: "note_detail",
-      page: "/dashboard/Notes",
-      meta: {
-        noteId: note.id,
-        title: note.title || "Untitled Note",
-      },
-    });
-  };
 
   if (loading) return <div className={styles.loadingScreen}>Loading notes…</div>;
 
@@ -380,7 +353,13 @@ export default function NotesDashboard() {
             <div
               key={n.id}
               className={`${styles.noteItem} ${activeNote?.id === n.id ? styles.noteActive : ""}`}
-              onClick={() => openNote(n)}
+              onClick={() => {
+                setActiveNote(n);
+                setTitle(n.title || "");
+                setContent(n.content || "");
+                setActiveLabel(n.label || "none");
+                setIsNewNote(false);
+              }}
             >
               {/* Label strip */}
               {n.label && n.label !== "none" && (

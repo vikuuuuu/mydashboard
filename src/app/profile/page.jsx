@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   onAuthStateChanged,
@@ -29,41 +29,8 @@ export default function ProfilePage() {
 
   const [toolHistory, setToolHistory] = useState([]);
   const [loginLogs, setLoginLogs] = useState([]);
-  const [activityLogs, setActivityLogs] = useState([]);
 
-  const loadToolHistory = useCallback(async (uid) => {
-    const db = getFirestore(app);
-    const q = query(
-      collection(db, "tool_usage"),
-      where("userId", "==", uid),
-      orderBy("createdAt", "desc"),
-    );
-    const snap = await getDocs(q);
-    setToolHistory(snap.docs.map((d) => d.data()));
-  }, []);
-
-  const loadLoginLogs = useCallback(async (uid) => {
-    const db = getFirestore(app);
-    const q = query(
-      collection(db, "login_logs"),
-      where("userId", "==", uid),
-      orderBy("createdAt", "desc"),
-    );
-    const snap = await getDocs(q);
-    setLoginLogs(snap.docs.map((d) => d.data()));
-  }, []);
-
-  const loadActivityLogs = useCallback(async (uid) => {
-    const db = getFirestore(app);
-    const q = query(
-      collection(db, "activity_logs"),
-      where("userId", "==", uid),
-      orderBy("createdAt", "desc"),
-    );
-    const snap = await getDocs(q);
-    setActivityLogs(snap.docs.map((d) => d.data()));
-  }, []);
-
+  /* ================= AUTH GUARD ================= */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
@@ -74,18 +41,39 @@ export default function ProfilePage() {
       setUser(u);
       setName(u.displayName || "");
 
-      await Promise.all([
-        loadToolHistory(u.uid),
-        loadLoginLogs(u.uid),
-        loadActivityLogs(u.uid),
-      ]);
+      await loadToolHistory(u.uid);
+      await loadLoginLogs(u.uid);
 
       setLoading(false);
     });
 
     return () => unsub();
-  }, [loadActivityLogs, loadLoginLogs, loadToolHistory, router]);
+  }, [router]);
 
+  /* ================= FIRESTORE LOADERS ================= */
+  const loadToolHistory = async (uid) => {
+    const db = getFirestore(app);
+    const q = query(
+      collection(db, "tool_usage"),
+      where("userId", "==", uid),
+      orderBy("createdAt", "desc"),
+    );
+    const snap = await getDocs(q);
+    setToolHistory(snap.docs.map((d) => d.data()));
+  };
+
+  const loadLoginLogs = async (uid) => {
+    const db = getFirestore(app);
+    const q = query(
+      collection(db, "login_logs"),
+      where("userId", "==", uid),
+      orderBy("createdAt", "desc"),
+    );
+    const snap = await getDocs(q);
+    setLoginLogs(snap.docs.map((d) => d.data()));
+  };
+
+  /* ================= ACTIONS ================= */
   const saveProfile = async () => {
     await updateProfile(auth.currentUser, {
       displayName: name,
@@ -109,8 +97,9 @@ export default function ProfilePage() {
       </button>
       <h1 className={styles.title}>My Profile</h1>
       <div className={styles.cardParent}>
+        {/* PROFILE INFO */}
         <section className={styles.card}>
-          <img src={user.photoURL || "/avatar.png"} className={styles.avatar} alt="avatar" />
+          <img src={user.photoURL || "/avatar.png"} className={styles.avatar} />
 
           <label className={styles.label}>Name</label>
           <input
@@ -127,6 +116,7 @@ export default function ProfilePage() {
           </button>
         </section>
 
+        {/* SECURITY */}
         <section className={styles.card}>
           <h3>Security</h3>
           <button className={styles.secondaryBtn} onClick={resetPassword}>
@@ -134,6 +124,7 @@ export default function ProfilePage() {
           </button>
         </section>
 
+        {/* LOGIN LOGS */}
         <section className={styles.card}>
           <h3>Login Activity ({loginLogs.length})</h3>
           <div className={styles.cardContent}>
@@ -150,24 +141,11 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        <section className={styles.card}>
-          <h3>Profile History ({activityLogs.length})</h3>
-          <div className={styles.cardContent}>
-            {activityLogs.length === 0 && (
-              <p className={styles.empty}>No profile history yet</p>
-            )}
-            {activityLogs.map((entry, i) => (
-              <div key={i} className={styles.listItem}>
-                <strong>{getHistoryLabel(entry)}</strong>
-                <small>{entry.createdAt?.toDate().toLocaleString()}</small>
-              </div>
-            ))}
-          </div>
-        </section>
-
+        {/* TOOL HISTORY */}
         <section className={styles.card}>
           <h3>Tool Usage History ({toolHistory.length})</h3>
           <div className={styles.cardContent}>
+            {" "}
             {toolHistory.length === 0 && (
               <p className={styles.empty}>No tool usage yet</p>
             )}
@@ -175,7 +153,7 @@ export default function ProfilePage() {
               <div key={i} className={styles.listItem}>
                 <strong>{formatTool(h.tool)}</strong>
                 <small>
-                  {h.imageCount} items · {h.totalSizeKB} KB · {" "}
+                  {h.imageCount} items · {h.totalSizeKB} KB ·{" "}
                   {h.createdAt?.toDate().toLocaleString()}
                 </small>
               </div>
@@ -187,25 +165,10 @@ export default function ProfilePage() {
   );
 }
 
+/* ================= HELPER ================= */
 function formatTool(tool) {
   if (tool === "image-to-pdf") return "Image → PDF";
   if (tool === "pdf-to-img") return "PDF → Image";
   if (tool === "img-resize") return "Image Resize";
   return tool;
-}
-
-function getHistoryLabel(entry) {
-  if (entry.type === "note_create") {
-    return `Created note: ${entry.meta?.title || "Untitled Note"}`;
-  }
-
-  if (entry.type === "note_detail") {
-    return `Viewed note detail: ${entry.meta?.title || "Untitled Note"}`;
-  }
-
-  if (entry.type === "page_visit") {
-    return `Visited page: ${entry.page}`;
-  }
-
-  return `${entry.type || "activity"}: ${entry.page || "-"}`;
 }
