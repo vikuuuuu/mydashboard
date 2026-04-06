@@ -40,12 +40,7 @@ const TOOLS = [
     id: "myvideoeditor",
     title: "My Video Editor",
     desc: "Video Edit for short",
-  },
-  {
-    id: "private_video_chat",
-    title: "Private Video Chat",
-    desc: "Secure video calls and it working on same Network.",
-  },
+  }
 ];
 
 export default function DashboardPage() {

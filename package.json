@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@supabase/supabase-js": "^2.90.1",
     "firebase": "^12.10.0",
     "html-to-text": "^9.0.5",
@@ -21,6 +23,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hot-toast": "^2.6.0",
+    "react-player": "^3.4.0",
     "recharts": "^3.8.0",
     "swr": "^2.4.0",
     "xlsx": "^0.18.5"
