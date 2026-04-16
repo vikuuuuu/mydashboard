@@ -166,7 +166,7 @@ export default function LoginPage() {
 
         {/* GOOGLE LOGIN */}
         <button
-          type="button"  {/* Ye type="button" lagana bohot zaroori hai form refresh rokne ke liye */}
+          type="button"
           className={styles.googleBtn}
           onClick={handleGoogleLogin}
           disabled={loading}
