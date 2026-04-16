@@ -29,8 +29,6 @@
 }
 
 /* ─── BASE ────────────────────────────────────────────────── */
-/* *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } */
-
 .page {
   min-height: 100vh;
   background: linear-gradient(160deg, var(--bg) 0%, var(--bg2) 100%);
@@ -622,7 +620,7 @@
   font-weight: 600;
 }
 
-/* ─── ACTION BUTTON ───────────────────────────────────────── */
+/* ─── ACTION BUTTON ─── */
 .actionBtn {
   display: flex;
   align-items: center;
@@ -677,14 +675,7 @@
   background: var(--surface2);
 }
 
-/* History */
-.historySection {
-  border-top: 1px solid var(--border2);
-  padding: 16px 20px;
-  background: var(--surface);
-}
-
-/* ─── RESPONSIVE ──────────────────────────────────────────── */
+/* ─── RESPONSIVE ─── */
 @media (max-width: 960px) {
   .root { grid-template-columns: 1fr; height: auto; overflow: visible; }
   .leftPanel { border-right: none; border-bottom: 1px solid var(--border2); }
