@@ -18,7 +18,7 @@ const TABS = [
   { id: "history", icon: "🕘", label: "History" },
 ];
 
-const FORMATS = ["png","jpeg","jpg","webp","bmp","gif","tiff","ico"];
+const FORMATS = ["png","jpeg","jpg","webp"];
 
 const FILTERS = [
   { id: "none", label: "Original" },
@@ -26,9 +26,6 @@ const FILTERS = [
   { id: "sepia", label: "Sepia" },
   { id: "invert", label: "Invert" },
   { id: "blur", label: "Blur" },
-  { id: "brightness", label: "Bright" },
-  { id: "contrast", label: "Contrast" },
-  { id: "saturate", label: "Vivid" },
 ];
 
 export default function ImageStudio() {
@@ -45,7 +42,7 @@ export default function ImageStudio() {
 
   const fileInputRef = useRef();
 
-  // ✅ Fix: memory cleanup
+  // ✅ FIX: memory leak
   useEffect(() => {
     return () => {
       if (preview) URL.revokeObjectURL(preview);
@@ -77,7 +74,7 @@ export default function ImageStudio() {
 
   const handleFileInput = (e) => loadImage(e.target.files?.[0]);
 
-  const getCanvasImage = () =>
+  const getImage = () =>
     new Promise((res) => {
       const img = new Image();
       img.src = preview;
@@ -89,19 +86,18 @@ export default function ImageStudio() {
     if (!preview) return;
     setProcessing(true);
 
-    const img = await getCanvasImage();
-    const canvas = document.createElement("canvas");
+    const img = await getImage();
+    const c = document.createElement("canvas");
 
-    canvas.width = img.width / 2;
-    canvas.height = img.height / 2;
+    c.width = img.width / 2;
+    c.height = img.height / 2;
 
-    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
 
-    setResult(canvas.toDataURL());
-    setResultInfo({ label: "Resized", value: `${canvas.width}x${canvas.height}` });
+    setResult(c.toDataURL());
+    setResultInfo({ label: "Resized", value: `${c.width}x${c.height}` });
 
     if (user) logToolUsage({ userId: user.uid, tool: "resize" });
-
     setProcessing(false);
   };
 
@@ -110,21 +106,20 @@ export default function ImageStudio() {
     if (!preview) return;
     setProcessing(true);
 
-    const img = await getCanvasImage();
-    const canvas = document.createElement("canvas");
+    const img = await getImage();
+    const c = document.createElement("canvas");
 
-    canvas.width = img.width;
-    canvas.height = img.height;
+    c.width = img.width;
+    c.height = img.height;
 
-    canvas.getContext("2d").drawImage(img, 0, 0);
+    c.getContext("2d").drawImage(img, 0, 0);
 
-    const output = canvas.toDataURL("image/jpeg", 0.7);
+    const out = c.toDataURL("image/jpeg", 0.7);
 
-    setResult(output);
-    setResultInfo({ label: "Compressed", value: "JPEG 70%" });
+    setResult(out);
+    setResultInfo({ label: "Compressed", value: "70%" });
 
     if (user) logToolUsage({ userId: user.uid, tool: "compress" });
-
     setProcessing(false);
   };
 
@@ -133,29 +128,122 @@ export default function ImageStudio() {
     if (!preview) return;
     setProcessing(true);
 
-    const img = await getCanvasImage();
-    const canvas = document.createElement("canvas");
+    const img = await getImage();
+    const c = document.createElement("canvas");
 
-    canvas.width = img.width;
-    canvas.height = img.height;
+    c.width = img.width;
+    c.height = img.height;
 
-    canvas.getContext("2d").drawImage(img, 0, 0);
+    c.getContext("2d").drawImage(img, 0, 0);
 
-    const output = canvas.toDataURL("image/png");
+    const out = c.toDataURL("image/png");
 
-    setResult(output);
+    setResult(out);
     setResultInfo({ label: "Converted", value: "PNG" });
 
     if (user) logToolUsage({ userId: user.uid, tool: "convert" });
-
     setProcessing(false);
   };
 
-  /* ACTION MAPPER */
+  /* CROP */
+  const doCrop = async () => {
+    if (!preview) return;
+    setProcessing(true);
+
+    const img = await getImage();
+    const c = document.createElement("canvas");
+
+    const w = img.width / 2;
+    const h = img.height / 2;
+
+    c.width = w;
+    c.height = h;
+
+    c.getContext("2d").drawImage(img, 0, 0, w, h, 0, 0, w, h);
+
+    setResult(c.toDataURL());
+    setResultInfo({ label: "Cropped", value: `${w}x${h}` });
+
+    if (user) logToolUsage({ userId: user.uid, tool: "crop" });
+    setProcessing(false);
+  };
+
+  /* ROTATE */
+  const doRotate = async () => {
+    if (!preview) return;
+    setProcessing(true);
+
+    const img = await getImage();
+    const c = document.createElement("canvas");
+
+    c.width = img.height;
+    c.height = img.width;
+
+    const ctx = c.getContext("2d");
+    ctx.translate(c.width / 2, c.height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+    setResult(c.toDataURL());
+    setResultInfo({ label: "Rotated", value: "90°" });
+
+    if (user) logToolUsage({ userId: user.uid, tool: "rotate" });
+    setProcessing(false);
+  };
+
+  /* FILTER */
+  const doFilter = async () => {
+    if (!preview) return;
+    setProcessing(true);
+
+    const img = await getImage();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+
+    const ctx = c.getContext("2d");
+    ctx.filter = "grayscale(100%)";
+    ctx.drawImage(img, 0, 0);
+
+    setResult(c.toDataURL());
+    setResultInfo({ label: "Filter", value: "Grayscale" });
+
+    if (user) logToolUsage({ userId: user.uid, tool: "filter" });
+    setProcessing(false);
+  };
+
+  /* WATERMARK */
+  const doWatermark = async () => {
+    if (!preview) return;
+    setProcessing(true);
+
+    const img = await getImage();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.font = "30px sans-serif";
+    ctx.fillText("© My Image", 20, c.height - 20);
+
+    setResult(c.toDataURL());
+    setResultInfo({ label: "Watermark", value: "Added" });
+
+    if (user) logToolUsage({ userId: user.uid, tool: "watermark" });
+    setProcessing(false);
+  };
+
   const ACTION = {
     resize: doResize,
     compress: doCompress,
     convert: doConvert,
+    crop: doCrop,
+    rotate: doRotate,
+    filter: doFilter,
+    watermark: doWatermark,
   };
 
   return (
@@ -197,7 +285,7 @@ export default function ImageStudio() {
       {/* ✅ FIX: no crash */}
       {imageFile && tab !== "history" && ACTION[tab] && (
         <button onClick={ACTION[tab]}>
-          {processing ? "Processing..." : "Run Tool"}
+          {processing ? "Processing..." : TABS.find(t=>t.id===tab)?.label}
         </button>
       )}
     </div>
