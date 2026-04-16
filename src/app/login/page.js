@@ -77,10 +77,20 @@ export default function LoginPage() {
 
       toast.success("Google login successful");
       router.replace("/dashboard");
-    } catch (err) {
-      // 3. ACTUAL error console aur screen par dikhayein
+  } catch (err) {
       console.error("GOOGLE LOGIN EXACT ERROR:", err);
-      toast.error(err.code || err.message || "Google login failed");
+      
+      // Agar popup close ho gaya hai
+      if (err.code === 'auth/popup-closed-by-user') {
+        toast.error("Login cancelled. Please try again (Check popup blockers).");
+      } 
+      // Agar browser third-party cookies block kar raha hai
+      else if (err.code === 'auth/unauthorized-domain') {
+        toast.error("Domain not authorized in Firebase Console.");
+      } 
+      else {
+        toast.error(err.message || "Google login failed");
+      }
     } finally {
       setLoading(false);
     }
