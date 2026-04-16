@@ -58,17 +58,29 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signInWithGoogle();
+      console.log("Google Login process started...");
+      
+      // 1. Result ko variable me store karein
+      const result = await signInWithGoogle();
+
+      // 2. Safe tarike se user ID nikalein
+      const currentUid = result?.user?.uid || auth?.currentUser?.uid;
+
+      if (!currentUid) {
+        throw new Error("User ID load nahi ho paya!");
+      }
 
       await logLogin({
-        userId: auth.currentUser.uid,
+        userId: currentUid,
         provider: "google",
       });
 
       toast.success("Google login successful");
       router.replace("/dashboard");
     } catch (err) {
-      toast.error("Google login failed");
+      // 3. ACTUAL error console aur screen par dikhayein
+      console.error("GOOGLE LOGIN EXACT ERROR:", err);
+      toast.error(err.code || err.message || "Google login failed");
     } finally {
       setLoading(false);
     }
@@ -129,32 +141,32 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Login"}
           </button>
 
-            
-             {/* FORGOT PASSWORD */}
-            <div className={styles.forgetbtn}>
-            
-          <button
-            type="button"
-            className={styles.switchMode}
-            onClick={handleResetPassword}
-            disabled={loading}
-          >
-            Forgot Password?
-          </button>
-              
-          <button
- className={styles.switchMode}
- onClick={()=>router.push("/register")}
->
- Create new account
-</button>
-   </div>
+          {/* FORGOT PASSWORD */}
+          <div className={styles.forgetbtn}>
+            <button
+              type="button"
+              className={styles.switchMode}
+              onClick={handleResetPassword}
+              disabled={loading}
+            >
+              Forgot Password?
+            </button>
+
+            <button
+              type="button"
+              className={styles.switchMode}
+              onClick={() => router.push("/register")}
+            >
+              Create new account
+            </button>
+          </div>
         </form>
 
         <div className={styles.divider}>OR</div>
 
         {/* GOOGLE LOGIN */}
         <button
+          type="button"  {/* Ye type="button" lagana bohot zaroori hai form refresh rokne ke liye */}
           className={styles.googleBtn}
           onClick={handleGoogleLogin}
           disabled={loading}
