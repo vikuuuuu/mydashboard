@@ -1,3 +1,4 @@
+// File Path: app/profile/page.js
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,6 +15,8 @@ import {
   where,
   orderBy,
   getDocs,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import { auth } from "@/lib/firebaseAuth";
 import { app } from "@/lib/firebase";
@@ -23,6 +26,7 @@ export default function ProfilePage() {
   const router = useRouter();
 
   const [user, setUser]               = useState(null);
+  const [userDoc, setUserDoc]         = useState(null);
   const [name, setName]               = useState("");
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
@@ -30,21 +34,29 @@ export default function ProfilePage() {
   const [toolHistory, setToolHistory] = useState([]);
   const [loginLogs, setLoginLogs]     = useState([]);
   const [avatarError, setAvatarError] = useState(false);
+  const [expandedLog, setExpandedLog] = useState(null);
 
-  /* ── Auth Guard ── */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) { router.replace("/login"); return; }
       setUser(u);
       setName(u.displayName || "");
-      await loadToolHistory(u.uid);
-      await loadLoginLogs(u.uid);
+      await Promise.all([
+        loadUserDoc(u.uid),
+        loadToolHistory(u.uid),
+        loadLoginLogs(u.uid),
+      ]);
       setLoading(false);
     });
     return () => unsub();
   }, [router]);
 
-  /* ── Firestore ── */
+  const loadUserDoc = async (uid) => {
+    const db = getFirestore(app);
+    const snap = await getDoc(doc(db, "users", uid));
+    if (snap.exists()) setUserDoc(snap.data());
+  };
+
   const loadToolHistory = async (uid) => {
     const db = getFirestore(app);
     const q = query(collection(db, "tool_usage"), where("userId", "==", uid), orderBy("createdAt", "desc"));
@@ -59,12 +71,11 @@ export default function ProfilePage() {
     setLoginLogs(snap.docs.map((d) => d.data()));
   };
 
-  /* ── Actions ── */
   const saveProfile = async () => {
     setSaving(true);
     await updateProfile(auth.currentUser, { displayName: name });
     setSaving(false);
-    alert("Profile updated successfully!");
+    alert("Profile updated!");
   };
 
   const resetPassword = async () => {
@@ -73,9 +84,8 @@ export default function ProfilePage() {
     setTimeout(() => setResetSent(false), 4000);
   };
 
-  /* ── Avatar initials fallback ── */
   const getInitials = (displayName, email) => {
-    if (displayName && displayName.trim()) {
+    if (displayName?.trim()) {
       const parts = displayName.trim().split(" ");
       return parts.length >= 2
         ? (parts[0][0] + parts[1][0]).toUpperCase()
@@ -93,9 +103,9 @@ export default function ProfilePage() {
 
   const formatTool = (tool) => {
     const map = {
-      "image-to-pdf":           "Image → PDF",
-      "pdf-to-img":             "PDF → Image",
-      "img-resize":             "Image Resize",
+      "image-to-pdf":                 "🖼️ Image → PDF",
+      "pdf-to-img":                   "📄 PDF → Image",
+      "img-resize":                   "✂️ Image Resize",
       "My Financials - Add Trade":    "📈 Add Trade",
       "My Financials - Edit Trade":   "✏️ Edit Trade",
       "My Financials - Delete Trade": "🗑️ Delete Trade",
@@ -132,11 +142,9 @@ export default function ProfilePage() {
 
   return (
     <main className={styles.page}>
-      {/* ── Header ── */}
       <div className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => router.back()}>← Back</button>
       </div>
-
       <h1 className={styles.pageTitle}>👤 My Profile</h1>
 
       {/* ── Hero Banner ── */}
@@ -144,16 +152,9 @@ export default function ProfilePage() {
         <div className={styles.heroLeft}>
           <div className={styles.avatarWrap}>
             {showPhoto ? (
-              <img
-                src={user.photoURL}
-                className={styles.avatarImg}
-                alt="Profile"
-                onError={() => setAvatarError(true)}
-              />
+              <img src={user.photoURL} className={styles.avatarImg} alt="Profile" onError={() => setAvatarError(true)} />
             ) : (
-              <div className={styles.avatarInitials} style={{ background: avatarColor }}>
-                {initials}
-              </div>
+              <div className={styles.avatarInitials} style={{ background: avatarColor }}>{initials}</div>
             )}
             <div className={styles.avatarOnline} />
           </div>
@@ -178,16 +179,31 @@ export default function ProfilePage() {
           </div>
           <div className={styles.heroStatDivider} />
           <div className={styles.heroStat}>
-            <span className={styles.heroStatVal} style={{ fontSize: "0.95rem" }}>{lastLogin}</span>
+            <span className={styles.heroStatVal} style={{ fontSize: "0.85rem" }}>{lastLogin}</span>
             <span className={styles.heroStatLabel}>Last Login</span>
           </div>
         </div>
       </div>
 
-      {/* ── Cards Grid ── */}
-      <div className={styles.grid}>
+      {/* ── Registration Info Banner ── */}
+      {userDoc && (
+        <div className={styles.regBanner}>
+          <div className={styles.regBannerTitle}>🖥️ Registered From</div>
+          <div className={styles.regPills}>
+            {userDoc.registeredDevice   && <span className={styles.regPill}>{userDoc.registeredDevice}</span>}
+            {userDoc.registeredBrowser  && <span className={styles.regPill}>🌐 {userDoc.registeredBrowser}</span>}
+            {userDoc.registeredOS       && <span className={styles.regPill}>💿 {userDoc.registeredOS}</span>}
+            {userDoc.registeredLocation && <span className={styles.regPill}>📍 {userDoc.registeredLocation}</span>}
+            {userDoc.registeredIp       && <span className={styles.regPillMono}>🔌 {userDoc.registeredIp}</span>}
+            {userDoc.registeredISP      && <span className={styles.regPillMono}>📡 {userDoc.registeredISP}</span>}
+            {userDoc.registeredTimezone && <span className={styles.regPill}>🕐 {userDoc.registeredTimezone}</span>}
+            {userDoc.registeredScreen   && <span className={styles.regPill}>📺 {userDoc.registeredScreen}</span>}
+          </div>
+        </div>
+      )}
 
-        {/* Profile Info */}
+      <div className={styles.grid}>
+        {/* Edit Profile */}
         <div className={styles.card}>
           <div className={styles.cardHead}>
             <span className={styles.cardIcon}>✏️</span>
@@ -195,21 +211,12 @@ export default function ProfilePage() {
           </div>
           <div className={styles.cardBody}>
             <label className={styles.label}>Display Name</label>
-            <input
-              className={styles.input}
-              value={name}
-              placeholder="Your full name"
-              onChange={(e) => setName(e.target.value)}
-            />
+            <input className={styles.input} value={name} placeholder="Your full name" onChange={(e) => setName(e.target.value)} />
             <label className={styles.label}>Email Address</label>
             <input className={`${styles.input} ${styles.inputDisabled}`} value={user.email} disabled />
-            <label className={styles.label}>UID</label>
+            <label className={styles.label}>User ID</label>
             <input className={`${styles.input} ${styles.inputDisabled} ${styles.inputMono}`} value={user.uid} disabled />
-            <button
-              className={styles.primaryBtn}
-              onClick={saveProfile}
-              disabled={saving}
-            >
+            <button className={styles.primaryBtn} onClick={saveProfile} disabled={saving}>
               {saving ? "Saving…" : "💾 Save Profile"}
             </button>
           </div>
@@ -227,28 +234,24 @@ export default function ProfilePage() {
                 <div className={styles.securityLabel}>Password</div>
                 <div className={styles.securityMuted}>Reset via email link</div>
               </div>
-              <button
-                className={`${styles.outlineBtn} ${resetSent ? styles.outlineBtnSent : ""}`}
-                onClick={resetPassword}
-                disabled={resetSent}
-              >
+              <button className={`${styles.outlineBtn} ${resetSent ? styles.outlineBtnSent : ""}`} onClick={resetPassword} disabled={resetSent}>
                 {resetSent ? "✅ Sent!" : "Send Reset"}
               </button>
             </div>
             <div className={styles.securityRow}>
               <div>
-                <div className={styles.securityLabel}>Email</div>
+                <div className={styles.securityLabel}>Email Verified</div>
                 <div className={styles.securityMuted}>{user.email}</div>
               </div>
               <span className={`${styles.pill} ${user.emailVerified ? styles.pillGreen : styles.pillOrange}`}>
-                {user.emailVerified ? "Verified" : "Unverified"}
+                {user.emailVerified ? "✅ Verified" : "⚠️ Unverified"}
               </span>
             </div>
             <div className={styles.securityRow}>
               <div>
                 <div className={styles.securityLabel}>Auth Provider</div>
                 <div className={styles.securityMuted}>
-                  {user.providerData?.[0]?.providerId === "google.com" ? "Google" : "Email / Password"}
+                  {user.providerData?.[0]?.providerId === "google.com" ? "Google OAuth" : "Email / Password"}
                 </div>
               </div>
               <span className={styles.pill} style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>
@@ -276,7 +279,7 @@ export default function ProfilePage() {
                 <div className={styles.listItemLeft}>
                   <div className={styles.listItemTitle}>{formatTool(h.tool)}</div>
                   <div className={styles.listItemSub}>
-                    {h.imageCount != null && <span>{h.imageCount} items · {h.totalSizeKB} KB · </span>}
+                    {h.imageCount != null && `${h.imageCount} items · ${h.totalSizeKB} KB · `}
                     {formatDate(h.createdAt)}
                   </div>
                 </div>
@@ -285,7 +288,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Login Logs */}
+        {/* Login Logs — expandable full detail */}
         <div className={`${styles.card} ${styles.cardTall}`}>
           <div className={styles.cardHead}>
             <span className={styles.cardIcon}>🔐</span>
@@ -299,20 +302,94 @@ export default function ProfilePage() {
                 <p>No login activity found</p>
               </div>
             ) : loginLogs.map((log, i) => (
-              <div key={i} className={styles.listItem}>
-                <div className={styles.listDot} style={{ background: i === 0 ? "var(--buy)" : "var(--text3)" }} />
-                <div className={styles.listItemLeft}>
-                  <div className={styles.listItemTitle}>
-                    {log.provider === "google.com" ? "🔵 Google Sign-in" : "📧 Email Sign-in"}
+              <div key={i} className={styles.logItem}>
+                {/* Collapsed summary row */}
+                <div
+                  className={styles.logHeader}
+                  onClick={() => setExpandedLog(expandedLog === i ? null : i)}
+                >
+                  <div className={styles.logDot} style={{ background: i === 0 ? "var(--buy)" : "var(--text3)" }} />
+                  <div className={styles.logSummary}>
+                    <span className={styles.logProvider}>
+                      {log.provider === "google" ? "🔵 Google" : "📧 Email"}
+                    </span>
+                    <span className={styles.logDeviceTag}>{log.deviceType || "—"}</span>
+                    <span className={styles.logCity}>{log.city && log.city !== "Unknown" ? `📍 ${log.city}` : ""}</span>
                   </div>
-                  <div className={styles.listItemSub}>{formatDate(log.createdAt)}</div>
+                  <div className={styles.logRight}>
+                    <span className={styles.logTime}>{formatDate(log.createdAt)}</span>
+                    {i === 0 && <span className={styles.pillGreenSmall}>Latest</span>}
+                    <span className={styles.logChevron}>{expandedLog === i ? "▲" : "▼"}</span>
+                  </div>
                 </div>
-                {i === 0 && <span className={styles.pillGreenSmall}>Latest</span>}
+
+                {/* Expanded detail grid */}
+                {expandedLog === i && (
+                  <div className={styles.logDetails}>
+                    <div className={styles.logGrid}>
+                      <div className={styles.logDetailItem}>
+                        <span className={styles.logDetailIcon}>📱</span>
+                        <div>
+                          <div className={styles.logDetailLabel}>Device Type</div>
+                          <div className={styles.logDetailVal}>{log.deviceType || "—"}</div>
+                        </div>
+                      </div>
+                      <div className={styles.logDetailItem}>
+                        <span className={styles.logDetailIcon}>💿</span>
+                        <div>
+                          <div className={styles.logDetailLabel}>Operating System</div>
+                          <div className={styles.logDetailVal}>{log.os || "—"}</div>
+                        </div>
+                      </div>
+                      <div className={styles.logDetailItem}>
+                        <span className={styles.logDetailIcon}>🌐</span>
+                        <div>
+                          <div className={styles.logDetailLabel}>Browser</div>
+                          <div className={styles.logDetailVal}>{log.browser || "—"}</div>
+                        </div>
+                      </div>
+                      <div className={styles.logDetailItem}>
+                        <span className={styles.logDetailIcon}>📺</span>
+                        <div>
+                          <div className={styles.logDetailLabel}>Screen Resolution</div>
+                          <div className={styles.logDetailVal}>{log.screen || "—"}</div>
+                        </div>
+                      </div>
+                      <div className={styles.logDetailItem}>
+                        <span className={styles.logDetailIcon}>🔌</span>
+                        <div>
+                          <div className={styles.logDetailLabel}>IP Address</div>
+                          <div className={`${styles.logDetailVal} ${styles.monoVal}`}>{log.ip || "—"}</div>
+                        </div>
+                      </div>
+                      <div className={styles.logDetailItem}>
+                        <span className={styles.logDetailIcon}>📡</span>
+                        <div>
+                          <div className={styles.logDetailLabel}>ISP / Network</div>
+                          <div className={styles.logDetailVal}>{log.isp || "—"}</div>
+                        </div>
+                      </div>
+                      <div className={styles.logDetailItem}>
+                        <span className={styles.logDetailIcon}>📍</span>
+                        <div>
+                          <div className={styles.logDetailLabel}>Location</div>
+                          <div className={styles.logDetailVal}>{log.location || "—"}</div>
+                        </div>
+                      </div>
+                      <div className={styles.logDetailItem}>
+                        <span className={styles.logDetailIcon}>🕐</span>
+                        <div>
+                          <div className={styles.logDetailLabel}>Timezone</div>
+                          <div className={styles.logDetailVal}>{log.timezone || "—"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
-
       </div>
     </main>
   );

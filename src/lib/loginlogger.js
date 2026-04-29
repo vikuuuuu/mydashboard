@@ -1,30 +1,66 @@
-// lib/loginlogger.js
-import { db } from "./firebaseAuth"; // Ensure Firestore is exported from your firebase config
-import { collection, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { getDeviceDetails } from "./getDeviceDetails";
+// File Path: lib/loginlogger.js
 
-export const logLogin = async ({ userId, provider }) => {
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { getDeviceDetails } from "@/lib/getDeviceDetails";
+
+/**
+ * Call this after every successful login (email or google)
+ * Saves full session details to Firestore → login_logs collection
+ *
+ * Firestore Structure:
+ * login_logs/
+ *   {auto-id}/
+ *     userId        : string
+ *     provider      : "email" | "google"
+ *     ip            : string
+ *     browser       : string
+ *     os            : string
+ *     deviceType    : string   ("Mobile 📱" | "Desktop 💻" | "Tablet 📱" | "Smart TV 📺")
+ *     screen        : string   ("1920×1080")
+ *     city          : string
+ *     region        : string
+ *     country       : string
+ *     timezone      : string
+ *     isp           : string
+ *     location      : string   ("Mumbai, Maharashtra, India")
+ *     lat           : number | null
+ *     lon           : number | null
+ *     userAgent     : string
+ *     createdAt     : Timestamp
+ */
+export async function logLogin({ userId, provider }) {
   try {
-    const deviceDetails = await getDeviceDetails();
+    const details = await getDeviceDetails();
 
-    // 1. Update user's last login in their main profile document
-    const userRef = doc(db, "users", userId);
-    await setDoc(userRef, {
-      lastLogin: serverTimestamp(),
-      lastIp: deviceDetails.ip,
-      lastDevice: deviceDetails.os,
-    }, { merge: true });
-
-    // 2. Save a detailed log in the 'loginLogs' collection
-    await addDoc(collection(db, "loginLogs"), {
+    await addDoc(collection(db, "login_logs"), {
       userId,
       provider,
-      ...deviceDetails,
-      loginTime: serverTimestamp(),
-    });
 
-    console.log("Login details saved successfully");
-  } catch (error) {
-    console.error("Error saving login logs:", error);
+      // Device
+      deviceType: details.deviceType,
+      os:         details.os,
+      browser:    details.browser,
+      screen:     details.screen,
+      userAgent:  details.userAgent,
+
+      // Network
+      ip:         details.ip,
+      isp:        details.isp,
+
+      // Location
+      city:       details.city,
+      region:     details.region,
+      country:    details.country,
+      timezone:   details.timezone,
+      location:   details.location,
+      lat:        details.lat,
+      lon:        details.lon,
+
+      createdAt:  serverTimestamp(),
+    });
+  } catch (err) {
+    // Never crash the login flow due to logging failure
+    console.warn("Login log failed (non-critical):", err);
   }
-};
+}

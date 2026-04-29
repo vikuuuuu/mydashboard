@@ -1,4 +1,4 @@
-// File Path: app/login/page.jsx
+// File Path: app/login/page.js
 "use client";
 
 import { useEffect, useState } from "react";
@@ -18,88 +18,70 @@ import styles from "./login.module.css";
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
-  /* ================= AUTO REDIRECT ================= */
+  /* ── Auto Redirect ── */
   useEffect(() => {
     const user = getCurrentUser();
-    if (user) {
-      router.replace("/dashboard");
-    }
+    if (user) router.replace("/dashboard");
   }, [router]);
 
-  /* ================= EMAIL LOGIN ================= */
+  /* ── Email Login ── */
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const userCredential = await signInWithEmail(email.trim(), password);
       const uid = userCredential?.user?.uid;
-
       if (!uid) throw new Error("Could not retrieve User ID");
 
-      await logLogin({
-        userId: uid,
-        provider: "email",
-      });
+      await logLogin({ userId: uid, provider: "email" });
 
-      toast.success("Login successful");
+      toast.success("Login successful!");
       router.replace("/dashboard");
     } catch (err) {
       console.error("Email Login Error:", err);
-      toast.error("Invalid email or password");
+      if (err.code === "auth/user-not-found")   toast.error("No account found with this email");
+      else if (err.code === "auth/wrong-password") toast.error("Incorrect password");
+      else if (err.code === "auth/too-many-requests") toast.error("Too many attempts. Try again later.");
+      else toast.error("Invalid email or password");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ================= GOOGLE LOGIN ================= */
+  /* ── Google Login ── */
   const handleGoogleLogin = async () => {
     setLoading(true);
-
     try {
       const result = await signInWithGoogle();
       const currentUid = result?.user?.uid;
+      if (!currentUid) throw new Error("Failed to load User ID from Google!");
 
-      if (!currentUid) {
-        throw new Error("Failed to load User ID from Google!");
-      }
+      await logLogin({ userId: currentUid, provider: "google" });
 
-      await logLogin({
-        userId: currentUid,
-        provider: "google",
-      });
-
-      toast.success("Google login successful");
+      toast.success("Google login successful!");
       router.replace("/dashboard");
     } catch (err) {
-      console.error("GOOGLE LOGIN ERROR:", err);
-
-      if (err.code === "auth/popup-closed-by-user") {
-        toast.error("Login cancelled. Please try again.");
-      } else if (err.code === "auth/unauthorized-domain") {
-        toast.error("Domain not authorized in Firebase Console.");
-      } else {
-        toast.error(err.message || "Google login failed");
-      }
+      console.error("Google Login Error:", err);
+      if (err.code === "auth/popup-closed-by-user") toast.error("Login cancelled");
+      else if (err.code === "auth/unauthorized-domain") toast.error("Domain not authorized");
+      else toast.error(err.message || "Google login failed");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ================= RESET PASSWORD ================= */
+  /* ── Reset Password ── */
   const handleResetPassword = async () => {
-    if (!email) {
-      toast.error("Enter your email first");
-      return;
-    }
+    if (!email) { toast.error("Enter your email first"); return; }
     setLoading(true);
     try {
       await changePassword(email);
-      toast.success("Password reset email sent");
+      toast.success("Password reset email sent!");
     } catch (err) {
       toast.error("Failed to send reset email");
     } finally {
@@ -109,67 +91,95 @@ export default function LoginPage() {
 
   return (
     <div className={styles.wrapper}>
-      <Toaster position="top-right" />
-      <div className={styles.loginCard}>
-        <h1 className={styles.title}>File Dashboard</h1>
-        <p className={styles.subtitle}>Login using Email or Google</p>
+      <Toaster position="top-right" toastOptions={{
+        style: { fontFamily: "'DM Sans', sans-serif", fontSize: "13.5px" }
+      }} />
 
-        <form onSubmit={handleEmailLogin}>
+      <div className={styles.card}>
+        {/* Logo / Brand */}
+        <div className={styles.brand}>
+          <div className={styles.brandIcon}>📊</div>
+          <h1 className={styles.title}>File Dashboard</h1>
+          <p className={styles.subtitle}>Sign in to your account</p>
+        </div>
+
+        <form onSubmit={handleEmailLogin} className={styles.form}>
+          {/* Email */}
           <div className={styles.formGroup}>
-            <label className={styles.label}>Email</label>
-            <input
-              type="email"
-              className={styles.input}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <label className={styles.label}>Email Address</label>
+            <div className={styles.inputWrap}>
+              <span className={styles.inputIcon}>✉️</span>
+              <input
+                type="email"
+                className={styles.input}
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
           </div>
 
+          {/* Password */}
           <div className={styles.formGroup}>
             <label className={styles.label}>Password</label>
-            <input
-              type="password"
-              className={styles.input}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={6}
-              required
-            />
+            <div className={styles.inputWrap}>
+              <span className={styles.inputIcon}>🔑</span>
+              <input
+                type={showPass ? "text" : "password"}
+                className={styles.input}
+                placeholder="Min. 6 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={6}
+                required
+              />
+              <button
+                type="button"
+                className={styles.eyeBtn}
+                onClick={() => setShowPass(!showPass)}
+                tabIndex={-1}
+              >
+                {showPass ? "🙈" : "👁️"}
+              </button>
+            </div>
           </div>
 
           <button className={styles.loginBtn} disabled={loading}>
-            {loading ? "Signing in..." : "Login"}
+            {loading ? <span className={styles.btnSpinner} /> : null}
+            {loading ? "Signing in…" : "Login →"}
           </button>
 
-          <div className={styles.forgetbtn}>
-            <button
-              type="button"
-              className={styles.switchMode}
-              onClick={handleResetPassword}
-              disabled={loading}
-            >
+          <div className={styles.linkRow}>
+            <button type="button" className={styles.linkBtn} onClick={handleResetPassword} disabled={loading}>
               Forgot Password?
             </button>
-
-            <button
-              type="button"
-              className={styles.switchMode}
-              onClick={() => router.push("/register")}
-            >
-              Create new account
+            <button type="button" className={styles.linkBtn} onClick={() => router.push("/register")}>
+              Create Account
             </button>
           </div>
         </form>
 
-        <div className={styles.divider}>OR</div>
+        {/* Divider */}
+        <div className={styles.divider}>
+          <span className={styles.dividerLine} />
+          <span className={styles.dividerText}>OR</span>
+          <span className={styles.dividerLine} />
+        </div>
 
+        {/* Google */}
         <button
           type="button"
           className={styles.googleBtn}
           onClick={handleGoogleLogin}
           disabled={loading}
         >
+          <svg width="18" height="18" viewBox="0 0 48 48" style={{ flexShrink: 0 }}>
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
           Continue with Google
         </button>
       </div>
