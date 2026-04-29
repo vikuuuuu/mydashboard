@@ -1,17 +1,18 @@
+// File Path: app/login/page.jsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Toaster, toast } from "react-hot-toast";
-import { auth } from "@/lib/firebaseAuth";
+
 import {
   getCurrentUser,
   signInWithEmail,
   signInWithGoogle,
   changePassword,
 } from "@/lib/firebaseAuth";
-
 import { logLogin } from "@/lib/loginlogger";
+
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -19,7 +20,6 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
 
   /* ================= AUTO REDIRECT ================= */
@@ -33,20 +33,23 @@ export default function LoginPage() {
   /* ================= EMAIL LOGIN ================= */
   const handleEmailLogin = async (e) => {
     e.preventDefault();
-
     setLoading(true);
 
     try {
-      await signInWithEmail(email.trim(), password);
+      const userCredential = await signInWithEmail(email.trim(), password);
+      const uid = userCredential?.user?.uid;
+
+      if (!uid) throw new Error("Could not retrieve User ID");
 
       await logLogin({
-        userId: auth.currentUser.uid,
+        userId: uid,
         provider: "email",
       });
 
       toast.success("Login successful");
       router.replace("/dashboard");
     } catch (err) {
+      console.error("Email Login Error:", err);
       toast.error("Invalid email or password");
     } finally {
       setLoading(false);
@@ -58,16 +61,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      console.log("Google Login process started...");
-      
-      // 1. Result ko variable me store karein
       const result = await signInWithGoogle();
-
-      // 2. Safe tarike se user ID nikalein
-      const currentUid = result?.user?.uid || auth?.currentUser?.uid;
+      const currentUid = result?.user?.uid;
 
       if (!currentUid) {
-        throw new Error("User ID load nahi ho paya!");
+        throw new Error("Failed to load User ID from Google!");
       }
 
       await logLogin({
@@ -77,18 +75,14 @@ export default function LoginPage() {
 
       toast.success("Google login successful");
       router.replace("/dashboard");
-  } catch (err) {
-      console.error("GOOGLE LOGIN EXACT ERROR:", err);
-      
-      // Agar popup close ho gaya hai
-      if (err.code === 'auth/popup-closed-by-user') {
-        toast.error("Login cancelled. Please try again (Check popup blockers).");
-      } 
-      // Agar browser third-party cookies block kar raha hai
-      else if (err.code === 'auth/unauthorized-domain') {
+    } catch (err) {
+      console.error("GOOGLE LOGIN ERROR:", err);
+
+      if (err.code === "auth/popup-closed-by-user") {
+        toast.error("Login cancelled. Please try again.");
+      } else if (err.code === "auth/unauthorized-domain") {
         toast.error("Domain not authorized in Firebase Console.");
-      } 
-      else {
+      } else {
         toast.error(err.message || "Google login failed");
       }
     } finally {
@@ -102,9 +96,7 @@ export default function LoginPage() {
       toast.error("Enter your email first");
       return;
     }
-
     setLoading(true);
-
     try {
       await changePassword(email);
       toast.success("Password reset email sent");
@@ -122,7 +114,6 @@ export default function LoginPage() {
         <h1 className={styles.title}>File Dashboard</h1>
         <p className={styles.subtitle}>Login using Email or Google</p>
 
-        {/* EMAIL LOGIN */}
         <form onSubmit={handleEmailLogin}>
           <div className={styles.formGroup}>
             <label className={styles.label}>Email</label>
@@ -151,7 +142,6 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Login"}
           </button>
 
-          {/* FORGOT PASSWORD */}
           <div className={styles.forgetbtn}>
             <button
               type="button"
@@ -174,7 +164,6 @@ export default function LoginPage() {
 
         <div className={styles.divider}>OR</div>
 
-        {/* GOOGLE LOGIN */}
         <button
           type="button"
           className={styles.googleBtn}
