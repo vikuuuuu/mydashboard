@@ -1,9 +1,11 @@
+// File Path: app/register/page.jsx
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Toaster, toast } from "react-hot-toast";
-import { registerWithEmail, db } from "@/lib/firebaseAuth"; // Import db here
+
+import { registerWithEmail, db } from "@/lib/firebaseAuth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getDeviceDetails } from "@/lib/getDeviceDetails";
 
@@ -22,11 +24,11 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      // Assuming registerWithEmail returns the user credential
+      // Create user authentication
       const userCredential = await registerWithEmail(name, email, password);
       const user = userCredential.user;
 
-      // Get device details at registration
+      // Get device details at the time of registration
       const deviceDetails = await getDeviceDetails();
 
       // Save user profile in Firestore 'users' collection
@@ -37,6 +39,7 @@ export default function RegisterPage() {
         registeredIp: deviceDetails.ip,
         registeredDevice: deviceDetails.os,
         registeredBrowser: deviceDetails.browser,
+        registeredLocation: deviceDetails.location,
       });
 
       toast.success("Account created successfully");
@@ -94,9 +97,9 @@ export default function RegisterPage() {
             {loading ? "Creating..." : "Register"}
           </button>
         </form>
-        
+
         <div style={{ marginTop: "15px", fontSize: "14px", textAlign: "center" }}>
-          Already have an account? 
+          Already have an account?
           <button
             style={{
               background: "none",
@@ -105,7 +108,7 @@ export default function RegisterPage() {
               cursor: "pointer",
               textDecoration: "underline",
               marginLeft: "5px",
-              fontWeight: "600"
+              fontWeight: "600",
             }}
             onClick={() => router.push("/login")}
           >
