@@ -9,10 +9,10 @@ import {
   getCurrentUser,
   signInWithEmail,
   signInWithGoogle,
+  getGoogleRedirectResult,
   changePassword,
 } from "@/lib/firebaseAuth";
 import { logLogin } from "@/lib/loginlogger";
-
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -23,10 +23,25 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
 
-  /* ── Auto Redirect ── */
+  /* ── Check session + catch Google redirect result ── */
   useEffect(() => {
-    const user = getCurrentUser();
-    if (user) router.replace("/dashboard");
+    // Already logged in?
+    if (getCurrentUser()) { router.replace("/dashboard"); return; }
+
+    // Redirect se wapas aaye? (mobile/popup-blocked case)
+    getGoogleRedirectResult()
+      .then(async (result) => {
+        if (!result?.user) return;
+        await logLogin({ userId: result.user.uid, provider: "google" });
+        toast.success("Google login successful!");
+        router.replace("/dashboard");
+      })
+      .catch((err) => {
+        // "auth/no-redirect-result" is normal — ignore karo
+        if (err?.code !== "auth/no-redirect-result") {
+          console.error("Redirect result error:", err);
+        }
+      });
   }, [router]);
 
   /* ── Email Login ── */
@@ -34,20 +49,21 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const userCredential = await signInWithEmail(email.trim(), password);
-      const uid = userCredential?.user?.uid;
-      if (!uid) throw new Error("Could not retrieve User ID");
-
+      const cred = await signInWithEmail(email.trim(), password);
+      const uid  = cred?.user?.uid;
+      if (!uid) throw new Error("UID missing");
       await logLogin({ userId: uid, provider: "email" });
-
       toast.success("Login successful!");
       router.replace("/dashboard");
     } catch (err) {
-      console.error("Email Login Error:", err);
-      if (err.code === "auth/user-not-found")   toast.error("No account found with this email");
-      else if (err.code === "auth/wrong-password") toast.error("Incorrect password");
-      else if (err.code === "auth/too-many-requests") toast.error("Too many attempts. Try again later.");
-      else toast.error("Invalid email or password");
+      console.error("Email login error:", err);
+      const msg = {
+        "auth/user-not-found":     "No account found with this email",
+        "auth/wrong-password":     "Incorrect password",
+        "auth/invalid-credential": "Invalid email or password",
+        "auth/too-many-requests":  "Too many attempts. Try later.",
+      }[err.code] || "Login failed. Check your credentials.";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -58,18 +74,17 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const result = await signInWithGoogle();
-      const currentUid = result?.user?.uid;
-      if (!currentUid) throw new Error("Failed to load User ID from Google!");
 
-      await logLogin({ userId: currentUid, provider: "google" });
-
-      toast.success("Google login successful!");
-      router.replace("/dashboard");
+      if (result?.user) {
+        // Popup succeeded directly
+        await logLogin({ userId: result.user.uid, provider: "google" });
+        toast.success("Google login successful!");
+        router.replace("/dashboard");
+      }
+      // result === null means redirect is happening — page will reload automatically
     } catch (err) {
-      console.error("Google Login Error:", err);
-      if (err.code === "auth/popup-closed-by-user") toast.error("Login cancelled");
-      else if (err.code === "auth/unauthorized-domain") toast.error("Domain not authorized");
-      else toast.error(err.message || "Google login failed");
+      console.error("Google login error:", err);
+      toast.error(err.message || "Google login failed");
     } finally {
       setLoading(false);
     }
@@ -77,12 +92,12 @@ export default function LoginPage() {
 
   /* ── Reset Password ── */
   const handleResetPassword = async () => {
-    if (!email) { toast.error("Enter your email first"); return; }
+    if (!email.trim()) { toast.error("Enter your email first"); return; }
     setLoading(true);
     try {
-      await changePassword(email);
+      await changePassword(email.trim());
       toast.success("Password reset email sent!");
-    } catch (err) {
+    } catch {
       toast.error("Failed to send reset email");
     } finally {
       setLoading(false);
@@ -96,15 +111,15 @@ export default function LoginPage() {
       }} />
 
       <div className={styles.card}>
-        {/* Logo / Brand */}
+        {/* Brand */}
         <div className={styles.brand}>
           <div className={styles.brandIcon}>📊</div>
           <h1 className={styles.title}>File Dashboard</h1>
           <p className={styles.subtitle}>Sign in to your account</p>
         </div>
 
+        {/* Email form */}
         <form onSubmit={handleEmailLogin} className={styles.form}>
-          {/* Email */}
           <div className={styles.formGroup}>
             <label className={styles.label}>Email Address</label>
             <div className={styles.inputWrap}>
@@ -120,7 +135,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Password */}
           <div className={styles.formGroup}>
             <label className={styles.label}>Password</label>
             <div className={styles.inputWrap}>
@@ -137,7 +151,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 className={styles.eyeBtn}
-                onClick={() => setShowPass(!showPass)}
+                onClick={() => setShowPass((p) => !p)}
                 tabIndex={-1}
               >
                 {showPass ? "🙈" : "👁️"}
@@ -146,7 +160,7 @@ export default function LoginPage() {
           </div>
 
           <button className={styles.loginBtn} disabled={loading}>
-            {loading ? <span className={styles.btnSpinner} /> : null}
+            {loading && <span className={styles.btnSpinner} />}
             {loading ? "Signing in…" : "Login →"}
           </button>
 
@@ -167,7 +181,7 @@ export default function LoginPage() {
           <span className={styles.dividerLine} />
         </div>
 
-        {/* Google */}
+        {/* Google button */}
         <button
           type="button"
           className={styles.googleBtn}

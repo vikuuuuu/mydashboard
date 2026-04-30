@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebaseAuth"; // 👈 auth export karo
-import styles from "./dashboard/dashboard.module.css";
+import styles from "./dashboard/page.module.css";
 
 export default function HomePage() {
   const router = useRouter();
