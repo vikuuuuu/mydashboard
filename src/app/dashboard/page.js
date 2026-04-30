@@ -1,12 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import styles from "./dashboard.module.css";
-import { getCurrentUser, signOutUser } from "@/lib/firebaseAuth";
-import { LayoutDashboardIcon, LogOut, User } from "lucide-react";
-import { APP_VERSION, LASTUPDATE_DATE } from "@/lib/appVersion";
-import Avatar from "../../../public/avatar.png";
 
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   getFirestore,
   collection,
@@ -14,206 +10,554 @@ import {
   where,
   onSnapshot,
 } from "firebase/firestore";
+import { auth, signOutUser } from "@/lib/firebaseAuth";
+import { APP_VERSION, LASTUPDATE_DATE } from "@/lib/appVersion";
+import {
+  LayoutDashboardIcon,
+  LogOut,
+  User,
+  GripVertical,
+  LayoutGrid,
+  List,
+  Columns,
+  Search,
+  X,
+  Pin,
+  PinOff,
+} from "lucide-react";
+import styles from "./page.module.css";
 
-const TOOLS = [
-  { id: "Notes", title: "Notes", desc: "Create & Export Notes" },
+/* ─── Default Tools ─────────────────────────────────────── */
+const DEFAULT_TOOLS = [
+  {
+    id: "Notes",
+    title: "Notes",
+    desc: "Create & export notes",
+    icon: "📝",
+    color: "#4361ee",
+    pinned: false,
+  },
   {
     id: "myfinancials",
     title: "My Financials",
     desc: "Track investments & profit",
+    icon: "📈",
+    color: "#0f9d6e",
+    pinned: true,
   },
-  { id: "img-to-pdf", title: "Image to PDF", desc: "Convert images to PDF" },
+  {
+    id: "img-to-pdf",
+    title: "Image → PDF",
+    desc: "Convert images to PDF",
+    icon: "🖼️",
+    color: "#f77f00",
+    pinned: false,
+  },
   {
     id: "all-in-one-img",
-    title: "All-in-One Image Tool",
-    desc: "Convert, resize, crop, rotate, compress, add filters, and watermark images",
+    title: "All-in-One Image",
+    desc: "Convert, resize, crop, compress & more",
+    icon: "✂️",
+    color: "#9b5de5",
+    pinned: false,
   },
-  { id: "pdftool", title: "pdftool", desc: "Capture video frames" },
-  { id: "video-to-img", title: "Video to Image", desc: "Capture video frames" },
+  {
+    id: "pdftool",
+    title: "PDF Tool",
+    desc: "Merge, split & edit PDFs",
+    icon: "📄",
+    color: "#e63946",
+    pinned: false,
+  },
+  {
+    id: "video-to-img",
+    title: "Video → Image",
+    desc: "Capture video frames",
+    icon: "🎬",
+    color: "#3a86ff",
+    pinned: false,
+  },
   {
     id: "webchat",
     title: "Web Chat",
     desc: "Real-time messaging",
+    icon: "💬",
+    color: "#f15bb5",
+    pinned: false,
     isWebchat: true,
   },
-   {
+  {
     id: "myvideoeditor",
     title: "My Video Editor",
-    desc: "Video Edit for short",
-  }
+    desc: "Edit short-form videos",
+    icon: "🎞️",
+    color: "#06d6a0",
+    pinned: false,
+  },
 ];
+
+const VIEWS = ["grid", "list", "compact"];
+const VIEW_ICONS = {
+  grid: <LayoutGrid size={15} />,
+  list: <List size={15} />,
+  compact: <Columns size={15} />,
+};
+const STORAGE_KEY = "dash_tool_order_v2";
+
+/* ─── Avatar helpers ─────────────────────────────────────── */
+const getInitials = (name, email) => {
+  if (name?.trim()) {
+    const p = name.trim().split(" ");
+    return p.length >= 2
+      ? (p[0][0] + p[1][0]).toUpperCase()
+      : p[0].slice(0, 2).toUpperCase();
+  }
+  return email?.[0]?.toUpperCase() || "U";
+};
+const avatarPalette = [
+  "#4361ee",
+  "#0f9d6e",
+  "#f77f00",
+  "#e63946",
+  "#9b5de5",
+  "#3a86ff",
+  "#f15bb5",
+];
+const getAvatarColor = (str = "") => {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+  return avatarPalette[Math.abs(h) % avatarPalette.length];
+};
 
 export default function DashboardPage() {
   const router = useRouter();
+
   const [user, setUser] = useState(null);
-  const [openMenu, setOpenMenu] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [missedVoiceCount, setMissedVoiceCount] = useState(0);   // ✅ NEW
-  const [missedVideoCount, setMissedVideoCount] = useState(0);   // ✅ NEW
+  const [avatarErr, setAvatarErr] = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
+  const [view, setView] = useState("grid"); // grid | list | compact
+  const [search, setSearch] = useState("");
+  const [tools, setTools] = useState(DEFAULT_TOOLS);
+  const [unread, setUnread] = useState(0);
+  const [missedVoice, setMissedVoice] = useState(0);
+  const [missedVideo, setMissedVideo] = useState(0);
 
+  // Drag state
+  const dragIdx = useRef(null);
+  const dragOver = useRef(null);
+  const dropRef = useRef(null);
+  const searchRef = useRef(null);
+
+  /* ── Load saved order ── */
   useEffect(() => {
-    const currentUser = getCurrentUser();
-    if (!currentUser) {
-      router.replace("/login");
-      return;
-    }
-    setUser(currentUser);
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      if (Array.isArray(saved) && saved.length) {
+        // Merge saved order with DEFAULT_TOOLS (new tools get appended)
+        const savedIds = saved.map((t) => t.id);
+        const newTools = DEFAULT_TOOLS.filter((t) => !savedIds.includes(t.id));
+        setTools([...saved, ...newTools]);
+      }
+    } catch (_) {}
+  }, []);
 
-    const db = getFirestore();
-    const uid = currentUser.uid;
-    const messagesRef = collection(db, "messages");
+  /* ── Auth + Firestore ── */
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (!u) {
+        router.replace("/login");
+        return;
+      }
+      setUser(u);
 
-    // ══════════════════════════════════════════════════
-    // ✅ UNREAD MESSAGES (chat messages only, not calls)
-    // ══════════════════════════════════════════════════
-    const unreadQuery = query(
-      messagesRef,
-      where("participants", "array-contains", uid),
-      where("read", "==", false)
-    );
+      const db = getFirestore();
+      const uid = u.uid;
+      const ref = collection(db, "messages");
 
-    const unreadUnsub = onSnapshot(unreadQuery, (snapshot) => {
-      const count = snapshot.docs.filter((doc) => {
-        const d = doc.data();
-        return d.senderId !== uid && d.type !== "call";
-      }).length;
-      setUnreadCount(count);
+      const unreadQ = query(
+        ref,
+        where("participants", "array-contains", uid),
+        where("read", "==", false),
+      );
+      const voiceQ = query(
+        ref,
+        where("participants", "array-contains", uid),
+        where("type", "==", "call"),
+        where("callStatus", "==", "missed"),
+        where("callType", "==", "audio"),
+        where("read", "==", false),
+      );
+      const videoQ = query(
+        ref,
+        where("participants", "array-contains", uid),
+        where("type", "==", "call"),
+        where("callStatus", "==", "missed"),
+        where("callType", "==", "video"),
+        where("read", "==", false),
+      );
+
+      const u1 = onSnapshot(unreadQ, (s) =>
+        setUnread(
+          s.docs.filter(
+            (d) => d.data().senderId !== uid && d.data().type !== "call",
+          ).length,
+        ),
+      );
+      const u2 = onSnapshot(voiceQ, (s) =>
+        setMissedVoice(s.docs.filter((d) => d.data().senderId !== uid).length),
+      );
+      const u3 = onSnapshot(videoQ, (s) =>
+        setMissedVideo(s.docs.filter((d) => d.data().senderId !== uid).length),
+      );
+      return () => {
+        u1();
+        u2();
+        u3();
+      };
     });
-
-    // ══════════════════════════════════════════════════
-    // ✅ MISSED VOICE CALLS
-    // callType === "voice" (ya "audio") — apne Firestore
-    // field name ke hisaab se adjust karein
-    // ══════════════════════════════════════════════════
-    const missedVoiceQuery = query(
-  messagesRef,
-  where("participants", "array-contains", uid),
-  where("type", "==", "call"),
-  where("callStatus", "==", "missed"),
-  where("callType", "==", "audio"),
-  where("read", "==", false) // 🔥 ADD THIS
-);
-
-    const missedVoiceUnsub = onSnapshot(missedVoiceQuery, (snapshot) => {
-      const count = snapshot.docs.filter(
-        (doc) => doc.data().senderId !== uid
-      ).length;
-      setMissedVoiceCount(count);
-    });
-
-    // ══════════════════════════════════════════════════
-    // ✅ MISSED VIDEO CALLS
-    // callType === "video"
-    // ══════════════════════════════════════════════════
-   const missedVideoQuery = query(
-  messagesRef,
-  where("participants", "array-contains", uid),
-  where("type", "==", "call"),
-  where("callStatus", "==", "missed"),
-  where("callType", "==", "video"),
-  where("read", "==", false) // 🔥 ADD THIS
-);
-
-    const missedVideoUnsub = onSnapshot(missedVideoQuery, (snapshot) => {
-      const count = snapshot.docs.filter(
-        (doc) => doc.data().senderId !== uid
-      ).length;
-      setMissedVideoCount(count);
-    });
-
-    return () => {
-      unreadUnsub();
-      missedVoiceUnsub();
-      missedVideoUnsub();
-    };
+    return () => unsub();
   }, [router]);
 
-  const handleLogout = () => {
-    signOutUser();
+  /* ── Outside click → close dropdown ── */
+  useEffect(() => {
+    const h = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target))
+        setDropOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  /* ── Save order ── */
+  const saveTools = (t) => {
+    setTools(t);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
+  };
+
+  /* ── Pin toggle ── */
+  const togglePin = (id, e) => {
+    e.stopPropagation();
+    const updated = tools.map((t) =>
+      t.id === id ? { ...t, pinned: !t.pinned } : t,
+    );
+    // Sort: pinned first
+    const pinned = updated.filter((t) => t.pinned);
+    const unpinned = updated.filter((t) => !t.pinned);
+    saveTools([...pinned, ...unpinned]);
+  };
+
+  /* ── Drag & drop ── */
+  const onDragStart = (i) => {
+    dragIdx.current = i;
+  };
+  const onDragEnter = (i) => {
+    dragOver.current = i;
+  };
+  const onDragEnd = () => {
+    const arr = [...tools];
+    const from = dragIdx.current;
+    const to = dragOver.current;
+    if (from === null || to === null || from === to) {
+      dragIdx.current = null;
+      dragOver.current = null;
+      return;
+    }
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    dragIdx.current = null;
+    dragOver.current = null;
+    saveTools(arr);
+  };
+
+  /* ── Filtered tools ── */
+  const filtered = tools.filter(
+    (t) =>
+      t.title.toLowerCase().includes(search.toLowerCase()) ||
+      t.desc.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const handleLogout = async () => {
+    await signOutUser();
     router.replace("/login");
   };
 
   if (!user) {
     return (
-      <div className={styles.loaderWrapper}>
-        <div className={styles.loader}></div>
-        <p>Checking session...</p>
+      <div className={styles.loaderWrap}>
+        <div className={styles.loaderSpinner} />
+        <p className={styles.loaderText}>Checking session…</p>
       </div>
     );
   }
 
+  const initials = getInitials(user.displayName, user.email);
+  const avatarColor = getAvatarColor(user.email);
+  const showPhoto = user.photoURL && !avatarErr;
+  const totalBadge = unread + missedVoice + missedVideo;
+
   return (
-    <main className={styles.page}>
-      {/* HEADER */}
+    <div className={styles.page}>
+      {/* ── HEADER ── */}
       <header className={styles.header}>
-        <div className={styles.logoSection}>
-          <LayoutDashboardIcon size={24} />
-          <h1>Dashboard</h1>
+        <div className={styles.headerLeft}>
+          <div className={styles.brandMark}>
+            <LayoutDashboardIcon size={20} strokeWidth={2.5} />
+          </div>
+          <div>
+            <h1 className={styles.headerTitle}>Dashboard</h1>
+            <p className={styles.headerSub}>
+              Hey, <strong>{user.displayName?.split(" ")[0] || "User"}</strong>{" "}
+              👋
+            </p>
+          </div>
         </div>
-        <div className={styles.profile} onClick={() => setOpenMenu(!openMenu)}>
-          <img src={user.photoURL || Avatar.src} alt="profile" />
-          <span>{user.displayName || user.email}</span>
-          {openMenu && (
-            <div className={styles.dropdown}>
-              <button onClick={() => router.push("/profile")}>
-                <User size={16} /> Profile
+
+        <div className={styles.headerRight}>
+          {/* View toggle */}
+          <div className={styles.viewToggle}>
+            {VIEWS.map((v) => (
+              <button
+                key={v}
+                className={`${styles.viewBtn} ${view === v ? styles.viewBtnActive : ""}`}
+                onClick={() => setView(v)}
+                title={v}
+              >
+                {VIEW_ICONS[v]}
               </button>
-              <button onClick={handleLogout}>
-                <LogOut size={16} /> Logout
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className={styles.searchWrap}>
+            <Search size={13} className={styles.searchIcon} />
+            <input
+              ref={searchRef}
+              className={styles.searchInput}
+              placeholder="Search tools…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                className={styles.searchClear}
+                onClick={() => setSearch("")}
+              >
+                <X size={12} />
               </button>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* Avatar */}
+          <div className={styles.avatarZone} ref={dropRef}>
+            <button
+              className={styles.avatarBtn}
+              onClick={() => setDropOpen((p) => !p)}
+            >
+              {showPhoto ? (
+                <img
+                  src={user.photoURL}
+                  className={styles.avatarImg}
+                  alt="avatar"
+                  onError={() => setAvatarErr(true)}
+                />
+              ) : (
+                <div
+                  className={styles.avatarInitials}
+                  style={{ background: avatarColor }}
+                >
+                  {initials}
+                </div>
+              )}
+              {totalBadge > 0 && (
+                <span className={styles.avatarBadge}>
+                  {totalBadge > 99 ? "99+" : totalBadge}
+                </span>
+              )}
+              <div className={styles.avatarOnline} />
+            </button>
+
+            {dropOpen && (
+              <div className={styles.dropdown}>
+                <div className={styles.dropUser}>
+                  {showPhoto ? (
+                    <img
+                      src={user.photoURL}
+                      className={styles.dropAvatar}
+                      alt="av"
+                      onError={() => setAvatarErr(true)}
+                    />
+                  ) : (
+                    <div
+                      className={styles.dropAvatarInitials}
+                      style={{ background: avatarColor }}
+                    >
+                      {initials}
+                    </div>
+                  )}
+                  <div>
+                    <div className={styles.dropName}>
+                      {user.displayName || "User"}
+                    </div>
+                    <div className={styles.dropEmail}>{user.email}</div>
+                  </div>
+                </div>
+                <div className={styles.dropDivider} />
+                <button
+                  className={styles.dropItem}
+                  onClick={() => {
+                    setDropOpen(false);
+                    router.push("/profile");
+                  }}
+                >
+                  <User size={14} /> My Profile
+                </button>
+                <button
+                  className={styles.dropItem}
+                  onClick={() => {
+                    setDropOpen(false);
+                    router.push("/dashboard/myfinancials");
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>📈</span> My Financials
+                </button>
+                <div className={styles.dropDivider} />
+                <button
+                  className={`${styles.dropItem} ${styles.dropItemDanger}`}
+                  onClick={handleLogout}
+                >
+                  <LogOut size={14} /> Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* DASHBOARD CARDS */}
-      <section className={styles.cardGrid}>
-        {TOOLS.map((tool) => (
-          <div
-            key={tool.id}
-            className={styles.toolCard}
-            onClick={() => router.push(`/dashboard/${tool.id}`)}
-          >
-            <h3>{tool.title}</h3>
-            <p>{tool.desc}</p>
+      {/* ── TOOLBAR ── */}
+      <div className={styles.toolbar}>
+        <span className={styles.toolbarLabel}>
+          {filtered.length} tools
+          {search && (
+            <span className={styles.toolbarSearch}> for "{search}"</span>
+          )}
+        </span>
+        <span className={styles.toolbarHint}>
+          <GripVertical size={13} /> Drag to rearrange · Click{" "}
+          <span style={{ fontSize: 12 }}>📌</span> to pin
+        </span>
+      </div>
 
-            {/* ✅ WebChat card — Teen alag badges */}
-            {tool.isWebchat && (
-              <div className={styles.badgeRow}>
-                {/* 💬 Unread Messages */}
-                {unreadCount > 0 && (
-                  <span className={`${styles.badge} ${styles.badgeUnread}`}>
-                    💬 {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
+      {/* ── TOOL GRID ── */}
+      <main className={`${styles.cardGrid} ${styles["view_" + view]}`}>
+        {filtered.length === 0 && (
+          <div className={styles.emptySearch}>
+            <span>🔍</span>
+            <p>
+              No tools match "<strong>{search}</strong>"
+            </p>
+            <button onClick={() => setSearch("")}>Clear search</button>
+          </div>
+        )}
 
-                {/* 📞 Missed Voice Calls */}
-                {missedVoiceCount > 0 && (
-                  <span className={`${styles.badge} ${styles.badgeVoice}`}>
-                    📞 {missedVoiceCount > 99 ? "99+" : missedVoiceCount}
-                  </span>
-                )}
+        {filtered.map((tool, i) => {
+          const isWebchat = tool.isWebchat;
+          return (
+            <div
+              key={tool.id}
+              className={`${styles.toolCard} ${tool.pinned ? styles.toolCardPinned : ""}`}
+              style={{ "--tool-color": tool.color }}
+              draggable
+              onDragStart={() => onDragStart(tools.indexOf(tool))}
+              onDragEnter={() => onDragEnter(tools.indexOf(tool))}
+              onDragEnd={onDragEnd}
+              onDragOver={(e) => e.preventDefault()}
+              onClick={() => router.push(`/dashboard/${tool.id}`)}
+            >
+              {/* Drag handle */}
+              <div
+                className={styles.dragHandle}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical size={14} />
+              </div>
 
-                {/* 📹 Missed Video Calls */}
-                {missedVideoCount > 0 && (
-                  <span className={`${styles.badge} ${styles.badgeVideo}`}>
-                    📹 {missedVideoCount > 99 ? "99+" : missedVideoCount}
-                  </span>
+              {/* Pin button */}
+              <button
+                className={`${styles.pinBtn} ${tool.pinned ? styles.pinBtnActive : ""}`}
+                onClick={(e) => togglePin(tool.id, e)}
+                title={tool.pinned ? "Unpin" : "Pin"}
+              >
+                {tool.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+              </button>
+
+              {/* Icon */}
+              <div
+                className={styles.toolIcon}
+                style={{ background: `${tool.color}18`, color: tool.color }}
+              >
+                {tool.icon}
+              </div>
+
+              {/* Info */}
+              <div className={styles.toolInfo}>
+                <h3 className={styles.toolTitle}>{tool.title}</h3>
+                <p className={styles.toolDesc}>{tool.desc}</p>
+
+                {/* Webchat badges */}
+                {isWebchat && (
+                  <div className={styles.badgeRow}>
+                    {unread > 0 && (
+                      <span
+                        className={styles.badge}
+                        style={{
+                          background: "#eef2ff",
+                          color: "#4361ee",
+                          border: "1px solid #c7d2fe",
+                        }}
+                      >
+                        💬 {unread > 99 ? "99+" : unread}
+                      </span>
+                    )}
+                    {missedVoice > 0 && (
+                      <span
+                        className={styles.badge}
+                        style={{
+                          background: "#f0fdf4",
+                          color: "#0f9d6e",
+                          border: "1px solid #bbf7d0",
+                        }}
+                      >
+                        📞 {missedVoice > 99 ? "99+" : missedVoice}
+                      </span>
+                    )}
+                    {missedVideo > 0 && (
+                      <span
+                        className={styles.badge}
+                        style={{
+                          background: "#fef3c7",
+                          color: "#d97706",
+                          border: "1px solid #fde68a",
+                        }}
+                      >
+                        📹 {missedVideo > 99 ? "99+" : missedVideo}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
 
-            <span>Open →</span>
-          </div>
-        ))}
-      </section>
+              <span className={styles.toolArrow}>→</span>
+            </div>
+          );
+        })}
+      </main>
 
-      {/* FOOTER */}
+      {/* ── FOOTER ── */}
       <footer className={styles.footer}>
         <span>MyDashboard {APP_VERSION}</span>
         <span className={styles.dot}>•</span>
         <span>Last Update {LASTUPDATE_DATE}</span>
       </footer>
-    </main>
+    </div>
   );
 }

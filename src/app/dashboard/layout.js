@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebaseAuth";
-import styles from "./dashboard.module.css";
+import styles from "./page.module.css";
 
 export default function DashboardLayout({ children }) {
   const router = useRouter();
