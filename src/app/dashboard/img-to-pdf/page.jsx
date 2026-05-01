@@ -1,3 +1,4 @@
+// File: app/dashboard/img-to-pdf/page.js
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -10,11 +11,18 @@ import {
 import { app } from "@/lib/firebase";
 import { getCurrentUser } from "@/lib/firebaseAuth";
 import { logToolUsage } from "@/lib/firestore";
-import styles from "./tool.module.css";
+import styles from "../common/toolLayout.module.css";
 
 const db = getFirestore(app);
 
-/* ─── helper: file → JPEG data-url ─── */
+const PAGE_SIZES = {
+  fit:    null,
+  a4:     [210, 297],
+  a3:     [297, 420],
+  letter: [215.9, 279.4],
+  legal:  [215.9, 355.6],
+};
+
 function toJpeg(file, quality) {
   return new Promise((res) => {
     const img = new Image();
@@ -31,25 +39,16 @@ function toJpeg(file, quality) {
   });
 }
 
-const PAGE_SIZES = {
-  fit:    null,
-  a4:     [210, 297],
-  a3:     [297, 420],
-  letter: [215.9, 279.4],
-  legal:  [215.9, 355.6],
-};
-
 export default function ImgToPdfPage() {
-  const router  = useRouter();
-  const user    = getCurrentUser();
+  const router = useRouter();
+  const user   = getCurrentUser();
   const fileRef = useRef();
 
-  /* ── images ── */
-  const [images,   setImages  ] = useState([]);
-  const [dragOver, setDragOver] = useState(false);
+  const [images,      setImages     ] = useState([]);
+  const [dragOver,    setDragOver   ] = useState(false);
   const dragIdx = useRef(null);
 
-  /* ── settings ── */
+  // settings
   const [pageSize,    setPageSize   ] = useState("fit");
   const [orientation, setOrientation] = useState("portrait");
   const [margin,      setMargin     ] = useState(0);
@@ -59,13 +58,13 @@ export default function ImgToPdfPage() {
   const [addPageNums, setAddPageNums] = useState(false);
   const [watermark,   setWatermark  ] = useState("");
 
-  /* ── output ── */
+  // output
   const [pdfBlob,  setPdfBlob ] = useState(null);
   const [pdfInfo,  setPdfInfo ] = useState(null);
   const [loading,  setLoading ] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  /* ── history ── */
+  // history
   const [history,     setHistory    ] = useState([]);
   const [histLoading, setHistLoading] = useState(true);
 
@@ -78,7 +77,7 @@ export default function ImgToPdfPage() {
           where("userId", "==", user.uid),
           where("tool", "==", "image-to-pdf"),
           orderBy("createdAt", "desc"),
-          limit(8)
+          limit(10)
         );
         const snap = await getDocs(q);
         setHistory(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -87,7 +86,6 @@ export default function ImgToPdfPage() {
     })();
   }, [user?.uid]);
 
-  /* ── add files ── */
   const addFiles = (files) => {
     const newImgs = Array.from(files)
       .filter((f) => f.type.startsWith("image/"))
@@ -96,8 +94,7 @@ export default function ImgToPdfPage() {
     setPdfBlob(null); setPdfInfo(null);
   };
 
-  /* ── drag reorder ── */
-  const onDragStart  = (i) => { dragIdx.current = i; };
+  const onDragStart   = (i) => { dragIdx.current = i; };
   const onDropReorder = (i) => {
     if (dragIdx.current === null || dragIdx.current === i) return;
     const arr = [...images];
@@ -107,12 +104,9 @@ export default function ImgToPdfPage() {
     dragIdx.current = null;
   };
   const removeImg = (i) => {
-    const arr = [...images];
-    arr.splice(i, 1);
-    setImages(arr);
+    const arr = [...images]; arr.splice(i, 1); setImages(arr);
   };
 
-  /* ── convert ── */
   const convertToPdf = async () => {
     if (!images.length) return;
     setLoading(true); setProgress(0);
@@ -137,40 +131,34 @@ export default function ImgToPdfPage() {
       const m     = Number(margin);
 
       let imgW, imgH, x, y;
-
       if (pageSize === "fit") {
         imgW = pageW; imgH = (props.height * pageW) / props.width;
         x = 0; y = 0;
       } else {
         const maxW = pageW - m * 2, maxH = pageH - m * 2;
         const ratio = Math.min(maxW / props.width, maxH / props.height);
-        imgW = props.width  * ratio; imgH = props.height * ratio;
-        x = m + (maxW - imgW) / 2;  y = m + (maxH - imgH) / 2;
+        imgW = props.width * ratio; imgH = props.height * ratio;
+        x = m + (maxW - imgW) / 2; y = m + (maxH - imgH) / 2;
       }
 
       if (i !== 0) pdf.addPage();
 
-      /* bg color */
       if (bgColor !== "#ffffff") {
-        const hex = bgColor.replace("#","");
+        const hex = bgColor.replace("#", "");
         pdf.setFillColor(parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16));
         pdf.rect(0, 0, pageW, pageH, "F");
       }
 
       pdf.addImage(jpeg, "JPEG", x, y, imgW, imgH);
 
-      /* watermark */
       if (watermark.trim()) {
-        pdf.setFontSize(26);
-        pdf.setTextColor(160, 160, 160);
+        pdf.setFontSize(26); pdf.setTextColor(160, 160, 160);
         const tw = pdf.getTextWidth(watermark);
         pdf.text(watermark, (pageW - tw) / 2, pageH / 2 + 6, { angle: 45 });
       }
 
-      /* page numbers */
       if (addPageNums) {
-        pdf.setFontSize(9);
-        pdf.setTextColor(130);
+        pdf.setFontSize(9); pdf.setTextColor(130);
         pdf.text(`${i + 1} / ${images.length}`, pageW - m - 12, pageH - m - 4);
       }
     }
@@ -183,7 +171,7 @@ export default function ImgToPdfPage() {
     setLoading(false);
 
     if (user) {
-      await logToolUsage({ userId: user.uid, tool: "image-to-pdf", imageCount: images.length, totalSizeKB: Math.round(blob.size / 1024), imageType: "multiple" });
+      await logToolUsage({ userId: user.uid, tool: "image-to-pdf", imageCount: images.length, totalSizeKB: Math.round(blob.size / 1024) });
     }
   };
 
@@ -203,39 +191,33 @@ export default function ImgToPdfPage() {
 
   return (
     <div className={styles.page}>
-
-      {/* ── TOP BAR ── */}
       <div className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => router.back()}>← Back</button>
         <div className={styles.brand}>
-          <span>📄</span>
-          <span>Image to PDF</span>
+          <div className={styles.brandIcon}>📄</div>
+          <span>Image → PDF</span>
         </div>
         {images.length > 0 && (
           <div className={styles.topStats}>
             <span className={styles.statChip}>{images.length} image{images.length !== 1 ? "s" : ""}</span>
             <span className={styles.statChip}>{totalSizeMB} MB</span>
+            <button className={styles.clearBtn} onClick={() => { setImages([]); setPdfBlob(null); setPdfInfo(null); }}>✕ Clear</button>
           </div>
         )}
       </div>
 
       <div className={styles.layout}>
-
-        {/* ── LEFT: IMAGE PANEL ── */}
+        {/* LEFT: Images */}
         <aside className={styles.leftPanel}>
           <div className={styles.panelHeader}>
-            <span className={styles.panelTitle}>Images</span>
+            <span className={styles.panelTitle}>Images ({images.length})</span>
             <div className={styles.panelActions}>
               <button className={styles.addBtn} onClick={() => fileRef.current?.click()}>+ Add</button>
-              {images.length > 0 && (
-                <button className={styles.clearBtn} onClick={() => { setImages([]); setPdfBlob(null); setPdfInfo(null); }}>Clear</button>
-              )}
             </div>
           </div>
 
           <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => addFiles(e.target.files)} />
 
-          {/* Drop zone */}
           <div
             className={`${styles.dropZone} ${dragOver ? styles.dropActive : ""} ${images.length > 0 ? styles.dropHasFiles : ""}`}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -253,14 +235,10 @@ export default function ImgToPdfPage() {
             ) : (
               <div className={styles.imageGrid}>
                 {images.map((img, i) => (
-                  <div
-                    key={i}
-                    className={styles.imgCard}
-                    draggable
+                  <div key={i} className={styles.imgCard} draggable
                     onDragStart={() => onDragStart(i)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => onDropReorder(i)}
-                    title="Drag to reorder"
                   >
                     <img src={img.preview} alt={img.name} className={styles.imgThumb} />
                     <div className={styles.imgOverlay}>
@@ -274,7 +252,6 @@ export default function ImgToPdfPage() {
             )}
           </div>
 
-          {/* PDF Result */}
           {pdfInfo && (
             <div className={styles.resultBox}>
               <div className={styles.resultLeft}>
@@ -289,128 +266,103 @@ export default function ImgToPdfPage() {
           )}
         </aside>
 
-        {/* ── MIDDLE: SETTINGS ── */}
+        {/* MIDDLE: Settings */}
         <section className={styles.middlePanel}>
-          <h2 className={styles.sectionTitle}>⚙️ PDF Settings</h2>
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>⚙️ PDF Settings</h2>
 
-          {/* File name */}
-          <div className={styles.field}>
-            <label>Output File Name</label>
-            <div className={styles.nameRow}>
-              <input className={styles.textInput} type="text" value={pdfName}
-                onChange={(e) => setPdfName(e.target.value)} placeholder="my-document" />
-              <span className={styles.nameSuffix}>.pdf</span>
-            </div>
-          </div>
-
-          {/* Page size */}
-          <div className={styles.field}>
-            <label>Page Size</label>
-            <div className={styles.chipGroup}>
-              {Object.keys(PAGE_SIZES).map((s) => (
-                <button key={s} className={`${styles.chip} ${pageSize === s ? styles.chipActive : ""}`}
-                  onClick={() => setPageSize(s)}>
-                  {s === "fit" ? "Fit to Image" : s.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Orientation */}
-          {pageSize !== "fit" && (
             <div className={styles.field}>
-              <label>Orientation</label>
+              <label>Output File Name</label>
+              <div className={styles.nameRow}>
+                <input className={styles.textInput} type="text" value={pdfName} onChange={(e) => setPdfName(e.target.value)} placeholder="my-document" />
+                <span className={styles.nameSuffix}>.pdf</span>
+              </div>
+            </div>
+
+            <div className={styles.field}>
+              <label>Page Size</label>
               <div className={styles.chipGroup}>
-                {[["portrait","↕ Portrait"],["landscape","↔ Landscape"]].map(([v,l]) => (
-                  <button key={v} className={`${styles.chip} ${orientation === v ? styles.chipActive : ""}`}
-                    onClick={() => setOrientation(v)}>{l}</button>
+                {Object.keys(PAGE_SIZES).map((s) => (
+                  <button key={s} className={`${styles.chip} ${pageSize===s?styles.chipActive:""}`} onClick={() => setPageSize(s)}>
+                    {s === "fit" ? "Fit to Image" : s.toUpperCase()}
+                  </button>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Margin */}
-          {pageSize !== "fit" && (
-            <div className={styles.field}>
-              <label>Page Margin</label>
-              <div className={styles.chipGroup}>
-                {[["0","None"],["5","Small"],["10","Medium"],["20","Large"]].map(([v,l]) => (
-                  <button key={v} className={`${styles.chip} ${margin === Number(v) ? styles.chipActive : ""}`}
-                    onClick={() => setMargin(Number(v))}>{l}</button>
-                ))}
+            {pageSize !== "fit" && (
+              <div className={styles.field}>
+                <label>Orientation</label>
+                <div className={styles.chipGroup}>
+                  {[["portrait","↕ Portrait"],["landscape","↔ Landscape"]].map(([v,l]) => (
+                    <button key={v} className={`${styles.chip} ${orientation===v?styles.chipActive:""}`} onClick={() => setOrientation(v)}>{l}</button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Quality */}
-          <div className={styles.field}>
-            <label>Image Quality — <strong className={styles.valLabel}>{Math.round(quality * 100)}%</strong></label>
-            <input type="range" min="0.3" max="1" step="0.05" value={quality}
-              onChange={(e) => setQuality(+e.target.value)} className={styles.slider} />
-            <div className={styles.sliderLabels}><span>Smaller file</span><span>Best quality</span></div>
-          </div>
-
-          {/* Background */}
-          <div className={styles.field}>
-            <label>Page Background</label>
-            <div className={styles.colorRow}>
-              {["#ffffff","#f8f8f8","#fffef0","#f0f4ff","#1a1a2e"].map((c) => (
-                <button key={c}
-                  className={`${styles.colorSwatch} ${bgColor === c ? styles.colorActive : ""}`}
-                  style={{ background: c }} onClick={() => setBgColor(c)} title={c} />
-              ))}
-              <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)}
-                className={styles.colorPicker} title="Custom color" />
-            </div>
-          </div>
-
-          {/* Watermark */}
-          <div className={styles.field}>
-            <label>Watermark Text <span className={styles.optional}>optional</span></label>
-            <input className={styles.textInput} type="text" value={watermark}
-              onChange={(e) => setWatermark(e.target.value)} placeholder="e.g. CONFIDENTIAL" />
-          </div>
-
-          {/* Extras */}
-          <div className={styles.field}>
-            <label>Extras</label>
-            <label className={styles.checkRow}>
-              <input type="checkbox" checked={addPageNums} onChange={(e) => setAddPageNums(e.target.checked)} />
-              <span>Add page numbers</span>
-            </label>
-          </div>
-
-          {/* Convert button */}
-          <button
-            className={`${styles.convertBtn} ${loading ? styles.converting : ""}`}
-            onClick={convertToPdf}
-            disabled={loading || !images.length}
-          >
-            {loading ? (
-              <><span className={styles.spinner} /> Converting… {progress}%</>
-            ) : (
-              <>📄 Convert {images.length > 0 ? `${images.length} Image${images.length > 1 ? "s" : ""}` : ""} to PDF</>
             )}
-          </button>
 
-          {loading && (
-            <div className={styles.progressTrack}>
-              <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+            {pageSize !== "fit" && (
+              <div className={styles.field}>
+                <label>Margin</label>
+                <div className={styles.chipGroup}>
+                  {[["0","None"],["5","Small"],["10","Medium"],["20","Large"]].map(([v,l]) => (
+                    <button key={v} className={`${styles.chip} ${margin===Number(v)?styles.chipActive:""}`} onClick={() => setMargin(Number(v))}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className={styles.field}>
+              <label>Image Quality — <strong className={styles.valLabel}>{Math.round(quality * 100)}%</strong></label>
+              <input type="range" min="0.3" max="1" step="0.05" value={quality} onChange={(e) => setQuality(+e.target.value)} className={styles.slider} />
+              <div className={styles.sliderLabels}><span>Smaller file</span><span>Best quality</span></div>
             </div>
-          )}
+
+            <div className={styles.field}>
+              <label>Background</label>
+              <div className={styles.colorRow}>
+                {["#ffffff","#f8f8f8","#fffef0","#f0f4ff","#1a1a2e"].map((c) => (
+                  <button key={c} className={`${styles.colorSwatch} ${bgColor===c?styles.colorActive:""}`} style={{ background: c }} onClick={() => setBgColor(c)} />
+                ))}
+                <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className={styles.colorPicker} />
+              </div>
+            </div>
+
+            <div className={styles.field}>
+              <label>Watermark <span className={styles.optional}>optional</span></label>
+              <input className={styles.textInput} type="text" value={watermark} onChange={(e) => setWatermark(e.target.value)} placeholder="e.g. CONFIDENTIAL" />
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.checkRow}>
+                <input type="checkbox" checked={addPageNums} onChange={(e) => setAddPageNums(e.target.checked)} />
+                <span>Add page numbers</span>
+              </label>
+            </div>
+
+            <button
+              className={`${styles.convertBtn} ${loading ? styles.converting : ""}`}
+              onClick={convertToPdf}
+              disabled={loading || !images.length}
+            >
+              {loading ? <><span className={styles.spinner} /> Converting… {progress}%</> : <>📄 Convert {images.length > 0 ? `${images.length} Image${images.length>1?"s":""}` : ""} to PDF</>}
+            </button>
+
+            {loading && (
+              <div className={styles.progressTrack}>
+                <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+              </div>
+            )}
+          </div>
         </section>
 
-        {/* ── RIGHT: HISTORY ── */}
+        {/* RIGHT: History */}
         <aside className={styles.rightPanel}>
           <div className={styles.panelHeader}>
             <span className={styles.panelTitle}>History</span>
           </div>
-
           {histLoading && <p className={styles.histEmpty}>Loading…</p>}
-          {!histLoading && history.length === 0 && (
-            <p className={styles.histEmpty}>No conversions yet</p>
-          )}
-
+          {!histLoading && history.length === 0 && <p className={styles.histEmpty}>No conversions yet</p>}
           {history.map((h) => (
             <div key={h.id} className={styles.histItem}>
               <div className={styles.histIconWrap}>📄</div>
