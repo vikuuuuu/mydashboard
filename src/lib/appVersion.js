@@ -1,3 +1,3 @@
-export const APP_VERSION = "v5.1.5";1
+export const APP_VERSION = "v2.3.5";
 
-export const LASTUPDATE_DATE = "20 March 2026";
+export const LASTUPDATE_DATE = "03 May 2026";

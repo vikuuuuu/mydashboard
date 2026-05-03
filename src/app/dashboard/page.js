@@ -1,3 +1,4 @@
+// File: app/dashboard/page.js
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -9,8 +10,11 @@ import {
   query,
   where,
   onSnapshot,
+  doc,
+  onSnapshot as onDocSnapshot,
 } from "firebase/firestore";
 import { auth, signOutUser } from "@/lib/firebaseAuth";
+import { getSessionId, pingSession, clearSession } from "@/lib/sessionManager";
 import { APP_VERSION, LASTUPDATE_DATE } from "@/lib/appVersion";
 import {
   LayoutDashboardIcon,
@@ -64,7 +68,7 @@ const DEFAULT_TOOLS = [
   {
     id: "pdftool",
     title: "PDF Tool",
-    desc: "Merge, split & edit PDFs",
+    desc: "Resize, convert & edit PDFs",
     icon: "📄",
     color: "#e63946",
     pinned: false,
@@ -72,7 +76,7 @@ const DEFAULT_TOOLS = [
   {
     id: "video-to-img",
     title: "Video → Image",
-    desc: "Capture video frames",
+    desc: "Capture video frames as images",
     icon: "🎬",
     color: "#3a86ff",
     pinned: false,
@@ -104,7 +108,6 @@ const VIEW_ICONS = {
 };
 const STORAGE_KEY = "dash_tool_order_v2";
 
-/* ─── Avatar helpers ─────────────────────────────────────── */
 const getInitials = (name, email) => {
   if (name?.trim()) {
     const p = name.trim().split(" ");
@@ -135,25 +138,26 @@ export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [avatarErr, setAvatarErr] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
-  const [view, setView] = useState("grid"); // grid | list | compact
+  const [view, setView] = useState("grid");
   const [search, setSearch] = useState("");
   const [tools, setTools] = useState(DEFAULT_TOOLS);
   const [unread, setUnread] = useState(0);
   const [missedVoice, setMissedVoice] = useState(0);
   const [missedVideo, setMissedVideo] = useState(0);
 
-  // Drag state
+  // Session kicked modal
+  const [kicked, setKicked] = useState(false);
+
   const dragIdx = useRef(null);
   const dragOver = useRef(null);
   const dropRef = useRef(null);
-  const searchRef = useRef(null);
+  const pingRef = useRef(null);
 
   /* ── Load saved order ── */
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
       if (Array.isArray(saved) && saved.length) {
-        // Merge saved order with DEFAULT_TOOLS (new tools get appended)
         const savedIds = saved.map((t) => t.id);
         const newTools = DEFAULT_TOOLS.filter((t) => !savedIds.includes(t.id));
         setTools([...saved, ...newTools]);
@@ -161,7 +165,7 @@ export default function DashboardPage() {
     } catch (_) {}
   }, []);
 
-  /* ── Auth + Firestore ── */
+  /* ── Auth + realtime session watcher ── */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (!u) {
@@ -172,8 +176,27 @@ export default function DashboardPage() {
 
       const db = getFirestore();
       const uid = u.uid;
-      const ref = collection(db, "messages");
 
+      // ── Realtime session watcher ──
+      // If sessionId in Firestore changes → another device logged in → kick this one
+      const sessionUnsub = onDocSnapshot(
+        doc(db, "user_sessions", uid),
+        (snap) => {
+          if (!snap.exists()) return;
+          const data = snap.data();
+          const mySession = getSessionId();
+          if (data?.sessionId && data.sessionId !== mySession) {
+            // Another device has taken over — show kicked modal
+            setKicked(true);
+          }
+        },
+      );
+
+      // ── Ping every 60s to keep session alive ──
+      pingRef.current = setInterval(() => pingSession(uid), 60_000);
+
+      // ── Firestore: unread + missed calls ──
+      const ref = collection(db, "messages");
       const unreadQ = query(
         ref,
         where("participants", "array-contains", uid),
@@ -209,16 +232,22 @@ export default function DashboardPage() {
       const u3 = onSnapshot(videoQ, (s) =>
         setMissedVideo(s.docs.filter((d) => d.data().senderId !== uid).length),
       );
+
       return () => {
+        sessionUnsub();
         u1();
         u2();
         u3();
+        clearInterval(pingRef.current);
       };
     });
-    return () => unsub();
+    return () => {
+      unsub();
+      clearInterval(pingRef.current);
+    };
   }, [router]);
 
-  /* ── Outside click → close dropdown ── */
+  /* ── Outside click dropdown ── */
   useEffect(() => {
     const h = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target))
@@ -228,25 +257,28 @@ export default function DashboardPage() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  /* ── Save order ── */
+  /* ── Kicked modal — force logout ── */
+  const handleKickedLogout = useCallback(async () => {
+    clearInterval(pingRef.current);
+    await signOutUser();
+    router.replace("/login");
+  }, [router]);
+
   const saveTools = (t) => {
     setTools(t);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
   };
 
-  /* ── Pin toggle ── */
   const togglePin = (id, e) => {
     e.stopPropagation();
     const updated = tools.map((t) =>
       t.id === id ? { ...t, pinned: !t.pinned } : t,
     );
-    // Sort: pinned first
     const pinned = updated.filter((t) => t.pinned);
     const unpinned = updated.filter((t) => !t.pinned);
     saveTools([...pinned, ...unpinned]);
   };
 
-  /* ── Drag & drop ── */
   const onDragStart = (i) => {
     dragIdx.current = i;
   };
@@ -269,7 +301,6 @@ export default function DashboardPage() {
     saveTools(arr);
   };
 
-  /* ── Filtered tools ── */
   const filtered = tools.filter(
     (t) =>
       t.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -277,6 +308,8 @@ export default function DashboardPage() {
   );
 
   const handleLogout = async () => {
+    clearInterval(pingRef.current);
+    if (user) await clearSession(user.uid);
     await signOutUser();
     router.replace("/login");
   };
@@ -297,6 +330,26 @@ export default function DashboardPage() {
 
   return (
     <div className={styles.page}>
+      {/* ════ KICKED MODAL ════ */}
+      {kicked && (
+        <div className={styles.kickedOverlay}>
+          <div className={styles.kickedModal}>
+            <div className={styles.kickedIcon}>🔒</div>
+            <h2 className={styles.kickedTitle}>Session Ended</h2>
+            <p className={styles.kickedDesc}>
+              You were logged out because your account was signed in on another
+              device.
+            </p>
+            <div className={styles.kickedInfo}>
+              <span>If this wasn't you, change your password immediately.</span>
+            </div>
+            <button className={styles.kickedBtn} onClick={handleKickedLogout}>
+              OK, Go to Login
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── HEADER ── */}
       <header className={styles.header}>
         <div className={styles.headerLeft}>
@@ -331,7 +384,6 @@ export default function DashboardPage() {
           <div className={styles.searchWrap}>
             <Search size={13} className={styles.searchIcon} />
             <input
-              ref={searchRef}
               className={styles.searchInput}
               placeholder="Search tools…"
               value={search}
@@ -442,12 +494,11 @@ export default function DashboardPage() {
           )}
         </span>
         <span className={styles.toolbarHint}>
-          <GripVertical size={13} /> Drag to rearrange · Click{" "}
-          <span style={{ fontSize: 12 }}>📌</span> to pin
+          <GripVertical size={13} /> Drag to rearrange · Click 📌 to pin
         </span>
       </div>
 
-      {/* ── TOOL GRID ── */}
+      {/* ── TOOLS ── */}
       <main className={`${styles.cardGrid} ${styles["view_" + view]}`}>
         {filtered.length === 0 && (
           <div className={styles.emptySearch}>
@@ -459,100 +510,86 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {filtered.map((tool, i) => {
-          const isWebchat = tool.isWebchat;
-          return (
+        {filtered.map((tool) => (
+          <div
+            key={tool.id}
+            className={`${styles.toolCard} ${tool.pinned ? styles.toolCardPinned : ""}`}
+            style={{ "--tool-color": tool.color }}
+            draggable
+            onDragStart={() => onDragStart(tools.indexOf(tool))}
+            onDragEnter={() => onDragEnter(tools.indexOf(tool))}
+            onDragEnd={onDragEnd}
+            onDragOver={(e) => e.preventDefault()}
+            onClick={() => router.push(`/dashboard/${tool.id}`)}
+          >
             <div
-              key={tool.id}
-              className={`${styles.toolCard} ${tool.pinned ? styles.toolCardPinned : ""}`}
-              style={{ "--tool-color": tool.color }}
-              draggable
-              onDragStart={() => onDragStart(tools.indexOf(tool))}
-              onDragEnter={() => onDragEnter(tools.indexOf(tool))}
-              onDragEnd={onDragEnd}
-              onDragOver={(e) => e.preventDefault()}
-              onClick={() => router.push(`/dashboard/${tool.id}`)}
+              className={styles.dragHandle}
+              onClick={(e) => e.stopPropagation()}
             >
-              {/* Drag handle */}
-              <div
-                className={styles.dragHandle}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <GripVertical size={14} />
-              </div>
-
-              {/* Pin button */}
-              <button
-                className={`${styles.pinBtn} ${tool.pinned ? styles.pinBtnActive : ""}`}
-                onClick={(e) => togglePin(tool.id, e)}
-                title={tool.pinned ? "Unpin" : "Pin"}
-              >
-                {tool.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-              </button>
-
-              {/* Icon */}
-              <div
-                className={styles.toolIcon}
-                style={{ background: `${tool.color}18`, color: tool.color }}
-              >
-                {tool.icon}
-              </div>
-
-              {/* Info */}
-              <div className={styles.toolInfo}>
-                <h3 className={styles.toolTitle}>{tool.title}</h3>
-                <p className={styles.toolDesc}>{tool.desc}</p>
-
-                {/* Webchat badges */}
-                {isWebchat && (
-                  <div className={styles.badgeRow}>
-                    {unread > 0 && (
-                      <span
-                        className={styles.badge}
-                        style={{
-                          background: "#eef2ff",
-                          color: "#4361ee",
-                          border: "1px solid #c7d2fe",
-                        }}
-                      >
-                        💬 {unread > 99 ? "99+" : unread}
-                      </span>
-                    )}
-                    {missedVoice > 0 && (
-                      <span
-                        className={styles.badge}
-                        style={{
-                          background: "#f0fdf4",
-                          color: "#0f9d6e",
-                          border: "1px solid #bbf7d0",
-                        }}
-                      >
-                        📞 {missedVoice > 99 ? "99+" : missedVoice}
-                      </span>
-                    )}
-                    {missedVideo > 0 && (
-                      <span
-                        className={styles.badge}
-                        style={{
-                          background: "#fef3c7",
-                          color: "#d97706",
-                          border: "1px solid #fde68a",
-                        }}
-                      >
-                        📹 {missedVideo > 99 ? "99+" : missedVideo}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <span className={styles.toolArrow}>→</span>
+              <GripVertical size={14} />
             </div>
-          );
-        })}
+            <button
+              className={`${styles.pinBtn} ${tool.pinned ? styles.pinBtnActive : ""}`}
+              onClick={(e) => togglePin(tool.id, e)}
+              title={tool.pinned ? "Unpin" : "Pin"}
+            >
+              {tool.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+            </button>
+            <div
+              className={styles.toolIcon}
+              style={{ background: `${tool.color}18`, color: tool.color }}
+            >
+              {tool.icon}
+            </div>
+            <div className={styles.toolInfo}>
+              <h3 className={styles.toolTitle}>{tool.title}</h3>
+              <p className={styles.toolDesc}>{tool.desc}</p>
+              {tool.isWebchat && (
+                <div className={styles.badgeRow}>
+                  {unread > 0 && (
+                    <span
+                      className={styles.badge}
+                      style={{
+                        background: "#eef2ff",
+                        color: "#4361ee",
+                        border: "1px solid #c7d2fe",
+                      }}
+                    >
+                      💬 {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
+                  {missedVoice > 0 && (
+                    <span
+                      className={styles.badge}
+                      style={{
+                        background: "#f0fdf4",
+                        color: "#0f9d6e",
+                        border: "1px solid #bbf7d0",
+                      }}
+                    >
+                      📞 {missedVoice > 99 ? "99+" : missedVoice}
+                    </span>
+                  )}
+                  {missedVideo > 0 && (
+                    <span
+                      className={styles.badge}
+                      style={{
+                        background: "#fef3c7",
+                        color: "#d97706",
+                        border: "1px solid #fde68a",
+                      }}
+                    >
+                      📹 {missedVideo > 99 ? "99+" : missedVideo}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <span className={styles.toolArrow}>→</span>
+          </div>
+        ))}
       </main>
 
-      {/* ── FOOTER ── */}
       <footer className={styles.footer}>
         <span>MyDashboard {APP_VERSION}</span>
         <span className={styles.dot}>•</span>
