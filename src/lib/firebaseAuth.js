@@ -1,8 +1,8 @@
-// File Path: lib/firebaseAuth.js
+// File: lib/firebaseAuth.js
+
 import {
   getAuth,
   signInWithEmailAndPassword,
-  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
@@ -30,25 +30,34 @@ export const signInWithEmail = async (email, password) => {
   return await signInWithEmailAndPassword(auth, email, password);
 };
 
-/* ── Google Login ──────────────────────────────────────────
-   Strategy:
-   1. Popup try karo
-   2. Popup block/close → redirect fallback
-   3. Redirect result → login page useEffect mein pakdo
-      via getGoogleRedirectResult()
-─────────────────────────────────────────────────────────── */
+/* ── Google Login (FINAL FIXED) ── */
 export const signInWithGoogle = async () => {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
+    // 🔥 ALWAYS redirect (no popup issues)
+    await signInWithRedirect(auth, googleProvider);
+    return null;
+  } catch (err) {
+    throw err;
+  }
+};
+
+/* ── Handle Redirect Result ── */
+export const getGoogleRedirectResult = async () => {
+  try {
+    const result = await getRedirectResult(auth);
+
+    if (!result) return null;
+
     const user = result.user;
 
+    // 🔥 Save user in Firestore
     await setDoc(
       doc(db, "users", user.uid),
       {
-        name:      user.displayName || "",
-        email:     user.email,
-        photoURL:  user.photoURL || "",
-        provider:  "google",
+        name: user.displayName || "",
+        email: user.email,
+        photoURL: user.photoURL || "",
+        provider: "google",
         isPrivate: false,
         lastLogin: serverTimestamp(),
       },
@@ -56,47 +65,24 @@ export const signInWithGoogle = async () => {
     );
 
     return result;
-
   } catch (err) {
-    if (
-      err.code === "auth/popup-closed-by-user"    ||
-      err.code === "auth/popup-blocked"            ||
-      err.code === "auth/cancelled-popup-request"
-    ) {
-      // Browser ne popup block kiya — redirect use karo
-      await signInWithRedirect(auth, googleProvider);
-      return null; // Page reload hoga, result useEffect mein milega
-    }
-    throw err;
+    console.error("Redirect login error:", err);
+    return null;
   }
 };
-
-/* ── Redirect Result ─────────────────────────────────────
-   Login page useEffect mein yeh call karo:
-
-   useEffect(() => {
-     getGoogleRedirectResult().then(async (result) => {
-       if (result?.user) {
-         await logLogin({ userId: result.user.uid, provider: "google" });
-         router.replace("/dashboard");
-       }
-     }).catch(() => {});
-   }, []);
-─────────────────────────────────────────────────────────── */
-export const getGoogleRedirectResult = () => getRedirectResult(auth);
 
 /* ── Register with Email ── */
 export const registerWithEmail = async (name, email, password) => {
   const result = await createUserWithEmailAndPassword(auth, email, password);
-  const user   = result.user;
+  const user = result.user;
 
   await updateProfile(user, { displayName: name });
 
   await setDoc(doc(db, "users", user.uid), {
     name,
     email,
-    photoURL:  "",
-    provider:  "email",
+    photoURL: "",
+    provider: "email",
     isPrivate: false,
     createdAt: serverTimestamp(),
     lastLogin: serverTimestamp(),
