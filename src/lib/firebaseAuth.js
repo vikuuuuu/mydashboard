@@ -33,7 +33,6 @@ export const signInWithEmail = async (email, password) => {
 /* ── Google Login (FINAL FIXED) ── */
 export const signInWithGoogle = async () => {
   try {
-    // 🔥 ALWAYS redirect (no popup issues)
     await signInWithRedirect(auth, googleProvider);
     return null;
   } catch (err) {

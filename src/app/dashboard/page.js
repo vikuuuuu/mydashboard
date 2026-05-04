@@ -98,6 +98,7 @@ const DEFAULT_TOOLS = [
     color: "#06d6a0",
     pinned: false,
   },
+  { id: "file-studio", title: "All File Studio", desc: "Preview & convert any file format", icon: "📁", color: "#4361ee", pinned: false },
 ];
 
 const VIEWS = ["grid", "list", "compact"];
