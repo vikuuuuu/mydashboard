@@ -1,0 +1,349 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #f8fbff;
+  --bg2: #eef2ff;
+  --surface: #ffffff;
+  --surface2: #f4f7fe;
+  --accent: #4361ee;
+  --accent2: #3a86ff;
+  --text: #1a2147;
+  --text2: #6b7ab5;
+  --border: rgba(99, 120, 200, 0.14);
+  --radius: 18px;
+  --shadow: 0 10px 30px rgba(67, 97, 238, 0.10);
+}
+
+.page {
+  min-height: 100vh;
+  background: linear-gradient(160deg, var(--bg), var(--bg2));
+  padding: 28px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.title {
+  font-family: 'Syne', sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.subtitle {
+  color: var(--text2);
+  margin-top: 4px;
+}
+
+.statsGrid {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.statCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 16px 20px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow);
+  color: var(--accent);
+  font-weight: 700;
+  flex: 1;
+  min-width: 150px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 24px;
+}
+
+@media(max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+.leftCol, .rightCol {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  transition: transform 0.3s ease;
+}
+
+.activeStudyPulse {
+  border: 2px solid #3a86ff;
+  box-shadow: 0 0 20px rgba(58, 134, 255, 0.25);
+  animation: pulseBg 3s infinite alternate;
+}
+
+@keyframes pulseBg {
+  0% { background-color: #ffffff; }
+  100% { background-color: #f0f5ff; }
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  color: var(--accent);
+}
+
+.cardHead h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.form select, .form input {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  outline: none;
+}
+
+.form button {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.taskCard {
+  background: var(--surface2);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--border);
+}
+
+.typeBadge {
+  background: #e0e7ff;
+  color: var(--accent);
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: bold;
+}
+
+.taskCard h3 {
+  color: var(--text);
+  font-size: 1.05rem;
+  margin: 6px 0 2px 0;
+}
+
+.taskCard p {
+  font-size: 0.85rem;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.deleteBtnDanger, .miniDeleteBtn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+}
+
+/* STUDY MODE ACTIVE UI Elements */
+.studySetupForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.studySetupForm select, .studySetupForm input {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.startModeBtn {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.liveConsoleArea {
+  text-align: center;
+  padding: 10px 0;
+}
+
+.liveConsoleArea mark {
+  background: #3a86ff;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.liveClockDisplay {
+  font-size: 2.8rem;
+  font-weight: 800;
+  color: var(--text);
+  margin: 15px 0;
+  letter-spacing: 2px;
+  font-family: monospace;
+}
+
+.stopModeBtn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+/* RIGHT HAND DEADLINE ELEMENTS */
+.examSetupMiniForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.examSetupMiniForm input {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  outline: none;
+}
+
+.addExamBtn {
+  background: var(--text);
+  color: #fff;
+  border: none;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.examDeadlineList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.examCountdownCard {
+  background: #fff8f8;
+  border: 1px solid #fee2e2;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.examCountdownCard h4 {
+  color: #991b1b;
+  font-size: 1rem;
+}
+
+.liveClockCountdownText {
+  font-size: 0.88rem;
+  color: #dc2626;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+/* HISTORY METRICS LOGGER */
+.sessionHistoryContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.historyItemLog {
+  background: var(--surface2);
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.historyMetaRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.92rem;
+}
+
+.historyItemLog p {
+  font-size: 0.82rem;
+  color: var(--text2);
+  margin-top: 4px;
+}
+
+.goodScore { color: #10b981; font-weight: bold; }
+.badScore { color: #f59e0b; font-weight: bold; }
