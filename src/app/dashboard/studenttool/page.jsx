@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import styles from "./studyhub.module.css";
+import styles from "./studytool.module.css";
 
 import {
   CalendarDays,
