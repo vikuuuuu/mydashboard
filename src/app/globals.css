@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 * {
@@ -19,3 +20,42 @@ select {
   font: inherit;
 }
 
+
+
+
+:root {
+  --bg: #f8fbff;
+  --bg2: #eef2ff;
+  --surface: #ffffff;
+  --surface2: #f4f7fe;
+  --accent: #4361ee;
+  --accent2: #3a86ff;
+  --text: #1a2147;
+  --text2: #6b7ab5;
+  --border: rgba(99, 120, 200, 0.14);
+  --radius: 18px;
+  --shadow: 0 10px 30px rgba(67, 97, 238, 0.1);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --purple: #a855f7;
+}
+
+[data-theme="dark"] {
+  --bg: #0f172a;
+  --bg2: #1e293b;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --accent: #60a5fa;
+  --accent2: #3b82f6;
+  --text: #f1f5f9;
+  --text2: #94a3b8;
+  --border: rgba(148, 163, 184, 0.2);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
