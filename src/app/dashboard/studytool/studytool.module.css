@@ -1,47 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
-
-:root {
-  --bg: #f8fbff;
-  --bg2: #eef2ff;
-  --surface: #ffffff;
-  --surface2: #f4f7fe;
-  --accent: #4361ee;
-  --accent2: #3a86ff;
-  --text: #1a2147;
-  --text2: #6b7ab5;
-  --border: rgba(99, 120, 200, 0.14);
-  --radius: 18px;
-  --shadow: 0 10px 30px rgba(67, 97, 238, 0.10);
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --purple: #a855f7;
-}
-
-[data-theme="dark"] {
-  --bg: #0f172a;
-  --bg2: #1e293b;
-  --surface: #1e293b;
-  --surface2: #334155;
-  --accent: #60a5fa;
-  --accent2: #3b82f6;
-  --text: #f1f5f9;
-  --text2: #94a3b8;
-  --border: rgba(148, 163, 184, 0.2);
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
 
 .page {
   min-height: 100vh;
   background: linear-gradient(160deg, var(--bg), var(--bg2));
   padding: 28px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: "DM Sans", sans-serif;
   transition: all 0.3s ease;
 }
 
@@ -80,7 +42,7 @@
 }
 
 .title {
-  font-family: 'Syne', sans-serif;
+  font-family: "Syne", sans-serif;
   font-size: 2rem;
   font-weight: 800;
   color: var(--text);
@@ -95,8 +57,13 @@
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .subtitle {
@@ -146,19 +113,28 @@
 }
 
 .streakBanner::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
+  background: linear-gradient(
+    45deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 70%
+  );
   animation: shimmer 3s infinite;
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .streakItem {
@@ -174,8 +150,15 @@
 }
 
 @keyframes flicker {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.1); opacity: 0.9; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
 }
 
 .streakNumber {
@@ -499,13 +482,14 @@
   gap: 24px;
 }
 
-@media(max-width: 900px) {
-  .grid { 
-    grid-template-columns: 1fr; 
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
   }
 }
 
-.leftCol, .rightCol {
+.leftCol,
+.rightCol {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -532,8 +516,12 @@
 }
 
 @keyframes pulseBg {
-  0% { background-color: var(--surface); }
-  100% { background-color: rgba(67, 97, 238, 0.05); }
+  0% {
+    background-color: var(--surface);
+  }
+  100% {
+    background-color: rgba(67, 97, 238, 0.05);
+  }
 }
 
 .cardHead {
@@ -557,7 +545,7 @@
   gap: 12px;
 }
 
-.studySetupForm select, 
+.studySetupForm select,
 .studySetupForm input {
   padding: 14px;
   border-radius: 12px;
@@ -643,7 +631,7 @@
   color: var(--text);
   margin: 20px 0;
   letter-spacing: 3px;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   text-shadow: 0 2px 10px rgba(67, 97, 238, 0.2);
 }
 
@@ -745,7 +733,7 @@
   margin-bottom: 20px;
 }
 
-.form select, 
+.form select,
 .form input {
   padding: 12px;
   border-radius: 12px;
@@ -869,7 +857,7 @@
   color: white;
 }
 
-.deleteBtnDanger, 
+.deleteBtnDanger,
 .miniDeleteBtn {
   background: transparent;
   border: none;
@@ -882,7 +870,7 @@
   transition: all 0.2s ease;
 }
 
-.deleteBtnDanger:hover, 
+.deleteBtnDanger:hover,
 .miniDeleteBtn:hover {
   background: var(--danger);
   color: white;
@@ -1060,16 +1048,16 @@
   margin: 0;
 }
 
-.goodScore { 
-  color: var(--success); 
-  font-weight: bold; 
+.goodScore {
+  color: var(--success);
+  font-weight: bold;
   background: rgba(16, 185, 129, 0.1);
   padding: 3px 8px;
   border-radius: 6px;
 }
 
-.badScore { 
-  color: var(--warning); 
+.badScore {
+  color: var(--warning);
   font-weight: bold;
   background: rgba(245, 158, 11, 0.1);
   padding: 3px 8px;
