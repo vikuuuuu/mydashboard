@@ -99,6 +99,7 @@ const DEFAULT_TOOLS = [
     pinned: false,
   },
   { id: "file-studio", title: "All File Studio", desc: "Preview & convert any file format", icon: "📁", color: "#4361ee", pinned: false },
+   { id: "studytool", title: "Study Tool", desc: "Create timetable, Tracker and Manage the timetable", icon: "📁", color: "#4361ee", pinned: false },
 ];
 
 const VIEWS = ["grid", "list", "compact"];
