@@ -259,11 +259,22 @@ export default function DashboardPage() {
   }, []);
 
   /* ── Kicked modal — force logout ── */
-  const handleKickedLogout = useCallback(async () => {
-    clearInterval(pingRef.current);
-    await signOutUser();
-    router.replace("/login");
-  }, [router]);
+ const handleKickedLogout = useCallback(async () => {
+  clearInterval(pingRef.current);
+
+  if (user) {
+    await clearSession(user.uid);
+  }
+
+  sessionStorage.removeItem("app_session_id");
+  sessionStorage.removeItem("user_session");
+
+  localStorage.removeItem("user_session");
+
+  await signOutUser();
+
+  router.replace("/login");
+}, [router, user]);
 
   const saveTools = (t) => {
     setTools(t);
@@ -308,13 +319,32 @@ export default function DashboardPage() {
       t.desc.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const handleLogout = async () => {
+ const handleLogout = async () => {
+  try {
     clearInterval(pingRef.current);
-    if (user) await clearSession(user.uid);
-    await signOutUser();
-    router.replace("/login");
-  };
 
+    // firestore session remove
+    if (user) {
+      await clearSession(user.uid);
+    }
+
+    // remove local/session storage
+    sessionStorage.removeItem("app_session_id");
+    sessionStorage.removeItem("user_session");
+
+    localStorage.removeItem("user_session");
+
+    // optional: pura storage clear
+    // sessionStorage.clear();
+    // localStorage.clear();
+
+    await signOutUser();
+
+    router.replace("/login");
+  } catch (err) {
+    console.error("Logout error:", err);
+  }
+};
   if (!user) {
     return (
       <div className={styles.loaderWrap}>
