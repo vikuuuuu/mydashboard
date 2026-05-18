@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap");
 @import "tailwindcss";
 
 * {
@@ -9,7 +9,7 @@ html,
 body {
   margin: 0;
   padding: 0;
-  font-family: Inter, Arial, Helvetica, sans-serif;
+  font-family: "DM Sans", Inter, Arial, Helvetica, sans-serif;
   background: #f8fafc;
   color: #0f172a;
 }
@@ -20,42 +20,250 @@ select {
   font: inherit;
 }
 
-
-
-
+/* ══════════════════════════════════════════
+   DESIGN SYSTEM — Light Theme (default)
+══════════════════════════════════════════ */
 :root {
-  --bg: #f8fbff;
-  --bg2: #eef2ff;
-  --surface: #ffffff;
-  --surface2: #f4f7fe;
-  --accent: #4361ee;
-  --accent2: #3a86ff;
-  --text: #1a2147;
-  --text2: #6b7ab5;
-  --border: rgba(99, 120, 200, 0.14);
-  --radius: 18px;
-  --shadow: 0 10px 30px rgba(67, 97, 238, 0.1);
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --purple: #a855f7;
+  /* Backgrounds */
+  --bg:           #f8fbff;
+  --bg2:          #eef2ff;
+
+  /* Surfaces */
+  --surface:      #ffffff;
+  --surface2:     #f4f7fe;
+  --surface3:     #edf1fb;
+
+  /* Borders */
+  --border:       rgba(99, 120, 200, 0.13);
+  --border2:      rgba(99, 120, 200, 0.22);
+
+  /* Accent / Brand */
+  --accent:       #4361ee;
+  --accent2:      #3a86ff;
+  --accent-soft:  rgba(67, 97, 238, 0.08);
+
+  /* Semantic */
+  --danger:       #e63946;
+  --danger-soft:  rgba(230, 57, 70, 0.09);
+  --buy:          #0f9d6e;
+  --buy-soft:     rgba(15, 157, 110, 0.10);
+  --sell:         #e63946;
+  --sell-soft:    rgba(230, 57, 70, 0.09);
+  --charges:      #f77f00;
+  --warning:      #f59e0b;
+  --warning-soft: rgba(245, 158, 11, 0.10);
+  --purple:       #a855f7;
+  --purple-soft:  rgba(168, 85, 247, 0.10);
+
+  /* Text */
+  --text:         #1a2147;
+  --text2:        #6b7ab5;
+  --text3:        #9ca8d0;
+
+  /* Shape */
+  --radius:       16px;
+  --radius-sm:    10px;
+  --radius-xs:    6px;
+
+  /* Shadows */
+  --shadow:       0 10px 30px rgba(67, 97, 238, 0.10);
+  --shadow-sm:    0 1px 4px rgba(67, 97, 238, 0.07), 0 2px 12px rgba(67, 97, 238, 0.05);
+  --shadow-md:    0 4px 20px rgba(67, 97, 238, 0.10), 0 1px 4px rgba(67, 97, 238, 0.06);
+  --shadow-lg:    0 12px 40px rgba(67, 97, 238, 0.14), 0 3px 12px rgba(67, 97, 238, 0.08);
+
+  /* ── Subscription-specific tokens ── */
+  --sub-active-bg:      rgba(15, 157, 110, 0.08);
+  --sub-active-border:  rgba(15, 157, 110, 0.25);
+  --sub-active-text:    #0f9d6e;
+
+  --sub-expired-bg:     rgba(230, 57, 70, 0.07);
+  --sub-expired-border: rgba(230, 57, 70, 0.22);
+  --sub-expired-text:   #e63946;
+
+  --sub-warning-bg:     rgba(245, 158, 11, 0.08);
+  --sub-warning-border: rgba(245, 158, 11, 0.25);
+  --sub-warning-text:   #d97706;
+
+  --sub-lock-overlay:   rgba(248, 251, 255, 0.88);
+  --sub-countdown-font: "DM Mono", monospace;
+
+  /* ── Razorpay / Payment tokens ── */
+  --pay-btn-bg:         #4361ee;
+  --pay-btn-hover:      #3251d4;
+  --pay-btn-shadow:     0 4px 18px rgba(67, 97, 238, 0.32);
+  --pay-price-color:    #1a2147;
+  --pay-badge-bg:       rgba(67, 97, 238, 0.08);
+  --pay-badge-color:    #4361ee;
 }
 
+/* ══════════════════════════════════════════
+   Dark Theme
+══════════════════════════════════════════ */
 [data-theme="dark"] {
-  --bg: #0f172a;
-  --bg2: #1e293b;
-  --surface: #1e293b;
-  --surface2: #334155;
-  --accent: #60a5fa;
-  --accent2: #3b82f6;
-  --text: #f1f5f9;
-  --text2: #94a3b8;
-  --border: rgba(148, 163, 184, 0.2);
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  --bg:           #0f172a;
+  --bg2:          #1e293b;
+  --surface:      #1e293b;
+  --surface2:     #263148;
+  --surface3:     #2d3a52;
+  --border:       rgba(148, 163, 184, 0.14);
+  --border2:      rgba(148, 163, 184, 0.22);
+  --accent:       #60a5fa;
+  --accent2:      #3b82f6;
+  --accent-soft:  rgba(96, 165, 250, 0.12);
+  --danger:       #f87171;
+  --danger-soft:  rgba(248, 113, 113, 0.12);
+  --buy:          #34d399;
+  --buy-soft:     rgba(52, 211, 153, 0.12);
+  --text:         #f1f5f9;
+  --text2:        #94a3b8;
+  --text3:        #64748b;
+  --shadow:       0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-sm:    0 1px 4px rgba(0,0,0,0.2), 0 2px 12px rgba(0,0,0,0.15);
+  --shadow-md:    0 4px 20px rgba(0,0,0,0.25), 0 1px 4px rgba(0,0,0,0.15);
+  --shadow-lg:    0 12px 40px rgba(0,0,0,0.35), 0 3px 12px rgba(0,0,0,0.2);
+
+  --sub-lock-overlay:   rgba(15, 23, 42, 0.90);
+  --pay-btn-bg:         #60a5fa;
+  --pay-btn-hover:      #3b82f6;
+  --pay-price-color:    #f1f5f9;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* ══════════════════════════════════════════
+   Utility — Subscription UI classes
+   (usable anywhere with className="...")
+══════════════════════════════════════════ */
+
+/* Active badge */
+.sub-badge-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--sub-active-bg);
+  color: var(--sub-active-text);
+  border: 1px solid var(--sub-active-border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 12px;
+  letter-spacing: 0.04em;
+}
+
+/* Expired badge */
+.sub-badge-expired {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--sub-expired-bg);
+  color: var(--sub-expired-text);
+  border: 1px solid var(--sub-expired-border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 12px;
+}
+
+/* Warning (< 7 days left) */
+.sub-badge-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--sub-warning-bg);
+  color: var(--sub-warning-text);
+  border: 1px solid var(--sub-warning-border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 12px;
+}
+
+/* Countdown display */
+.sub-countdown {
+  font-family: var(--sub-countdown-font);
+  font-size: 2rem;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.sub-countdown-warning {
+  color: var(--warning);
+}
+
+.sub-countdown-expired {
+  color: var(--danger);
+}
+
+/* Lock overlay on dashboard */
+.sub-lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--sub-lock-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* Payment card */
+.pay-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 32px 28px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.pay-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+
+.pay-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--pay-btn-bg);
+  color: #fff;
+  font-family: "Syne", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: var(--pay-btn-shadow);
+}
+
+.pay-btn:hover {
+  background: var(--pay-btn-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(67, 97, 238, 0.38);
+}
+
+.pay-btn:active {
+  transform: translateY(0);
+}
+
+.pay-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Global spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
