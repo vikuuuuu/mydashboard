@@ -1,10 +1,84 @@
 
+
 .page {
   min-height: 100vh;
   background: linear-gradient(160deg, var(--bg), var(--bg2));
   padding: 28px;
-  font-family: "DM Sans", sans-serif;
+  font-family: 'DM Sans', sans-serif;
   transition: all 0.3s ease;
+}
+
+/* =================== ACTIVE CLASS BANNER =================== */
+.activeClassBanner {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 10px 40px rgba(239, 68, 68, 0.3);
+  color: white;
+  animation: slideInDown 0.5s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.activeClassBanner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  animation: shimmer 2s infinite;
+}
+
+.pulseIcon {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    transform: scale(1); 
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.2); 
+    opacity: 0.8;
+  }
+}
+
+.activeClassBanner h3 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.activeClassBanner p {
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+.autoModeBadge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-left: auto;
 }
 
 /* =================== HEADER SECTION =================== */
@@ -42,7 +116,7 @@
 }
 
 .title {
-  font-family: "Syne", sans-serif;
+  font-family: 'Syne', sans-serif;
   font-size: 2rem;
   font-weight: 800;
   color: var(--text);
@@ -54,16 +128,6 @@
 .titleIcon {
   color: var(--accent);
   animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
 }
 
 .subtitle {
@@ -113,28 +177,19 @@
 }
 
 .streakBanner::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(
-    45deg,
-    transparent 30%,
-    rgba(255, 255, 255, 0.1) 50%,
-    transparent 70%
-  );
+  background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
   animation: shimmer 3s infinite;
 }
 
 @keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 .streakItem {
@@ -150,15 +205,8 @@
 }
 
 @keyframes flicker {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.9;
-  }
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.9; }
 }
 
 .streakNumber {
@@ -482,14 +530,13 @@
   gap: 24px;
 }
 
-@media (max-width: 900px) {
-  .grid {
-    grid-template-columns: 1fr;
+@media(max-width: 900px) {
+  .grid { 
+    grid-template-columns: 1fr; 
   }
 }
 
-.leftCol,
-.rightCol {
+.leftCol, .rightCol {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -516,12 +563,8 @@
 }
 
 @keyframes pulseBg {
-  0% {
-    background-color: var(--surface);
-  }
-  100% {
-    background-color: rgba(67, 97, 238, 0.05);
-  }
+  0% { background-color: var(--surface); }
+  100% { background-color: rgba(67, 97, 238, 0.05); }
 }
 
 .cardHead {
@@ -536,6 +579,74 @@
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--text);
+}
+
+/* =================== CUSTOM SUBJECT MANAGER =================== */
+.customSubjectForm {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.customSubjectForm input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.customSubjectForm input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+}
+
+.customSubjectForm button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.customSubjectForm button:hover {
+  background: var(--accent2);
+  transform: scale(1.02);
+}
+
+.customSubjectsList {
+  margin-top: 16px;
+}
+
+.customSubjectsList h4 {
+  color: var(--text2);
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+
+.customSubjectsChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.subjectChip {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(67, 97, 238, 0.2);
 }
 
 /* =================== STUDY MODE =================== */
@@ -631,7 +742,7 @@
   color: var(--text);
   margin: 20px 0;
   letter-spacing: 3px;
-  font-family: "Courier New", monospace;
+  font-family: 'JetBrains Mono', monospace;
   text-shadow: 0 2px 10px rgba(67, 97, 238, 0.2);
 }
 
@@ -679,7 +790,10 @@
   flex-wrap: wrap;
 }
 
-.toggleFilterBtn {
+.fullScreenBtn,
+.toggleFilterBtn,
+.exportBtn,
+.importBtn {
   background: var(--surface2);
   border: 1px solid var(--border);
   padding: 8px 14px;
@@ -694,10 +808,14 @@
   transition: all 0.2s ease;
 }
 
-.toggleFilterBtn:hover {
+.fullScreenBtn:hover,
+.toggleFilterBtn:hover,
+.exportBtn:hover,
+.importBtn:hover {
   background: var(--accent);
   color: white;
   border-color: var(--accent);
+  transform: translateY(-2px);
 }
 
 .activeFilter {
@@ -706,24 +824,14 @@
   border-color: var(--accent);
 }
 
-.exportBtn {
-  background: var(--text);
+.importBtn {
+  background: var(--success);
   color: white;
   border: none;
-  padding: 8px 14px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s ease;
 }
 
-.exportBtn:hover {
-  background: var(--accent);
-  transform: scale(1.02);
+.importBtn:hover {
+  background: #059669;
 }
 
 .form {
@@ -809,6 +917,47 @@
 .taskCard:hover {
   transform: translateX(4px);
   box-shadow: 0 4px 12px rgba(67, 97, 238, 0.1);
+}
+
+/* ACTIVE TASK HIGHLIGHTING */
+.activeTaskCard {
+  background: linear-gradient(135deg, #fef2f2, #fee2e2);
+  border: 2px solid var(--live-color);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+  animation: pulseActive 2s infinite;
+}
+
+[data-theme="dark"] .activeTaskCard {
+  background: linear-gradient(135deg, #450a0a, #7f1d1d);
+  border-color: #f87171;
+}
+
+@keyframes pulseActive {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+  }
+}
+
+.liveTag {
+  background: var(--live-color);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .typeBadge {
@@ -904,7 +1053,256 @@
   align-items: center;
 }
 
-/* =================== EXAM TARGETS =================== */
+/* =================== FULLSCREEN TIMETABLE VIEW =================== */
+.fullScreenOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg);
+  z-index: 9999;
+  overflow-y: auto;
+  animation: fadeIn 0.3s ease;
+}
+
+.fullScreenContent {
+  padding: 30px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.fullScreenHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.fullScreenHeader h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 2.5rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fullScreenControls {
+  display: flex;
+  gap: 12px;
+}
+
+.viewModeBtn,
+.closeFullScreen {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.viewModeBtn:hover,
+.closeFullScreen:hover {
+  background: var(--accent2);
+  transform: scale(1.02);
+}
+
+/* Week View Grid */
+.weekViewGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 16px;
+}
+
+.dayColumn {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.todayColumn {
+  border: 2px solid var(--accent);
+  box-shadow: 0 8px 30px rgba(67, 97, 238, 0.2);
+}
+
+.dayColumn h3 {
+  color: var(--accent);
+  font-size: 1.3rem;
+  margin-bottom: 16px;
+  text-align: center;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border);
+}
+
+.daySlots {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.noSlots {
+  text-align: center;
+  color: var(--text2);
+  font-size: 0.9rem;
+  padding: 20px 0;
+}
+
+.fullScreenSlot {
+  background: var(--surface2);
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.fullScreenSlot:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(67, 97, 238, 0.1);
+}
+
+.activeSlot {
+  background: linear-gradient(135deg, #fef2f2, #fee2e2);
+  border: 2px solid var(--live-color);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="dark"] .activeSlot {
+  background: linear-gradient(135deg, #450a0a, #7f1d1d);
+}
+
+.slotTime {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text2);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.fullScreenSlot h4 {
+  color: var(--text);
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+.slotType {
+  display: inline-block;
+  background: var(--accent);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.liveIndicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--live-color);
+  font-weight: 800;
+  font-size: 0.85rem;
+  animation: blink 1.5s infinite;
+}
+
+/* Day View */
+.dayViewContainer {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.dayViewContainer h2 {
+  color: var(--text);
+  font-size: 2rem;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.dayViewSlots {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dayViewSlot {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 24px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  transition: all 0.2s ease;
+}
+
+.dayViewSlot:hover {
+  transform: translateX(4px);
+  box-shadow: 0 8px 24px rgba(67, 97, 238, 0.15);
+}
+
+.slotTimeBlock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 140px;
+}
+
+.slotStartTime {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.slotEndTime {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text2);
+}
+
+.slotContent {
+  flex: 1;
+}
+
+.slotContent h3 {
+  color: var(--text);
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+
+.slotTypeBadge {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.liveIndicatorLarge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--live-color);
+  font-weight: 800;
+  font-size: 1.1rem;
+  animation: blink 1.5s infinite;
+}
+
+/* =================== EXAM TARGETS WITH LIVE COUNTDOWN =================== */
 .examSetupMiniForm {
   display: flex;
   flex-direction: column;
@@ -948,7 +1346,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 400px;
+  max-height: 500px;
   overflow-y: auto;
 }
 
@@ -956,7 +1354,7 @@
   background: linear-gradient(135deg, #fff1f2, #ffe4e6);
   border: 1px solid #fecdd3;
   border-radius: 14px;
-  padding: 14px;
+  padding: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -973,25 +1371,66 @@
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
 }
 
+.examCountdownInfo {
+  flex: 1;
+}
+
 .examCountdownCard h4 {
   color: #991b1b;
-  font-size: 1rem;
-  margin-bottom: 4px;
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+  font-weight: 700;
 }
 
 [data-theme="dark"] .examCountdownCard h4 {
   color: #fca5a5;
 }
 
-.liveClockCountdownText {
-  font-size: 0.88rem;
+/* LIVE COUNTDOWN GRID */
+.countdownGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.countdownUnit {
+  background: rgba(220, 38, 38, 0.1);
+  padding: 8px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.countdownNumber {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
   color: #dc2626;
-  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+[data-theme="dark"] .countdownNumber {
+  color: #fca5a5;
+}
+
+.countdownLabel {
+  display: block;
+  font-size: 0.7rem;
+  color: #991b1b;
+  font-weight: 600;
+  text-transform: uppercase;
   margin-top: 2px;
 }
 
-[data-theme="dark"] .liveClockCountdownText {
+[data-theme="dark"] .countdownLabel {
   color: #fca5a5;
+}
+
+.examCompletedText {
+  color: #059669;
+  font-weight: 700;
+  font-size: 1rem;
+  margin-top: 4px;
 }
 
 /* =================== SESSION HISTORY =================== */
@@ -1076,6 +1515,22 @@
 }
 
 /* =================== RESPONSIVE =================== */
+@media (max-width: 1200px) {
+  .weekViewGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .weekViewGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .countdownGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .page {
     padding: 16px;
@@ -1129,6 +1584,19 @@
   .achievementsGrid {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   }
+
+  .weekViewGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .fullScreenHeader h1 {
+    font-size: 1.8rem;
+  }
+
+  .dayViewSlot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1151,17 +1619,23 @@
   .streakNumber {
     font-size: 1.2rem;
   }
+
+  .activeClassBanner h3 {
+    font-size: 1.1rem;
+  }
+
+  .countdownNumber {
+    font-size: 1.2rem;
+  }
 }
 
 /* =================== ANIMATIONS =================== */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -1175,10 +1649,12 @@
   .headerControls,
   .analyticsToggle,
   .exportBtn,
+  .importBtn,
   .form button,
   .deleteBtnDanger,
   .miniDeleteBtn,
-  .editBtn {
+  .editBtn,
+  .fullScreenBtn {
     display: none;
   }
 
@@ -1188,5 +1664,9 @@
 
   .card {
     break-inside: avoid;
+  }
+  
+  .fullScreenOverlay {
+    position: static;
   }
 }

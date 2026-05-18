@@ -200,3 +200,132 @@
   .heroLeft { flex-direction: column; align-items: flex-start; }
   .logGrid { grid-template-columns: 1fr; }
 }
+
+
+/* ══════════════════════════════════════════
+   ADD TO BOTTOM OF: app/profile/profile.module.css
+   (Subscription card styles — paste at end of file)
+══════════════════════════════════════════ */
+
+/* ── Sub badge colors in card head ── */
+.subActive  { background: var(--buy-soft) !important; color: var(--buy) !important; border-color: rgba(15,157,110,0.22) !important; }
+.subWarning { background: rgba(245,158,11,0.10) !important; color: #d97706 !important; border-color: rgba(245,158,11,0.25) !important; }
+.subExpired { background: var(--sell-soft) !important; color: var(--sell) !important; border-color: rgba(230,57,70,0.22) !important; }
+
+/* ── Subscription card ── */
+.subCard { grid-column: 1 / -1; } /* full width */
+
+.subLoadWrap { display: flex; justify-content: center; padding: 32px 0; }
+
+/* ── Countdown ring ── */
+.countdownWrap {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.countdownRing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 4px solid var(--buy);
+  background: var(--buy-soft);
+  flex-shrink: 0;
+  transition: border-color 0.3s;
+}
+.countdownRingWarn { border-color: #f59e0b !important; background: rgba(245,158,11,0.08) !important; }
+
+.countdownNum {
+  font-family: 'DM Mono', monospace;
+  font-size: 2rem;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--buy);
+}
+.countdownActive  { color: var(--buy); }
+.countdownWarning { color: #d97706; }
+.countdownExpired { color: var(--danger); }
+
+.countdownUnit {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-top: 4px;
+}
+
+/* ── Sub meta rows ── */
+.subMeta { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.subMetaRow { display: flex; align-items: baseline; gap: 10px; }
+.subMetaLabel { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text3); width: 80px; flex-shrink: 0; }
+.subMetaVal { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.subMetaWarn { color: #d97706 !important; }
+.subMetaMono { font-family: 'DM Mono', monospace; font-size: 11.5px; color: var(--text2) !important; }
+
+/* Expiry warning box */
+.subWarnBox {
+  background: rgba(245,158,11,0.09);
+  border: 1px solid rgba(245,158,11,0.28);
+  border-radius: var(--radius-sm);
+  padding: 11px 16px;
+  font-size: 12.5px;
+  color: #92400e;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.renewBtn { background: var(--buy) !important; box-shadow: 0 4px 14px rgba(15,157,110,0.25) !important; }
+.renewBtn:hover { background: #0d8a5f !important; }
+
+/* ── No subscription / upsell ── */
+.subNoActiveBanner {
+  text-align: center;
+  padding: 20px 10px 12px;
+}
+.subNoActiveIcon { font-size: 2.8rem; margin-bottom: 8px; }
+.subNoActiveTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.subNoActiveDesc { font-size: 13px; color: var(--text2); line-height: 1.6; max-width: 400px; margin: 0 auto; }
+
+/* Price box */
+.subPriceBox {
+  text-align: center;
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--accent-soft);
+  border: 1.5px solid rgba(67,97,238,0.18);
+  border-radius: var(--radius-sm);
+}
+.subPriceLabel { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+.subPriceBig { font-family: 'Syne', sans-serif; font-size: 2.4rem; font-weight: 800; color: var(--text); letter-spacing: -0.03em; }
+.subPricePer { font-size: 1rem; font-weight: 500; color: var(--text2); }
+.subPriceNote { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+/* Feature list */
+.subFeatureList { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 12px 0 18px; padding: 0; }
+.subFeatureItem { font-size: 13px; color: var(--text2); font-weight: 500; }
+
+/* Footer note */
+.subFootNote { text-align: center; font-size: 11.5px; color: var(--text3); margin-top: 10px; }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .countdownWrap { flex-direction: column; align-items: flex-start; }
+  .subCard { grid-column: auto; }
+}

@@ -46,7 +46,6 @@ import {
   ChevronUp,
   Edit2,
   Check,
-  X,
   Flame,
   Brain,
   LineChart,
@@ -54,9 +53,15 @@ import {
   Activity,
   Star,
   AlertCircle,
+  Upload,
+  Maximize2,
+  Minimize2,
+  PlayCircle,
+  PauseCircle,
+  Calendar,
 } from "lucide-react";
 
-export default function AdvancedStudyHubPage() {
+export default function UltraAdvancedStudyHub() {
   const router = useRouter();
   const [user, setUser] = useState(null);
 
@@ -68,10 +73,17 @@ export default function AdvancedStudyHubPage() {
   const [day, setDay] = useState("Monday");
   const [tasks, setTasks] = useState([]);
 
+  // Dynamic Subject Management
+  const [customSubjects, setCustomSubjects] = useState([]);
+  const [newSubjectInput, setNewSubjectInput] = useState("");
+
   // Target Exam Configuration States
   const [exams, setExams] = useState([]);
   const [examName, setExamName] = useState("");
   const [examDate, setExamDate] = useState("");
+
+  // Real-time Countdown States
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   // Live Study Mode Analytics States
   const [studySessions, setStudySessions] = useState([]);
@@ -91,17 +103,26 @@ export default function AdvancedStudyHubPage() {
   const [breakReminder, setBreakReminder] = useState(true);
   const [studyGoalMinutes, setStudyGoalMinutes] = useState(120);
 
+  // Full Screen Timetable View
+  const [fullScreenTimetable, setFullScreenTimetable] = useState(false);
+  const [timetableViewMode, setTimetableViewMode] = useState("week"); // week or day
+
+  // Auto Study Mode Based on Timetable
+  const [autoStudyMode, setAutoStudyMode] = useState(false);
+  const [currentActiveClass, setCurrentActiveClass] = useState(null);
+
   // Performance tracking
   const [weeklyProgress, setWeeklyProgress] = useState([]);
   const [subjectStats, setSubjectStats] = useState({});
 
   const activeSessionRef = useRef(null);
   const breakReminderRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const daysMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const currentDayName = daysMap[new Date().getDay()];
 
-  const subjects = [
+  const defaultSubjects = [
     "Mathematics",
     "Reasoning",
     "English Language",
@@ -111,6 +132,8 @@ export default function AdvancedStudyHubPage() {
     "Geography",
     "Computer Science",
   ];
+
+  const allSubjects = [...defaultSubjects, ...customSubjects];
 
   /* 🌟 CENTRALIZED LOG MECHANISM */
   const createProfileLog = async (userId, logDescription) => {
@@ -132,14 +155,87 @@ export default function AdvancedStudyHubPage() {
         return;
       }
       setUser(u);
-      createProfileLog(u.uid, "Advanced Exam Hub - Page Visit");
-      
+      createProfileLog(u.uid, "Ultra Advanced Study Hub - Page Visit");
+
       // Load dark mode preference
       const savedDarkMode = localStorage.getItem("darkMode") === "true";
       setDarkMode(savedDarkMode);
+
+      // Load custom subjects
+      const savedSubjects = localStorage.getItem(`customSubjects_${u.uid}`);
+      if (savedSubjects) {
+        setCustomSubjects(JSON.parse(savedSubjects));
+      }
+
+      // Load auto study mode preference
+      const savedAutoStudy = localStorage.getItem(`autoStudyMode_${u.uid}`) === "true";
+      setAutoStudyMode(savedAutoStudy);
     });
     return () => unsub();
   }, [router]);
+
+  /* REAL-TIME CLOCK UPDATE */
+  useEffect(() => {
+    const clockInterval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(clockInterval);
+  }, []);
+
+  /* AUTO STUDY MODE - CHECK ACTIVE CLASS */
+  useEffect(() => {
+    if (!autoStudyMode || tasks.length === 0) {
+      setCurrentActiveClass(null);
+      return;
+    }
+
+    const checkActiveClass = () => {
+      const now = new Date();
+      const currentDay = daysMap[now.getDay()];
+      const currentTimeStr = `${now.getHours().toString().padStart(2, "0")}:${now
+        .getMinutes()
+        .toString()
+        .padStart(2, "0")}`;
+
+      const activeTask = tasks.find((task) => {
+        if (task.day !== currentDay) return false;
+
+        const [startHour, startMin] = task.startTime.split(":").map(Number);
+        const [endHour, endMin] = task.endTime.split(":").map(Number);
+
+        const startMinutes = startHour * 60 + startMin;
+        const endMinutes = endHour * 60 + endMin;
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+        return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+      });
+
+      setCurrentActiveClass(activeTask || null);
+
+      // Auto start study mode
+      if (activeTask && !isStudyMode) {
+        const [startHour, startMin] = activeTask.startTime.split(":").map(Number);
+        const [endHour, endMin] = activeTask.endTime.split(":").map(Number);
+        const durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+
+        setActiveSubject(activeTask.subject);
+        setTargetMinutes(durationMinutes.toString());
+        
+        if (notificationsEnabled) {
+          showNotification(
+            "Auto Study Mode Started! 🎓",
+            `${activeTask.subject} class shuru ho gayi hai!`
+          );
+        }
+      }
+    };
+
+    checkActiveClass();
+    const autoCheckInterval = setInterval(checkActiveClass, 30000); // Check every 30 seconds
+
+    return () => clearInterval(autoCheckInterval);
+  }, [autoStudyMode, tasks, isStudyMode, notificationsEnabled]);
 
   /* READ DATA FROM FIRESTORE */
   useEffect(() => {
@@ -169,7 +265,10 @@ export default function AdvancedStudyHubPage() {
         checkAchievements(sessions);
       });
 
-      const qAchievements = query(collection(db, "study_achievements"), where("userId", "==", user.uid));
+      const qAchievements = query(
+        collection(db, "study_achievements"),
+        where("userId", "==", user.uid)
+      );
       unsubAchievements = onSnapshot(qAchievements, (snap) => {
         setAchievements(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       });
@@ -185,25 +284,43 @@ export default function AdvancedStudyHubPage() {
     };
   }, [user]);
 
+  /* ADD CUSTOM SUBJECT */
+  const addCustomSubject = () => {
+    if (!newSubjectInput.trim() || !user) return;
+    
+    const trimmedSubject = newSubjectInput.trim();
+    if (allSubjects.includes(trimmedSubject)) {
+      alert("Yeh subject pehle se exist karta hai!");
+      return;
+    }
+
+    const updated = [...customSubjects, trimmedSubject];
+    setCustomSubjects(updated);
+    localStorage.setItem(`customSubjects_${user.uid}`, JSON.stringify(updated));
+    setNewSubjectInput("");
+    
+    createProfileLog(user.uid, `Custom Subject Added - ${trimmedSubject}`);
+  };
+
   /* CALCULATE ADVANCED STATISTICS */
   const calculateAdvancedStats = (sessions) => {
     // Weekly progress calculation
     const last7Days = [];
     const today = new Date();
-    
+
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const dateStr = date.toLocaleDateString();
-      
+
       const dayTotal = sessions
-        .filter(s => {
+        .filter((s) => {
           if (!s.createdAt) return false;
           const sessionDate = s.createdAt.toDate?.() || new Date(s.createdAt);
           return sessionDate.toLocaleDateString() === dateStr;
         })
         .reduce((sum, s) => sum + (s.actualTime || 0), 0);
-      
+
       last7Days.push({
         day: daysMap[date.getDay()].slice(0, 3),
         minutes: dayTotal,
@@ -213,7 +330,7 @@ export default function AdvancedStudyHubPage() {
 
     // Subject-wise statistics
     const subjectMap = {};
-    sessions.forEach(s => {
+    sessions.forEach((s) => {
       if (!subjectMap[s.subjectName]) {
         subjectMap[s.subjectName] = {
           totalTime: 0,
@@ -226,7 +343,7 @@ export default function AdvancedStudyHubPage() {
       subjectMap[s.subjectName].avgAccuracy += s.accuracyPercentage || 0;
     });
 
-    Object.keys(subjectMap).forEach(key => {
+    Object.keys(subjectMap).forEach((key) => {
       subjectMap[key].avgAccuracy = Math.round(
         subjectMap[key].avgAccuracy / subjectMap[key].sessions
       );
@@ -246,7 +363,7 @@ export default function AdvancedStudyHubPage() {
     }
 
     const sortedSessions = sessions
-      .filter(s => s.createdAt)
+      .filter((s) => s.createdAt)
       .sort((a, b) => {
         const dateA = a.createdAt.toDate?.() || new Date(a.createdAt);
         const dateB = b.createdAt.toDate?.() || new Date(b.createdAt);
@@ -257,9 +374,10 @@ export default function AdvancedStudyHubPage() {
     let lastDate = sortedSessions[0].createdAt.toDate?.() || new Date(sortedSessions[0].createdAt);
 
     for (let i = 1; i < sortedSessions.length; i++) {
-      const currentDate = sortedSessions[i].createdAt.toDate?.() || new Date(sortedSessions[i].createdAt);
+      const currentDate =
+        sortedSessions[i].createdAt.toDate?.() || new Date(sortedSessions[i].createdAt);
       const dayDiff = Math.floor((lastDate - currentDate) / (1000 * 60 * 60 * 24));
-      
+
       if (dayDiff === 1) {
         currentStreak++;
         lastDate = currentDate;
@@ -290,7 +408,7 @@ export default function AdvancedStudyHubPage() {
     }
 
     // 10 Hours Milestone
-    if (totalMinutes >= 600 && !achievements.find(a => a.title === "10 Hour Champion")) {
+    if (totalMinutes >= 600 && !achievements.find((a) => a.title === "10 Hour Champion")) {
       newAchievements.push({
         title: "10 Hour Champion",
         description: "10 ghante ki padhai complete ki!",
@@ -298,13 +416,31 @@ export default function AdvancedStudyHubPage() {
       });
     }
 
+    // 50 Hours Milestone
+    if (totalMinutes >= 3000 && !achievements.find((a) => a.title === "Study Warrior")) {
+      newAchievements.push({
+        title: "Study Warrior",
+        description: "50 ghante ki padhai! Kamaal hai!",
+        icon: "⚔️",
+      });
+    }
+
     // Perfect Accuracy
-    const perfectSessions = sessions.filter(s => s.accuracyPercentage === 100);
-    if (perfectSessions.length >= 5 && !achievements.find(a => a.title === "Perfectionist")) {
+    const perfectSessions = sessions.filter((s) => s.accuracyPercentage === 100);
+    if (perfectSessions.length >= 5 && !achievements.find((a) => a.title === "Perfectionist")) {
       newAchievements.push({
         title: "Perfectionist",
         description: "5 sessions me 100% accuracy achieve ki!",
         icon: "💯",
+      });
+    }
+
+    // Week Streak
+    if (streak >= 7 && !achievements.find((a) => a.title === "Week Warrior")) {
+      newAchievements.push({
+        title: "Week Warrior",
+        description: "7 din continuous padhai ki!",
+        icon: "🔥",
       });
     }
 
@@ -373,14 +509,24 @@ export default function AdvancedStudyHubPage() {
     }
   }, [darkMode]);
 
-  /* CALCULATE COUNTDOWN */
-  const calculateCountdown = (targetDate) => {
-    const diff = new Date(targetDate) - new Date();
-    if (diff <= 0) return "Exam Completed";
+  /* REAL-TIME COUNTDOWN WITH SECONDS */
+  const calculateDetailedCountdown = (targetDate) => {
+    const diff = new Date(targetDate) - currentTime;
+    if (diff <= 0) return { text: "Exam Completed", isCompleted: true };
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    return `${days} Days, ${hours} Hours left`;
+    const minutes = Math.floor((diff / (1000 * 60)) % 60);
+    const seconds = Math.floor((diff / 1000) % 60);
+
+    return {
+      days,
+      hours,
+      minutes,
+      seconds,
+      text: `${days}d ${hours}h ${minutes}m ${seconds}s`,
+      isCompleted: false,
+    };
   };
 
   /* ADD TASK */
@@ -398,7 +544,7 @@ export default function AdvancedStudyHubPage() {
         createdAt: serverTimestamp(),
       });
 
-      createProfileLog(user.uid, `Advanced Hub - Timetable Slot Added (${subject})`);
+      createProfileLog(user.uid, `Timetable Slot Added - ${subject}`);
 
       setSubject("");
       setStartTime("");
@@ -417,7 +563,7 @@ export default function AdvancedStudyHubPage() {
     if (!user) return;
     try {
       await deleteDoc(doc(db, "study_tasks", id));
-      createProfileLog(user.uid, "Advanced Hub - Timetable Slot Deleted");
+      createProfileLog(user.uid, "Timetable Slot Deleted");
     } catch (e) {
       console.error("Error deleting task:", e);
     }
@@ -428,7 +574,7 @@ export default function AdvancedStudyHubPage() {
     try {
       await updateDoc(doc(db, "study_tasks", id), updatedData);
       setEditingTaskId(null);
-      createProfileLog(user.uid, "Advanced Hub - Timetable Slot Updated");
+      createProfileLog(user.uid, "Timetable Slot Updated");
     } catch (e) {
       console.error("Error updating task:", e);
     }
@@ -446,7 +592,7 @@ export default function AdvancedStudyHubPage() {
         createdAt: serverTimestamp(),
       });
 
-      createProfileLog(user.uid, `Advanced Hub - Target Exam Set (${examName})`);
+      createProfileLog(user.uid, `Target Exam Set - ${examName}`);
 
       setExamName("");
       setExamDate("");
@@ -464,7 +610,7 @@ export default function AdvancedStudyHubPage() {
     if (!user) return;
     try {
       await deleteDoc(doc(db, "study_exams", id));
-      createProfileLog(user.uid, "Advanced Hub - Exam Deadline Deleted");
+      createProfileLog(user.uid, "Exam Deadline Deleted");
     } catch (e) {
       console.error("Error deleting exam:", e);
     }
@@ -479,7 +625,7 @@ export default function AdvancedStudyHubPage() {
     setSecondsElapsed(0);
     setIsStudyMode(true);
 
-    createProfileLog(user.uid, `Advanced Hub - Study Mode Started (${activeSubject})`);
+    createProfileLog(user.uid, `Study Mode Started - ${activeSubject}`);
 
     if (notificationsEnabled) {
       showNotification("Study Mode Active! 📚", `${activeSubject} ki padhai shuru ho gayi.`);
@@ -506,16 +652,10 @@ export default function AdvancedStudyHubPage() {
         createdAt: serverTimestamp(),
       });
 
-      createProfileLog(
-        user.uid,
-        `Advanced Hub - Session Completed (${activeSubject}) with ${accuracy}% Accuracy`
-      );
+      createProfileLog(user.uid, `Session Completed - ${activeSubject} (${accuracy}% Accuracy)`);
 
       if (notificationsEnabled) {
-        showNotification(
-          "Session Complete! 🎉",
-          `Focus accuracy: ${accuracy}%. Great work!`
-        );
+        showNotification("Session Complete! 🎉", `Focus accuracy: ${accuracy}%. Great work!`);
       }
 
       alert(`Session complete! Focus accuracy: ${accuracy}%`);
@@ -526,32 +666,82 @@ export default function AdvancedStudyHubPage() {
     setSecondsElapsed(0);
   };
 
-  /* EXPORT TIMETABLE AS PDF */
+  /* EXPORT TIMETABLE */
   const exportTimetable = () => {
-    const content = tasks.map(t => 
-      `${t.day} | ${t.subject} | ${t.taskType} | ${t.startTime} - ${t.endTime}`
-    ).join('\n');
-    
-    const blob = new Blob([content], { type: 'text/plain' });
+    const exportData = {
+      tasks: tasks,
+      customSubjects: customSubjects,
+      exportedAt: new Date().toISOString(),
+      version: "1.0",
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = 'my-timetable.txt';
+    a.download = `study-timetable-${new Date().toISOString().split("T")[0]}.json`;
     a.click();
-    
-    createProfileLog(user.uid, "Advanced Hub - Timetable Exported");
+
+    createProfileLog(user.uid, "Timetable Exported");
+  };
+
+  /* IMPORT TIMETABLE */
+  const importTimetable = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const importedData = JSON.parse(e.target.result);
+
+        if (!importedData.tasks || !Array.isArray(importedData.tasks)) {
+          alert("Invalid timetable file!");
+          return;
+        }
+
+        // Import tasks
+        for (const task of importedData.tasks) {
+          await addDoc(collection(db, "study_tasks"), {
+            userId: user.uid,
+            subject: task.subject,
+            startTime: task.startTime,
+            endTime: task.endTime,
+            taskType: task.taskType,
+            day: task.day,
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        // Import custom subjects
+        if (importedData.customSubjects && Array.isArray(importedData.customSubjects)) {
+          const merged = [...new Set([...customSubjects, ...importedData.customSubjects])];
+          setCustomSubjects(merged);
+          localStorage.setItem(`customSubjects_${user.uid}`, JSON.stringify(merged));
+        }
+
+        createProfileLog(user.uid, "Timetable Imported");
+        alert("Timetable successfully imported!");
+      } catch (error) {
+        console.error("Import error:", error);
+        alert("Error importing timetable. Please check the file format.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   /* SMART RECOMMENDATIONS */
   const getWeakestSubject = () => {
-    const subjects = Object.entries(subjectStats)
-      .sort((a, b) => a[1].avgAccuracy - b[1].avgAccuracy);
+    const subjects = Object.entries(subjectStats).sort(
+      (a, b) => a[1].avgAccuracy - b[1].avgAccuracy
+    );
     return subjects[0]?.[0] || "No data yet";
   };
 
   const getBestSubject = () => {
-    const subjects = Object.entries(subjectStats)
-      .sort((a, b) => b[1].avgAccuracy - a[1].avgAccuracy);
+    const subjects = Object.entries(subjectStats).sort(
+      (a, b) => b[1].avgAccuracy - a[1].avgAccuracy
+    );
     return subjects[0]?.[0] || "No data yet";
   };
 
@@ -565,7 +755,7 @@ export default function AdvancedStudyHubPage() {
     : 0;
 
   const todayStudied = studySessions
-    .filter(s => {
+    .filter((s) => {
       if (!s.createdAt) return false;
       const sessionDate = s.createdAt.toDate?.() || new Date(s.createdAt);
       return sessionDate.toDateString() === new Date().toDateString();
@@ -589,6 +779,124 @@ export default function AdvancedStudyHubPage() {
     ? tasks.filter((t) => t.day?.toLowerCase() === currentDayName.toLowerCase())
     : tasks;
 
+  /* CHECK IF TASK IS CURRENTLY ACTIVE */
+  const isTaskActive = (task) => {
+    const now = new Date();
+    const currentDay = daysMap[now.getDay()];
+    
+    if (task.day !== currentDay) return false;
+
+    const [startHour, startMin] = task.startTime.split(":").map(Number);
+    const [endHour, endMin] = task.endTime.split(":").map(Number);
+
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+  };
+
+  /* FULLSCREEN TIMETABLE VIEW */
+  const FullScreenTimetableView = () => {
+    const groupedByDay = {};
+    daysMap.forEach((day) => {
+      groupedByDay[day] = tasks.filter((t) => t.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime));
+    });
+
+    return (
+      <div className={styles.fullScreenOverlay}>
+        <div className={styles.fullScreenContent}>
+          <div className={styles.fullScreenHeader}>
+            <h1>
+              <Calendar size={32} /> Weekly Timetable View
+            </h1>
+            <div className={styles.fullScreenControls}>
+              <button
+                onClick={() => setTimetableViewMode(timetableViewMode === "week" ? "day" : "week")}
+                className={styles.viewModeBtn}
+              >
+                {timetableViewMode === "week" ? "Day View" : "Week View"}
+              </button>
+              <button onClick={() => setFullScreenTimetable(false)} className={styles.closeFullScreen}>
+                <Minimize2 size={20} /> Close
+              </button>
+            </div>
+          </div>
+
+          {timetableViewMode === "week" ? (
+            <div className={styles.weekViewGrid}>
+              {daysMap.map((day) => (
+                <div key={day} className={`${styles.dayColumn} ${day === currentDayName ? styles.todayColumn : ""}`}>
+                  <h3>{day}</h3>
+                  <div className={styles.daySlots}>
+                    {groupedByDay[day].length === 0 ? (
+                      <p className={styles.noSlots}>No classes</p>
+                    ) : (
+                      groupedByDay[day].map((task) => (
+                        <div
+                          key={task.id}
+                          className={`${styles.fullScreenSlot} ${isTaskActive(task) ? styles.activeSlot : ""}`}
+                        >
+                          <span className={styles.slotTime}>
+                            {task.startTime} - {task.endTime}
+                          </span>
+                          <h4>{task.subject}</h4>
+                          <span className={styles.slotType}>{task.taskType}</span>
+                          {isTaskActive(task) && (
+                            <div className={styles.liveIndicator}>
+                              <PlayCircle size={16} /> LIVE NOW
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.dayViewContainer}>
+              <h2>{currentDayName}'s Schedule</h2>
+              <div className={styles.dayViewSlots}>
+                {groupedByDay[currentDayName].length === 0 ? (
+                  <p className={styles.emptyState}>Aaj koi class schedule nahi hai</p>
+                ) : (
+                  groupedByDay[currentDayName].map((task) => (
+                    <div
+                      key={task.id}
+                      className={`${styles.dayViewSlot} ${isTaskActive(task) ? styles.activeSlot : ""}`}
+                    >
+                      <div className={styles.slotTimeBlock}>
+                        <Clock3 size={24} />
+                        <div>
+                          <span className={styles.slotStartTime}>{task.startTime}</span>
+                          <span className={styles.slotEndTime}>to {task.endTime}</span>
+                        </div>
+                      </div>
+                      <div className={styles.slotContent}>
+                        <h3>{task.subject}</h3>
+                        <span className={styles.slotTypeBadge}>{task.taskType}</span>
+                      </div>
+                      {isTaskActive(task) && (
+                        <div className={styles.liveIndicatorLarge}>
+                          <PlayCircle size={24} /> LIVE NOW
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  if (fullScreenTimetable) {
+    return <FullScreenTimetableView />;
+  }
+
   return (
     <div className={`${styles.page} ${darkMode ? styles.darkMode : ""}`}>
       {/* HEADER SECTION */}
@@ -599,11 +907,22 @@ export default function AdvancedStudyHubPage() {
         <div className={styles.titleArea}>
           <h1 className={styles.title}>
             <Zap size={28} className={styles.titleIcon} />
-            Advanced Exam Hub
+            Ultra Advanced Study Hub
           </h1>
-          <p className={styles.subtitle}>AI-Powered Study Analytics & Performance Tracker</p>
+          <p className={styles.subtitle}>Real-Time Analytics & Auto Study Mode</p>
         </div>
         <div className={styles.headerControls}>
+          <button
+            className={styles.iconBtn}
+            onClick={() => {
+              const newState = !autoStudyMode;
+              setAutoStudyMode(newState);
+              localStorage.setItem(`autoStudyMode_${user?.uid}`, newState.toString());
+            }}
+            title={autoStudyMode ? "Auto Study Mode: ON" : "Auto Study Mode: OFF"}
+          >
+            {autoStudyMode ? <PlayCircle size={18} /> : <PauseCircle size={18} />}
+          </button>
           <button
             className={styles.iconBtn}
             onClick={() => setNotificationsEnabled(!notificationsEnabled)}
@@ -621,6 +940,20 @@ export default function AdvancedStudyHubPage() {
         </div>
       </div>
 
+      {/* CURRENT ACTIVE CLASS BANNER */}
+      {currentActiveClass && (
+        <div className={styles.activeClassBanner}>
+          <PlayCircle size={24} className={styles.pulseIcon} />
+          <div>
+            <h3>LIVE NOW: {currentActiveClass.subject}</h3>
+            <p>
+              {currentActiveClass.startTime} - {currentActiveClass.endTime} • {currentActiveClass.taskType}
+            </p>
+          </div>
+          {autoStudyMode && <span className={styles.autoModeBadge}>AUTO MODE</span>}
+        </div>
+      )}
+
       {/* STREAK & DAILY GOAL BANNER */}
       <div className={styles.streakBanner}>
         <div className={styles.streakItem}>
@@ -633,7 +966,9 @@ export default function AdvancedStudyHubPage() {
         <div className={styles.streakItem}>
           <Target size={24} />
           <div>
-            <span className={styles.streakNumber}>{todayStudied} / {studyGoalMinutes}</span>
+            <span className={styles.streakNumber}>
+              {todayStudied} / {studyGoalMinutes}
+            </span>
             <span className={styles.streakLabel}>Today's Goal (mins)</span>
           </div>
         </div>
@@ -647,7 +982,9 @@ export default function AdvancedStudyHubPage() {
         <div className={styles.statCard}>
           <Clock3 size={20} />
           <div>
-            <span className={styles.statValue}>{Math.floor(totalStudiedMins / 60)}h {totalStudiedMins % 60}m</span>
+            <span className={styles.statValue}>
+              {Math.floor(totalStudiedMins / 60)}h {totalStudiedMins % 60}m
+            </span>
             <span className={styles.statLabel}>Total Studied</span>
           </div>
         </div>
@@ -675,10 +1012,7 @@ export default function AdvancedStudyHubPage() {
       </div>
 
       {/* ANALYTICS TOGGLE */}
-      <button
-        className={styles.analyticsToggle}
-        onClick={() => setShowAnalytics(!showAnalytics)}
-      >
+      <button className={styles.analyticsToggle} onClick={() => setShowAnalytics(!showAnalytics)}>
         <LineChart size={18} />
         {showAnalytics ? "Hide" : "Show"} Advanced Analytics
         {showAnalytics ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -748,14 +1082,18 @@ export default function AdvancedStudyHubPage() {
                 <AlertCircle size={16} className={styles.recIcon} />
                 <div>
                   <strong>Focus Area</strong>
-                  <p>Aapko <mark>{getWeakestSubject()}</mark> par zyada dhyan dena chahiye</p>
+                  <p>
+                    Aapko <mark>{getWeakestSubject()}</mark> par zyada dhyan dena chahiye
+                  </p>
                 </div>
               </div>
               <div className={styles.recommendation}>
                 <Star size={16} className={styles.recIcon} />
                 <div>
                   <strong>Strong Subject</strong>
-                  <p><mark>{getBestSubject()}</mark> me aapki performance bohot acchi hai!</p>
+                  <p>
+                    <mark>{getBestSubject()}</mark> me aapki performance bohot acchi hai!
+                  </p>
                 </div>
               </div>
               {avgAccuracy < 70 && (
@@ -778,7 +1116,9 @@ export default function AdvancedStudyHubPage() {
             </div>
             <div className={styles.achievementsGrid}>
               {achievements.length === 0 ? (
-                <p className={styles.emptyState}>Padhai shuru karein to achievements unlock honge!</p>
+                <p className={styles.emptyState}>
+                  Padhai shuru karein to achievements unlock honge!
+                </p>
               ) : (
                 achievements.map((ach) => (
                   <div key={ach.id} className={styles.achievementCard}>
@@ -806,12 +1146,9 @@ export default function AdvancedStudyHubPage() {
 
             {!isStudyMode ? (
               <div className={styles.studySetupForm}>
-                <select
-                  value={activeSubject}
-                  onChange={(e) => setActiveSubject(e.target.value)}
-                >
+                <select value={activeSubject} onChange={(e) => setActiveSubject(e.target.value)}>
                   <option value="">-- Choose Target Subject --</option>
-                  {subjects.map((sub) => (
+                  {allSubjects.map((sub) => (
                     <option key={sub} value={sub}>
                       {sub}
                     </option>
@@ -863,6 +1200,38 @@ export default function AdvancedStudyHubPage() {
             )}
           </div>
 
+          {/* CUSTOM SUBJECT MANAGER */}
+          <div className={styles.card}>
+            <div className={styles.cardHead}>
+              <Plus size={18} />
+              <h2>Add Custom Subject</h2>
+            </div>
+            <div className={styles.customSubjectForm}>
+              <input
+                type="text"
+                placeholder="Enter new subject name..."
+                value={newSubjectInput}
+                onChange={(e) => setNewSubjectInput(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && addCustomSubject()}
+              />
+              <button onClick={addCustomSubject}>
+                <Plus size={16} /> Add
+              </button>
+            </div>
+            {customSubjects.length > 0 && (
+              <div className={styles.customSubjectsList}>
+                <h4>Your Custom Subjects:</h4>
+                <div className={styles.customSubjectsChips}>
+                  {customSubjects.map((sub, idx) => (
+                    <span key={idx} className={styles.subjectChip}>
+                      {sub}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* TIMETABLE MANAGER */}
           <div className={styles.card}>
             <div className={styles.cardHead} style={{ justifyContent: "space-between" }}>
@@ -873,6 +1242,12 @@ export default function AdvancedStudyHubPage() {
 
               <div className={styles.timetableControls}>
                 <button
+                  onClick={() => setFullScreenTimetable(true)}
+                  className={styles.fullScreenBtn}
+                >
+                  <Maximize2 size={15} /> Full View
+                </button>
+                <button
                   onClick={() => setFilterToday(!filterToday)}
                   className={`${styles.toggleFilterBtn} ${filterToday ? styles.activeFilter : ""}`}
                 >
@@ -882,6 +1257,19 @@ export default function AdvancedStudyHubPage() {
                 <button onClick={exportTimetable} className={styles.exportBtn}>
                   <Download size={15} /> Export
                 </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className={styles.importBtn}
+                >
+                  <Upload size={15} /> Import
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: "none" }}
+                  onChange={importTimetable}
+                />
               </div>
             </div>
 
@@ -902,7 +1290,7 @@ export default function AdvancedStudyHubPage() {
                 style={{ flex: 1.5 }}
               >
                 <option value="">-- Select Subject --</option>
-                {subjects.map((sub) => (
+                {allSubjects.map((sub) => (
                   <option key={sub} value={sub}>
                     {sub}
                   </option>
@@ -937,14 +1325,15 @@ export default function AdvancedStudyHubPage() {
                 </p>
               ) : (
                 displayedTasks.map((task) => (
-                  <div key={task.id} className={styles.taskCard}>
+                  <div
+                    key={task.id}
+                    className={`${styles.taskCard} ${isTaskActive(task) ? styles.activeTaskCard : ""}`}
+                  >
                     {editingTaskId === task.id ? (
                       <div className={styles.editForm}>
                         <input
                           defaultValue={task.subject}
-                          onBlur={(e) =>
-                            updateTask(task.id, { subject: e.target.value })
-                          }
+                          onBlur={(e) => updateTask(task.id, { subject: e.target.value })}
                         />
                         <button onClick={() => setEditingTaskId(null)}>
                           <Check size={14} />
@@ -954,6 +1343,9 @@ export default function AdvancedStudyHubPage() {
                       <>
                         <div>
                           <span className={styles.typeBadge}>{task.taskType}</span>
+                          {isTaskActive(task) && (
+                            <span className={styles.liveTag}>● LIVE</span>
+                          )}
                           <h3 style={{ marginTop: "6px" }}>{task.subject}</h3>
                           <p>
                             <Clock3 size={13} /> {task.day} • {task.startTime} - {task.endTime}
@@ -984,7 +1376,7 @@ export default function AdvancedStudyHubPage() {
 
         {/* RIGHT COLUMN */}
         <div className={styles.rightCol}>
-          {/* EXAM TARGETS */}
+          {/* EXAM TARGETS WITH LIVE COUNTDOWN */}
           <div className={styles.card}>
             <div className={styles.cardHead}>
               <Target size={18} />
@@ -1011,19 +1403,41 @@ export default function AdvancedStudyHubPage() {
               {exams.length === 0 ? (
                 <p className={styles.emptyState}>Koi exam target set nahi hai.</p>
               ) : (
-                exams.map((ex) => (
-                  <div key={ex.id} className={styles.examCountdownCard}>
-                    <div>
-                      <h4>{ex.examName}</h4>
-                      <p className={styles.liveClockCountdownText}>
-                        {calculateCountdown(ex.examDate)}
-                      </p>
+                exams.map((ex) => {
+                  const countdown = calculateDetailedCountdown(ex.examDate);
+                  return (
+                    <div key={ex.id} className={styles.examCountdownCard}>
+                      <div className={styles.examCountdownInfo}>
+                        <h4>{ex.examName}</h4>
+                        {countdown.isCompleted ? (
+                          <p className={styles.examCompletedText}>{countdown.text}</p>
+                        ) : (
+                          <div className={styles.countdownGrid}>
+                            <div className={styles.countdownUnit}>
+                              <span className={styles.countdownNumber}>{countdown.days}</span>
+                              <span className={styles.countdownLabel}>Days</span>
+                            </div>
+                            <div className={styles.countdownUnit}>
+                              <span className={styles.countdownNumber}>{countdown.hours}</span>
+                              <span className={styles.countdownLabel}>Hours</span>
+                            </div>
+                            <div className={styles.countdownUnit}>
+                              <span className={styles.countdownNumber}>{countdown.minutes}</span>
+                              <span className={styles.countdownLabel}>Mins</span>
+                            </div>
+                            <div className={styles.countdownUnit}>
+                              <span className={styles.countdownNumber}>{countdown.seconds}</span>
+                              <span className={styles.countdownLabel}>Secs</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <button onClick={() => deleteExam(ex.id)} className={styles.miniDeleteBtn}>
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                    <button onClick={() => deleteExam(ex.id)} className={styles.miniDeleteBtn}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -1039,25 +1453,28 @@ export default function AdvancedStudyHubPage() {
               {studySessions.length === 0 ? (
                 <p className={styles.emptyState}>Abhi tak koi session complete nahi hua.</p>
               ) : (
-                studySessions.slice(-10).reverse().map((session) => (
-                  <div key={session.id} className={styles.historyItemLog}>
-                    <div className={styles.historyMetaRow}>
-                      <strong>{session.subjectName}</strong>
-                      <span
-                        className={
-                          session.accuracyPercentage >= 80
-                            ? styles.goodScore
-                            : styles.badScore
-                        }
-                      >
-                        {session.accuracyPercentage}% Score
-                      </span>
+                studySessions
+                  .slice(-10)
+                  .reverse()
+                  .map((session) => (
+                    <div key={session.id} className={styles.historyItemLog}>
+                      <div className={styles.historyMetaRow}>
+                        <strong>{session.subjectName}</strong>
+                        <span
+                          className={
+                            session.accuracyPercentage >= 80
+                              ? styles.goodScore
+                              : styles.badScore
+                          }
+                        >
+                          {session.accuracyPercentage}% Score
+                        </span>
+                      </div>
+                      <p>
+                        Padhai ki: {session.actualTime} Min / Goal tha: {session.targetTime} Min
+                      </p>
                     </div>
-                    <p>
-                      Padhai ki: {session.actualTime} Min / Goal tha: {session.targetTime} Min
-                    </p>
-                  </div>
-                ))
+                  ))
               )}
             </div>
           </div>

@@ -100,7 +100,6 @@ const DEFAULT_TOOLS = [
   },
   { id: "file-studio", title: "All File Studio", desc: "Preview & convert any file format", icon: "📁", color: "#4361ee", pinned: false },
   { id: "studytool", title: "Study Tool", desc: "Manage Timetable and review study materials", icon: "📚", color: "#4361ee", pinned: false },
-   { id: "invoicegenerator", title: "Invoicegenerator  Tool", desc: "Manage Timetable and review study materials", icon: "📚", color: "#4361ee", pinned: false },
 
 ];
 

@@ -1,11 +1,13 @@
 import "./globals.css";
 
+
 export const metadata = {
   title: "My Dashboard",
   description: "All service in Single dashboard",
   icons: {
     icon: "/dashboard.png",
   },
+  
 };
 
 export default function RootLayout({ children }) {

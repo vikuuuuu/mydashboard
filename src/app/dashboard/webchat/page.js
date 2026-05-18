@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   collection, query, where, onSnapshot, addDoc,
   serverTimestamp, orderBy, getDocs, doc, getDoc,
-  updateDoc, setDoc, deleteDoc, limit, writeBatch,
+  updateDoc, setDoc, deleteDoc, limit, writeBatch, arrayUnion
 } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, auth } from "@/lib/firebase";
@@ -166,9 +166,9 @@ const Ic = {
     :<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>,
   Cam:     ({off})=>off
     ?<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 6.5l-4-4-14.5 14.5 2 2L8 15.5V17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5l-1-1zM16 13.85L8.15 6H16v7.85zM3 7v10a1 1 0 0 0 1 1h1.85l-2-2H4V7.85l-1-1V7z"/></svg>
-    :<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>,
+    :<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5l-1-1z"/></svg>,
   Speaker: ({off})=>off
-    ?<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+    ?<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27l7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
     :<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>,
   FlipCam: ()=><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-5 11.5V14H9v2.5L5.5 13 9 9.5V12h6V9.5l3.5 3.5-3.5 3.5z"/></svg>,
   Send:    ()=><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>,
@@ -184,7 +184,7 @@ const Ic = {
   Play:    ()=><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>,
   Stop:    ()=><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>,
   Check:   ({double=false,blue=false})=>double
-    ?<span style={{color:blue?"#2ea043":"#6e7681",fontSize:12,letterSpacing:"-2px"}}>✓✓</span>
+    ?<span style={{color:blue?"#58a6ff":"#6e7681",fontSize:12,letterSpacing:"-2px"}}>✓✓</span>
     :<span style={{color:"#6e7681",fontSize:12}}>✓</span>,
   Star:    ()=><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>,
   Status:  ()=><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
@@ -383,13 +383,13 @@ function ContextMenu({ x, y, isMine, msgId, msgText, msgType, onDelete, onReact,
         ))}
       </div>
       {[
-        {label:"Reply",     icon:<Ic.Reply />,   fn:()=>{onReply();onClose();},   show:true},
-        {label:"Forward",   icon:<Ic.Forward />, fn:()=>{onForward();onClose();}, show:isText},
-        {label:"Star",      icon:<Ic.Star />,    fn:()=>{onStar?.();onClose();},  show:true},
-        {label:"Pin",       icon:<Ic.Pin />,     fn:()=>{onPin();onClose();},     show:true},
+        {label:"Reply",      icon:<Ic.Reply />,    fn:()=>{onReply();onClose();},   show:true},
+        {label:"Forward",    icon:<Ic.Forward />, fn:()=>{onForward();onClose();}, show:isText},
+        {label:"Star",       icon:<Ic.Star />,    fn:()=>{onStar?.();onClose();},  show:true},
+        {label:"Pin",        icon:<Ic.Pin />,     fn:()=>{onPin();onClose();},      show:true},
         {label:"Copy text", icon:<Ic.Copy />,    fn:()=>{navigator.clipboard?.writeText(msgText||"");onClose();}, show:isText},
-        {label:"Edit",      icon:<Ic.Edit />,    fn:()=>{onEdit();onClose();},    show:isMine&&isText},
-        {label:"Delete",    icon:<Ic.Delete />,  fn:()=>{onDelete();onClose();},  show:isMine, danger:true},
+        {label:"Edit",       icon:<Ic.Edit />,    fn:()=>{onEdit();onClose();},    show:isMine&&isText},
+        {label:"Delete",     icon:<Ic.Delete />,  fn:()=>{onDelete();onClose();},  show:isMine, danger:true},
       ].filter(a=>a.show).map(({label,icon,fn,danger})=>(
         <button key={label} onClick={fn}
           style={{display:"flex",alignItems:"center",gap:12,width:"100%",background:"none",border:"none",padding:"10px 16px",cursor:"pointer",textAlign:"left",color:danger?T.danger:T.text,fontSize:13,transition:"background 0.12s"}}
@@ -404,17 +404,51 @@ function ContextMenu({ x, y, isMine, msgId, msgText, msgType, onDelete, onReact,
 }
 
 // ══════════════════════════════════════════════════════════════
-//  STATUS VIEWER
+//  STATUS VIEWER (UPDATED WITH DELETE & SEEN BY LIST)
 // ══════════════════════════════════════════════════════════════
 function StatusViewer({ status, currentUser, onClose }) {
   const [progress, setProgress] = useState(0);
 
-  useEffect(()=>{
-    const iv = setInterval(()=>{
-      setProgress(p=>{ if(p>=100){clearInterval(iv);onClose();return 100;}return p+0.5; });
-    },30);
-    return ()=>clearInterval(iv);
-  },[onClose]);
+  useEffect(() => {
+    // अगर स्टेटस दूसरे यूजर का है, तो सीन लिस्ट में नाम जोड़ें
+    if (status && status.authorId !== currentUser?.uid && currentUser?.uid) {
+      const docRef = doc(db, "statuses", status.id);
+      updateDoc(docRef, {
+        views: arrayUnion({
+          uid: currentUser.uid,
+          name: currentUser.name || "Unknown User"
+        })
+      }).catch(err => console.error("Error updating views: ", err));
+    }
+  }, [status, currentUser]);
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setProgress(p => { 
+        if (p >= 100) { 
+          clearInterval(iv); 
+          onClose(); 
+          return 100; 
+        } 
+        return p + 0.5; 
+      });
+    }, 30);
+    return () => clearInterval(iv);
+  }, [onClose]);
+
+  const handleDeleteStatus = async () => {
+    if (confirm("Do you want to delete this status?")) {
+      try {
+        await deleteDoc(doc(db, "statuses", status.id));
+        alert("Status deleted successfully.");
+        onClose();
+      } catch (err) {
+        alert("Failed to delete status: " + err.message);
+      }
+    }
+  };
+
+  const isMyStatus = status.authorId === currentUser?.uid;
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:3500,background:"#000",display:"flex",flexDirection:"column"}}>
@@ -429,7 +463,14 @@ function StatusViewer({ status, currentUser, onClose }) {
           <div style={{color:"#fff",fontWeight:600,fontSize:14}}>{status.authorName}</div>
           <div style={{color:"rgba(255,255,255,0.6)",fontSize:12}}>{formatTime(status.createdAt)}</div>
         </div>
-        <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",color:"#fff",cursor:"pointer",padding:4}}><Ic.Close s={20} /></button>
+        <div style={{marginLeft:"auto", display:"flex", alignItems:"center", gap:14}}>
+          {isMyStatus && (
+            <button onClick={handleDeleteStatus} style={{background:"none",border:"none",color:T.danger,cursor:"pointer",padding:4}} title="Delete Status">
+              <Ic.Delete />
+            </button>
+          )}
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",padding:4}}><Ic.Close s={20} /></button>
+        </div>
       </div>
       <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 32px",background:status.bg||"#0d1117"}}>
         {status.type==="text"
@@ -439,6 +480,27 @@ function StatusViewer({ status, currentUser, onClose }) {
           : null
         }
       </div>
+
+      {/* SEEN BY VIEWERS LIST */}
+      {isMyStatus && (
+        <div style={{background:"rgba(22, 27, 34, 0.95)", borderTop:`1px solid ${T.border}`, padding:"12px 16px", maxHeight:"150px", overflowY:"auto"}}>
+          <div style={{color:T.textSec, fontSize:12, fontWeight:700, marginBottom:6, display:"flex", alignItems:"center", gap:6}}>
+            👁️ Viewed by ({status.views?.length || 0})
+          </div>
+          {status.views && status.views.length > 0 ? (
+            <div style={{display:"flex", flexDirection:"column", gap:6}}>
+              {status.views.map((viewer, idx) => (
+                <div key={idx} style={{color:T.text, fontSize:13, display:"flex", alignItems:"center", gap:8}}>
+                  <div style={{width:6, height:6, borderRadius:"50%", background:T.green}} />
+                  {viewer.name}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{color:T.textMuted, fontSize:12, fontStyle:"italic"}}>No views yet</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -452,14 +514,24 @@ function StatusComposer({ currentUser, onClose, addToast }) {
 
   const post = async () => {
     if(!text.trim()||!currentUser?.uid) return;
-    await addDoc(collection(db,"statuses"),{
-      authorId:currentUser.uid, authorName:currentUser.name||"Me",
-      authorPhoto:currentUser.photoURL||null, type:"text",
-      text:text.trim(), bg:STATUS_THEMES[theme].bg, color:STATUS_THEMES[theme].fg,
-      createdAt:serverTimestamp(), expiresAt:new Date(Date.now()+86400000),
-    });
-    addToast({id:Date.now(),icon:"✅",title:"Status posted",body:"Visible for 24 hours",color:T.green});
-    onClose();
+    try {
+      await addDoc(collection(db,"statuses"),{
+        authorId: currentUser.uid, 
+        authorName: currentUser.name || "User",
+        authorPhoto: currentUser.photoURL || null, 
+        type: "text",
+        text: text.trim(), 
+        bg: STATUS_THEMES[theme].bg, 
+        color: STATUS_THEMES[theme].fg,
+        createdAt: serverTimestamp(), 
+        expiresAt: new Date(Date.now() + 86400000),
+        views: [] // व्यूज ऐरे यहाँ शुरू किया गया है
+      });
+      addToast({id:Date.now(),icon:"✅",title:"Status posted",body:"Visible for 24 hours",color:T.green});
+      onClose();
+    } catch(err) {
+      addToast({id:Date.now(),icon:"❌",title:"Failed to post status",body:err.message,color:T.danger});
+    }
   };
 
   return (
@@ -477,7 +549,7 @@ function StatusComposer({ currentUser, onClose, addToast }) {
           </div>
           <div style={{display:"flex",gap:8,marginBottom:16}}>
             {STATUS_THEMES.map((th,i)=>(
-              <button key={i} onClick={()=>setTheme(i)} style={{width:32,height:32,borderRadius:"50%",background:th.bg,border:theme===i?`3px solid ${T.green}`:`1px solid ${T.border}`,cursor:"pointer"}} />
+              <button key={i} onClick={()=>setTheme(i)} style={{width:32,height:32,borderRadius:"50%",background:th.bg,border:theme===i?`3px solid ${T.green}`:`1px solid ${T.border}`,cursor:"pointer"}    } />
             ))}
           </div>
           <button onClick={post} disabled={!text.trim()}
@@ -700,20 +772,22 @@ function ForwardModal({ chats, currentUser, msgText, onForward, onClose }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  EMOJI PICKER
+//  EMOJI PICKER (FIXED HEIGHT, LAYOUT & CONTAINMENT)
 // ══════════════════════════════════════════════════════════════
 function EmojiPicker({ onSelect, onClose }) {
   const ref = useRef();
   useEffect(()=>{ const fn=e=>{if(ref.current&&!ref.current.contains(e.target))onClose();}; document.addEventListener("mousedown",fn); return ()=>document.removeEventListener("mousedown",fn); },[onClose]);
   return (
-    <div ref={ref} style={{position:"absolute",bottom:"100%",left:0,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:T.radius,boxShadow:T.shadow,padding:12,zIndex:1000,display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:2,width:260,animation:"popIn 0.15s ease",marginBottom:8}}>
-      {EMOJI_PICKER.map(e=>(
-        <button key={e} onClick={()=>onSelect(e)} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,borderRadius:T.radiusSm,padding:4,transition:"transform 0.1s,background 0.1s"}}
-          onMouseEnter={ev=>{ev.currentTarget.style.transform="scale(1.3)";ev.currentTarget.style.background="rgba(255,255,255,0.06)";}}
-          onMouseLeave={ev=>{ev.currentTarget.style.transform="scale(1)";ev.currentTarget.style.background="none";}}>
-          {e}
-        </button>
-      ))}
+    <div ref={ref} style={{position:"absolute",bottom:"100%",left:0,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:T.radius,boxShadow:T.shadow,padding:12,zIndex:1000,width:280,maxHeight:220,overflowY:"auto",animation:"popIn 0.15s ease",marginBottom:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+        {EMOJI_PICKER.map(e=>(
+          <button key={e} onClick={()=>onSelect(e)} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,borderRadius:T.radiusSm,padding:4,display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.1s,background 0.1s"}}
+            onMouseEnter={ev=>{ev.currentTarget.style.transform="scale(1.25)";ev.currentTarget.style.background="rgba(255,255,255,0.06)";}}
+            onMouseLeave={ev=>{ev.currentTarget.style.transform="scale(1)";ev.currentTarget.style.background="none";}}>
+            {e}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -867,7 +941,7 @@ function VideoCallUI({ localStream, remoteStream, callDuration, isMuted, isCamer
           {icon:<Ic.Mic muted={isMuted}/>,fn:onToggleMute,label:isMuted?"Unmute":"Mute"},
         ].map(({icon,fn,label})=>(
           <div key={label} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-            <button onClick={fn} style={{width:48,height:48,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff"}}>{icon}</button>
+            <button onClick={fn} style={{width:48,height:48,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff"}} nesting="true">{icon}</button>
             <span style={{color:"rgba(255,255,255,0.6)",fontSize:11}}>{label}</span>
           </div>
         ))}
@@ -1090,7 +1164,7 @@ function FilterTabs({ active, onChange }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  CHAT ACTION MENU  (right-click / swipe on chat item)
+//  CHAT ACTION MENU
 // ══════════════════════════════════════════════════════════════
 function ChatItemMenu({ chat, pos, onClose, onClearMessages, onDeleteChat }) {
   const ref = useRef();
@@ -1126,7 +1200,7 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
   const [searchResults,setSearchResults] = useState([]);
   const [filter,       setFilter      ] = useState("All");
   const [menuOpen,     setMenuOpen    ] = useState(false);
-  const [chatMenu,     setChatMenu    ] = useState(null); // {chatId, x, y}
+  const [chatMenu,     setChatMenu    ] = useState(null);
   const menuRef = useRef();
 
   useEffect(()=>{
@@ -1154,8 +1228,16 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
   const handleUserSelect=async(user)=>{
     const ex=chats.find(c=>c.participants?.includes(user.id));
     if(ex){onSelectChat(ex);setSearch("");return;}
-    const ref=await addDoc(collection(db,"chats"),{participants:[currentUser.uid,user.id],createdAt:serverTimestamp()});
-    onSelectChat({id:ref.id,participants:[currentUser.uid,user.id],otherUser:user,lastMessage:"",lastMessageTime:null});
+    
+    const chatData = {
+      participants: [currentUser.uid, user.id],
+      createdAt: serverTimestamp(),
+      lastMessage: "",
+      lastMessageTime: serverTimestamp(),
+      unreadCount: 0
+    };
+    const ref = await addDoc(collection(db,"chats"), chatData);
+    onSelectChat({id:ref.id, ...chatData, otherUser:user});
     setSearch("");
   };
 
@@ -1186,7 +1268,7 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
           <div style={{overflow:"hidden"}}>
             <div style={{color:T.text,fontWeight:700,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{currentUser?.name||"You"}</div>
             <div style={{color:T.green,fontSize:11,display:"flex",alignItems:"center",gap:4}}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:T.green,display:"inline-block"}} />
+              <span style={{width:6,height:6,borderRadius:"50%",background:T.green,display:"inline-block"}    } />
               Online
             </div>
           </div>
@@ -1220,12 +1302,14 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
       {/* Status Row */}
       <div style={{padding:"10px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`,overflowX:"auto"}}>
         <div style={{display:"flex",gap:14,alignItems:"center"}}>
-          <button onClick={onComposeStatus} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,background:"none",border:"none",cursor:"pointer",flexShrink:0}}>
+          <button onClick={() => { if(myStatus.length > 0) onViewStatus(myStatus[0]); else onComposeStatus(); }} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,background:"none",border:"none",cursor:"pointer",flexShrink:0}}>
             <div style={{position:"relative",width:46,height:46}}>
               <Avatar name={currentUser?.name||"Me"} photoURL={currentUser?.photoURL} size={46} hasStatus={myStatus.length>0} />
-              <div style={{position:"absolute",bottom:0,right:0,width:18,height:18,borderRadius:"50%",background:T.green,border:`2px solid ${T.bg}`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700,lineHeight:1}}>+</div>
+              {myStatus.length === 0 && (
+                <div style={{position:"absolute",bottom:0,right:0,width:18,height:18,borderRadius:"50%",background:T.green,border:`2px solid ${T.bg}`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700,lineHeight:1}}>+</div>
+              )}
             </div>
-            <span style={{fontSize:10,color:T.textSec,whiteSpace:"nowrap",maxWidth:52,overflow:"hidden",textOverflow:"ellipsis"}}>My Status</span>
+            <span style={{fontSize:10,color:T.textSec,whiteSpace:"nowrap",maxWidth:52,overflow:"hidden",textOverflow:"ellipsis"}}>{myStatus.length > 0 ? "My Status" : "Add Status"}</span>
           </button>
           {othersStatus.slice(0,6).map((s,i)=>(
             <button key={s.id||i} onClick={()=>onViewStatus(s)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,background:"none",border:"none",cursor:"pointer",flexShrink:0}}>
@@ -1243,7 +1327,7 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
           <span style={{color:T.textMuted}}><Ic.Search /></span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search or start new chat"
             style={{background:"none",border:"none",outline:"none",color:T.text,flex:1,fontSize:13}} />
-          {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}><Ic.Close s={14} /></button>}
+          {search&&<button onClick={()=>setSearch("")} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}    }><Ic.Close s={14} /></button>}
         </div>
       </div>
 
@@ -1276,7 +1360,7 @@ function Sidebar({ chats, currentUser, onSelectChat, activeChatId, isMobile, onB
               style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",cursor:"pointer",background:isActive?T.bgActive:T.bg,borderBottom:`1px solid ${T.border}`,transition:"background 0.12s",position:"relative"}}
               onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background=T.bgHover;}}
               onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background=T.bg;}}>
-              {isActive&&<div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:T.green,borderRadius:"0 3px 3px 0"}} />}
+              {isActive&&<div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:T.green,borderRadius:"0 3px 3px 0"}    } />}
               <Avatar name={name} photoURL={item.photoURL||item.otherUser?.photoURL} size={44} online={item.online||item.otherUser?.online} />
               <div style={{flex:1,overflow:"hidden"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1318,7 +1402,7 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
   const [searchMatches,setSearchMatches] = useState([]);
   const [searchIndex,  setSearchIndex ] = useState(0);
   const [showScrollBtn,setShowScrollBtn] = useState(false);
-  const [replyTo,      setReplyTo     ] = useState(null);
+  const [replyTo,      setReplyTo      ] = useState(null);
   const [editingMsg,   setEditingMsg  ] = useState(null);
   const [forwardMsg,   setForwardMsg  ] = useState(null);
   const [showEmoji,    setShowEmoji   ] = useState(false);
@@ -1331,9 +1415,8 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
   const [showStarred,  setShowStarred ] = useState(false);
   const [showProfile,  setShowProfile ] = useState(false);
   const [moreMenuOpen, setMoreMenu    ] = useState(false);
-  // FIX: Confirm dialogs for clear/delete
   const [confirmClear, setConfirmClear] = useState(false);
-  const [confirmDelMsg,setConfirmDelMsg] = useState(null); // msgId
+  const [confirmDelMsg,setConfirmDelMsg] = useState(null);
   const moreMenuRef = useRef();
 
   const bottomRef     = useRef();
@@ -1349,11 +1432,7 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
 
   const vc = useVideoCall({ currentUser, chat, addToast });
 
-  // When chat changes: save old draft, load new draft
   useEffect(()=>{
-    if(prevChatId.current && prevChatId.current !== chat?.id) {
-      // old draft already saved via handleTyping
-    }
     if(chat?.id) {
       const saved = DraftStore.get(chat.id);
       setText(saved);
@@ -1361,7 +1440,6 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
     }
   },[chat?.id]);
 
-  // Save draft on unmount
   useEffect(()=>{
     return ()=>{
       if(chat?.id) DraftStore.set(chat.id, inputRef.current?.value||"");
@@ -1460,7 +1538,6 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
 
   const handleTyping=async(val)=>{
     setText(val);
-    // Save draft
     if(chat?.id) {
       DraftStore.set(chat.id, val);
       onDraftChange?.(chat.id, val);
@@ -1476,6 +1553,7 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
     if(!trimmed||!chat?.id) return;
     clearTimeout(typingTimeout.current);
     if(typingDocRef.current) await deleteDoc(typingDocRef.current).catch(()=>{});
+    
     if(editingMsg){
       await updateDoc(doc(db,"messages",editingMsg.id),{text:trimmed,edited:true,editedAt:serverTimestamp()}).catch(()=>{});
       setEditingMsg(null);
@@ -1483,9 +1561,13 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
       const msgData={chatId:chat.id,participants:chat.participants||[currentUser.uid,chat.otherUser?.id].filter(Boolean),text:trimmed,senderId:currentUser.uid,createdAt:serverTimestamp(),read:false,delivered:false,type:"text"};
       if(replyTo){msgData.replyTo=replyTo.id;msgData.replyToText=replyTo.text;}
       await addDoc(collection(db,"messages"),msgData);
+      
+      await updateDoc(doc(db,"chats",chat.id), {
+        lastMessage: trimmed,
+        lastMessageTime: serverTimestamp()
+      }).catch(()=>{});
       setReplyTo(null);
     }
-    // Clear draft on send
     DraftStore.remove(chat.id);
     onDraftChange?.(chat.id, "");
     setText("");
@@ -1513,6 +1595,12 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
         if(cancelled) return;
         const url=await getDownloadURL(task.snapshot.ref);
         await addDoc(collection(db,"messages"),{chatId:chat.id,participants:chat.participants||[currentUser.uid,chat.otherUser?.id].filter(Boolean),senderId:currentUser.uid,createdAt:serverTimestamp(),read:false,delivered:false,type:fileType,fileURL:url,fileName:file.name,fileSize:file.size});
+        
+        await updateDoc(doc(db,"chats",chat.id), {
+          lastMessage: `📎 ${fileType === 'image' ? 'Image' : fileType === 'video' ? 'Video' : 'File'}`,
+          lastMessageTime: serverTimestamp()
+        }).catch(()=>{});
+        
         setUploadProg(null);
       }
     );
@@ -1536,6 +1624,11 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
         task.on("state_changed",null,null,async()=>{
           const url=await getDownloadURL(task.snapshot.ref);
           await addDoc(collection(db,"messages"),{chatId:chat.id,participants:chat.participants||[currentUser.uid,chat.otherUser?.id].filter(Boolean),senderId:currentUser.uid,createdAt:serverTimestamp(),read:false,delivered:false,type:"voice",fileURL:url,voiceDuration:dur});
+          
+          await updateDoc(doc(db,"chats",chat.id), {
+            lastMessage: "🎤 Voice Note",
+            lastMessageTime: serverTimestamp()
+          }).catch(()=>{});
         });
       };
       mr.start(); setIsRecording(true); setRecDuration(0);
@@ -1551,14 +1644,12 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
     }
   };
 
-  // FIX: Single message delete with confirm
   const handleDeleteMsg=async(id)=>{
     setDeletedIds(p=>new Set([...p,id]));
     await updateDoc(doc(db,"messages",id),{deleted:true,text:""}).catch(()=>{});
     setConfirmDelMsg(null);
   };
 
-  // Clear all messages in this chat
   const handleClearMessages=async()=>{
     if(!chat?.id) return;
     try {
@@ -1567,7 +1658,12 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
       const batch=writeBatch(db);
       snap.docs.forEach(d=>batch.delete(d.ref));
       await batch.commit();
-      // Also clear draft
+      
+      await updateDoc(doc(db,"chats",chat.id), {
+        lastMessage: "",
+        lastMessageTime: serverTimestamp()
+      }).catch(()=>{});
+      
       DraftStore.remove(chat.id);
       onDraftChange?.(chat.id,"");
       setText("");
@@ -1578,7 +1674,7 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
     }
   };
 
-  const handleReact  =async(id,emoji)=>{await updateDoc(doc(db,"messages",id),{[`reactions.${currentUser.uid}`]:emoji}).catch(()=>{});};
+  const handleReact   =async(id,emoji)=>{await updateDoc(doc(db,"messages",id),{[`reactions.${currentUser.uid}`]:emoji}).catch(()=>{});};
   const handlePin    =async(id)=>{const m=messages.find(x=>x.id===id);await updateDoc(doc(db,"messages",id),{pinned:!m?.pinned}).catch(()=>{});};
   const handleStar   =async(id)=>{const m=messages.find(x=>x.id===id);await updateDoc(doc(db,"messages",id),{starred:!m?.starred}).catch(()=>{});};
   const handleEdit   =(msg)=>{setEditingMsg(msg);setText(msg.text);setReplyTo(null);setTimeout(()=>{inputRef.current?.focus();inputRef.current?.setSelectionRange(msg.text.length,msg.text.length);},50);};
@@ -1587,6 +1683,12 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
     const targetChat=allChats.find(c=>c.id===targetChatId);
     if(!targetChat||!forwardMsg) return;
     await addDoc(collection(db,"messages"),{chatId:targetChatId,participants:targetChat.participants||[currentUser.uid,targetChat.otherUser?.id].filter(Boolean),text:forwardMsg.text,senderId:currentUser.uid,createdAt:serverTimestamp(),read:false,delivered:false,type:"text",forwarded:true});
+    
+    await updateDoc(doc(db,"chats",targetChatId), {
+      lastMessage: forwardMsg.text,
+      lastMessageTime: serverTimestamp()
+    }).catch(()=>{});
+
     setForwardMsg(null);
     addToast({id:Date.now(),icon:"↩️",title:"Forwarded",body:`Sent to ${targetChat.otherUser?.name}`,color:T.green});
   };
@@ -1696,7 +1798,7 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
             {moreMenuOpen&&(
               <div style={{position:"absolute",top:"100%",right:0,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:T.radius,boxShadow:T.shadow,minWidth:200,zIndex:200,animation:"popIn 0.15s ease",overflow:"hidden"}}>
                 {[
-                  {icon:<Ic.Starred />,  label:"Starred Messages",  fn:()=>{setShowStarred(true);setMoreMenu(false);},           danger:false},
+                  {icon:<Ic.Starred />,  label:"Starred Messages",  fn:()=>{setShowStarred(true);setMoreMenu(false);},      danger:false},
                   {icon:<Ic.Archive />,  label:"Archive Chat",       fn:()=>setMoreMenu(false),                                   danger:false},
                   {icon:<Ic.Unread />,   label:"Mark as Unread",     fn:()=>setMoreMenu(false),                                   danger:false},
                   {icon:<Ic.Clear />,    label:"Clear Messages",     fn:()=>{setConfirmClear(true);setMoreMenu(false);},           danger:false},
@@ -1811,7 +1913,7 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
         ):(
           <div style={{display:"flex",alignItems:"center",padding:"8px 10px",gap:6,background:T.bgCard,borderTop:`1px solid ${T.border}`,position:"relative"}}>
             {showEmoji&&<EmojiPicker onSelect={e=>{const newText=text+e; setText(newText); if(chat?.id){DraftStore.set(chat.id,newText);onDraftChange?.(chat.id,newText);} setShowEmoji(false); setTimeout(()=>inputRef.current?.focus(),0);}} onClose={()=>setShowEmoji(false)} />}
-            <button onClick={()=>setShowEmoji(s=>!s)} style={{background:showEmoji?T.greenGlow:"none",border:"none",color:showEmoji?T.green:T.textMuted,fontSize:20,cursor:"pointer",padding:6,borderRadius:T.radiusSm,flexShrink:0,transition:"all 0.15s"}}>😊</button>
+            <button onClick={(e)=>{e.stopPropagation(); setShowEmoji(s=>!s);}} style={{background:showEmoji?T.greenGlow:"none",border:"none",color:showEmoji?T.green:T.textMuted,fontSize:20,cursor:"pointer",padding:6,borderRadius:T.radiusSm,flexShrink:0,transition:"all 0.15s"}}>😊</button>
             <button onClick={()=>fileInputRef.current?.click()} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:6,borderRadius:T.radiusSm,flexShrink:0,display:"flex",alignItems:"center"}}
               onMouseEnter={e=>e.currentTarget.style.color=T.textSec} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
               <Ic.Attach />
@@ -1821,7 +1923,7 @@ function ChatPanel({ chat, currentUser, onClose, isMobile, addToast, allChats, o
               style={{flex:1,background:T.bg,border:`1px solid ${T.border}`,borderRadius:T.radiusLg,padding:"9px 16px",color:T.text,fontSize:14,outline:"none",minWidth:0,transition:"border-color 0.15s"}}
               onFocus={e=>e.target.style.borderColor=T.green} onBlur={e=>e.target.style.borderColor=T.border} />
             {text.trim()?(
-              <button onClick={sendMessage} style={{width:42,height:42,borderRadius:"50%",background:T.green,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",flexShrink:0,boxShadow:`0 0 16px ${T.green}44`,transition:"transform 0.1s"}}
+              <button onClick={sendMessage} style={{width:42,height:42,borderRadius:"50%",background:T.green,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",flexShrink:0,boxShadow:`0 0 16px ${T.green}44`,transition:"transform 0.1s`"}}
                 onMouseEnter={e=>e.currentTarget.style.transform="scale(1.06)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
                 <Ic.Send />
               </button>
@@ -1853,8 +1955,8 @@ export default function WhatsAppUI({ onBackToDashboard }) {
   const [viewingStatus,setViewingStatus] = useState(null);
   const [composingStatus,setComposingStatus] = useState(false);
   const [notifBar,     setNotifBar    ] = useState(false);
-  const [drafts,       setDrafts      ] = useState({}); // chatId -> draft text
-  const [confirmDeleteChat, setConfirmDeleteChat] = useState(null); // chatId
+  const [drafts,       setDrafts      ] = useState({});
+  const [confirmDeleteChat, setConfirmDeleteChat] = useState(null);
 
   const toastTimers     = useRef({});
   const typingUnsubsRef = useRef({});
@@ -1888,7 +1990,6 @@ export default function WhatsAppUI({ onBackToDashboard }) {
       const uDoc=await getDoc(doc(db,"users",user.uid));
       setCurrentUser({uid:user.uid,...(uDoc.exists()?uDoc.data():{})});
       updateDoc(doc(db,"users",user.uid),{online:true}).catch(()=>{});
-      // Load all saved drafts from localStorage
       try {
         const loadedDrafts={};
         for(let i=0;i<localStorage.length;i++){
@@ -1917,7 +2018,7 @@ export default function WhatsAppUI({ onBackToDashboard }) {
         const lastMsg=msgSnap.docs[0]?.data();
         const unreadQ=query(collection(db,"messages"),where("chatId","==",d.id),where("senderId","!=",currentUser.uid),where("read","==",false));
         const unreadSnap=await getDocs(unreadQ);
-        return {...data,otherUser,lastMessage:lastMsg?.text||"",lastMessageTime:lastMsg?.createdAt||data.createdAt,unreadCount:unreadSnap.size};
+        return {...data,otherUser,lastMessage:lastMsg?.text||data.lastMessage||"",lastMessageTime:lastMsg?.createdAt||data.lastMessageTime||data.createdAt,unreadCount:unreadSnap.size};
       }));
       list.sort((a,b)=>(b.lastMessageTime?.seconds||0)-(a.lastMessageTime?.seconds||0));
       setChats(list);
@@ -1953,7 +2054,6 @@ export default function WhatsAppUI({ onBackToDashboard }) {
     setDrafts(p=>({...p,[chatId]:text}));
   },[]);
 
-  // ── Clear Messages (from sidebar right-click)
   const handleClearMessages=useCallback(async(chatId)=>{
     try {
       const q=query(collection(db,"messages"),where("chatId","==",chatId));
@@ -1961,6 +2061,12 @@ export default function WhatsAppUI({ onBackToDashboard }) {
       const batch=writeBatch(db);
       snap.docs.forEach(d=>batch.delete(d.ref));
       await batch.commit();
+
+      await updateDoc(doc(db,"chats",chatId), {
+        lastMessage: "",
+        lastMessageTime: serverTimestamp()
+      }).catch(()=>{});
+
       DraftStore.remove(chatId);
       setDrafts(p=>{const n={...p};delete n[chatId];return n;});
       addToast({id:Date.now(),icon:"🗑️",title:"Messages Cleared",body:"All messages deleted",color:T.warn});
@@ -1969,8 +2075,7 @@ export default function WhatsAppUI({ onBackToDashboard }) {
     }
   },[addToast]);
 
-  // ── Delete Chat (messages + chat doc)
-  const handleDeleteChat=useCallback(async(chatId)=>{
+  const handleDeleteChat=useCallback((chatId)=>{
     setConfirmDeleteChat(chatId);
   },[]);
 
@@ -1978,18 +2083,18 @@ export default function WhatsAppUI({ onBackToDashboard }) {
     const chatId=confirmDeleteChat;
     if(!chatId) return;
     try {
-      // Delete all messages
       const msgQ=query(collection(db,"messages"),where("chatId","==",chatId));
       const msgSnap=await getDocs(msgQ);
       const batch=writeBatch(db);
       msgSnap.docs.forEach(d=>batch.delete(d.ref));
-      // Delete typing sub-docs
+      
       const typingQ=collection(db,"chats",chatId,"typing");
       const typingSnap=await getDocs(typingQ).catch(()=>({docs:[]}));
       typingSnap.docs.forEach(d=>batch.delete(d.ref));
-      // Delete chat doc
+      
       batch.delete(doc(db,"chats",chatId));
       await batch.commit();
+      
       DraftStore.remove(chatId);
       setDrafts(p=>{const n={...p};delete n[chatId];return n;});
       if(activeChat?.id===chatId) setActiveChat(null);
