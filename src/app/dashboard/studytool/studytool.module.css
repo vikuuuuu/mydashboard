@@ -1,4 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
 
+:root {
+  --bg: #f8fbff;
+  --bg2: #eef2ff;
+  --surface: #ffffff;
+  --surface2: #f4f7fe;
+  --accent: #4361ee;
+  --accent2: #3a86ff;
+  --text: #1a2147;
+  --text2: #6b7ab5;
+  --border: rgba(99, 120, 200, 0.14);
+  --radius: 18px;
+  --shadow: 0 10px 30px rgba(67, 97, 238, 0.10);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --purple: #a855f7;
+  --live-color: #ef4444;
+}
+
+[data-theme="dark"] {
+  --bg: #0f172a;
+  --bg2: #1e293b;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --accent: #60a5fa;
+  --accent2: #3b82f6;
+  --text: #f1f5f9;
+  --text2: #94a3b8;
+  --border: rgba(148, 163, 184, 0.2);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
 .page {
   min-height: 100vh;
@@ -6,6 +44,109 @@
   padding: 28px;
   font-family: 'DM Sans', sans-serif;
   transition: all 0.3s ease;
+}
+
+/* =================== QUICK NOTES PANEL =================== */
+.quickNotesPanel {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  animation: slideDown 0.3s ease;
+}
+
+.notesPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.notesPanelHeader h3 {
+  color: var(--text);
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.closeNotesBtn {
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.closeNotesBtn:hover {
+  background: var(--surface2);
+  color: var(--danger);
+}
+
+.notesTextarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  resize: vertical;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.notesTextarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+}
+
+.saveNotesBtn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  transition: all 0.2s ease;
+}
+
+.saveNotesBtn:hover {
+  background: var(--accent2);
+  transform: scale(1.02);
+}
+
+/* =================== UPCOMING CLASSES ALERT =================== */
+.upcomingAlert {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.2);
+  border: 1px solid #fbbf24;
+  animation: slideDown 0.3s ease;
+  color: #92400e;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .upcomingAlert {
+  background: linear-gradient(135deg, #78350f, #92400e);
+  color: #fef3c7;
+  border-color: #b45309;
 }
 
 /* =================== ACTIVE CLASS BANNER =================== */
@@ -48,6 +189,7 @@
 
 .pulseIcon {
   animation: pulse 1.5s infinite;
+  z-index: 1;
 }
 
 @keyframes pulse {
@@ -65,11 +207,13 @@
   font-size: 1.3rem;
   font-weight: 800;
   margin-bottom: 4px;
+  z-index: 1;
 }
 
 .activeClassBanner p {
   font-size: 0.95rem;
   opacity: 0.9;
+  z-index: 1;
 }
 
 .autoModeBadge {
@@ -79,6 +223,7 @@
   font-size: 0.85rem;
   font-weight: 700;
   margin-left: auto;
+  z-index: 1;
 }
 
 /* =================== HEADER SECTION =================== */
@@ -639,14 +784,38 @@
   gap: 8px;
 }
 
-.subjectChip {
+.subjectChipWithDelete {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
-  color: white;
-  padding: 6px 14px;
+  padding: 2px 2px 2px 14px;
   border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(67, 97, 238, 0.2);
+}
+
+.subjectChip {
+  color: white;
   font-size: 0.85rem;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(67, 97, 238, 0.2);
+}
+
+.deleteSubjectBtn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.deleteSubjectBtn:hover {
+  background: var(--danger);
+  transform: scale(1.1);
 }
 
 /* =================== STUDY MODE =================== */
@@ -1654,7 +1823,8 @@
   .deleteBtnDanger,
   .miniDeleteBtn,
   .editBtn,
-  .fullScreenBtn {
+  .fullScreenBtn,
+  .quickNotesPanel {
     display: none;
   }
 
