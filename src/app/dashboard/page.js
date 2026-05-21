@@ -246,27 +246,27 @@ export default function DashboardPage() {
         </div>
       )}
 
-      // {/* ════ SUBSCRIPTION LOCK OVERLAY ════ */}
-      // {!subActive && (
-      //   <div className={styles.subLockOverlay}>
-      //     <div className={styles.subLockModal}>
-      //       <div className={styles.subLockIcon}>💎</div>
-      //       <h2 className={styles.subLockTitle}></h2>
-      //       <p className={styles.subLockDesc}>
-      //         Get full access to all {DEFAULT_TOOLS.length} tools — Image, PDF, Video, Financials, Chat & more.
-      //       </p>
-      //       <div className={styles.subLockPrice}>
-      //         <div className={styles.subLockPriceLabel}>Yearly Plan</div>
-      //         <div className={styles.subLockPriceBig}>₹999<span className={styles.subLockPricePer}>/year</span></div>
-      //         <div className={styles.subLockPriceNote}>≈ ₹83/month</div>
-      //       </div>
-      //       <button className={styles.subLockBtn} onClick={() => router.push("/profile")}>
-      //         🔓 Subscribe Now — Go to Profile
-      //       </button>
-      //       <p className={styles.subLockFooter}>Secured by Razorpay · UPI, Cards, Net Banking</p>
-      //     </div>
-      //   </div>
-      // )}
+      {/* ════ SUBSCRIPTION LOCK OVERLAY ════ */}
+      {!subActive && (
+        <div className={styles.subLockOverlay}>
+          <div className={styles.subLockModal}>
+            <div className={styles.subLockIcon}>💎</div>
+            <h2 className={styles.subLockTitle}></h2>
+            <p className={styles.subLockDesc}>
+              Get full access to all {DEFAULT_TOOLS.length} tools — Image, PDF, Video, Financials, Chat & more.
+            </p>
+            <div className={styles.subLockPrice}>
+              <div className={styles.subLockPriceLabel}>Yearly Plan</div>
+              <div className={styles.subLockPriceBig}>₹999<span className={styles.subLockPricePer}>/year</span></div>
+              <div className={styles.subLockPriceNote}>≈ ₹83/month</div>
+            </div>
+            <button className={styles.subLockBtn} onClick={() => router.push("/profile")}>
+              🔓 Subscribe Now — Go to Profile
+            </button>
+            <p className={styles.subLockFooter}>Secured by Razorpay · UPI, Cards, Net Banking</p>
+          </div>
+        </div>
+      )}
 
       {/* ════ CHANGELOG MODAL ════ */}
       {showChangelog && (
