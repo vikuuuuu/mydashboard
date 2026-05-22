@@ -1,7 +1,7 @@
 // src/lib/appVersion.js
 
-export const APP_VERSION    = "v1.3.8";
-export const LASTUPDATE_DATE = "20 May 2026";
+export const APP_VERSION    = "v1.3.5";
+export const LASTUPDATE_DATE = "21 May 2026";
 
 /**
  * Full changelog — latest first.
@@ -9,21 +9,48 @@ export const LASTUPDATE_DATE = "20 May 2026";
  */
 export const CHANGELOG = [
   {
-    version: "v1.3.8",
-    date:    "20 May 2026",
-    type:    "minor",
-    label:   "Latest",
+    version: "v1.3.5",
+    date:    "21 May 2026",
+    type:    "fix",
+    label:   "latest",
     changes: [
-      "💎 Subscription system with Razorpay payment gateway",
-      "🔒 Dashboard lock overlay for non-subscribers",
-      "📅 Yearly subscription countdown on Profile page",
-      "✅ Payment signature verification (HMAC-SHA256)",
-      "🔄 Auto-unlock dashboard after successful payment",
+      "🐛 Disable subscription lock overlay in dashboard",
+      "⚡ Add CHANGELOG for version tracking",
     ],
   },
   {
-    version: "v1.3.5",
-    date:    "10 May 2026",
+    version: "v1.3.4",
+    date:    "20 May 2026",
+    type:    "fix",
+    label:   null,
+    changes: [
+      "🐛Update app version and last update date",
+      "⚡ Delete src/app/dashboard/webchat/webchat.module.css",
+    ],
+  },
+  {
+    version: "v1.3.3",
+    date:    "19 May 2026",
+    type:    "minor",
+    label:   null,
+    changes: [
+      "💎 Update myvideo.module.css and page.jsx",
+      "🔒Remove InvoiceGenerator component",
+    ],
+  },
+  {
+    version: "v1.3.2",
+    date:    "18 May 2026",
+    type:    "minor",
+    label:   null,
+    changes: [
+      "💎 Bug Fix and Update Webchat, Studytool",
+      "🔒Refactor InvoiceGenerator component with new features",
+    ],
+  },
+  {
+    version: "v1.3.1",
+    date:    "16 May 2026",
     type:    "minor",
     label:   null,
     changes: [
@@ -35,7 +62,7 @@ export const CHANGELOG = [
   },
   {
     version: "v1.3.0",
-    date:    "28 Apr 2026",
+    date:    "16 May 2026",
     type:    "minor",
     label:   null,
     changes: [
@@ -46,8 +73,8 @@ export const CHANGELOG = [
     ],
   },
   {
-    version: "v1.2.8",
-    date:    "15 Apr 2026",
+    version: "v1.2.2",
+    date:    "04 May 2026",
     type:    "fix",
     label:   null,
     changes: [
@@ -57,8 +84,8 @@ export const CHANGELOG = [
     ],
   },
   {
-    version: "v1.2.5",
-    date:    "02 Apr 2026",
+    version: "v1.2.1",
+    date:    "03 May 2026",
     type:    "minor",
     label:   null,
     changes: [
@@ -69,7 +96,7 @@ export const CHANGELOG = [
   },
   {
     version: "v1.2.0",
-    date:    "20 Mar 2026",
+    date:    "03 May 2026",
     type:    "major",
     label:   null,
     changes: [
@@ -81,7 +108,7 @@ export const CHANGELOG = [
   },
   {
     version: "v1.1.0",
-    date:    "05 Mar 2026",
+    date:    "01 May 2026",
     type:    "minor",
     label:   null,
     changes: [
@@ -93,7 +120,7 @@ export const CHANGELOG = [
   },
   {
     version: "v1.0.0",
-    date:    "15 Feb 2026",
+    date:    "30 April 2026",
     type:    "major",
     label:   "Initial Release",
     changes: [
