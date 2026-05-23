@@ -1,7 +1,7 @@
 // src/lib/appVersion.js
 
-export const APP_VERSION    = "v1.3.5";
-export const LASTUPDATE_DATE = "21 May 2026";
+export const APP_VERSION    = "v1.3.6";
+export const LASTUPDATE_DATE = "23 May 2026";
 
 /**
  * Full changelog — latest first.
@@ -9,10 +9,23 @@ export const LASTUPDATE_DATE = "21 May 2026";
  */
 export const CHANGELOG = [
   {
+    version: "v1.3.6",
+    date:    "23 May 2026",
+    type:    "minor",
+    label:   "latest",
+    changes: [
+      "🔒 Security Lock System in Notes page",
+      "🤖 AI Writing Assistant in Notes Page",
+      "📜 Version History in Notes Page",
+      "🎯 Word Goal Tracker in Notes page",
+      "🐛 Bug Fixes in Notes page",
+    ],
+  },
+  {
     version: "v1.3.5",
     date:    "21 May 2026",
     type:    "fix",
-    label:   "latest",
+    label:  null,
     changes: [
       "🐛 Disable subscription lock overlay in dashboard",
       "⚡ Add CHANGELOG for version tracking",
