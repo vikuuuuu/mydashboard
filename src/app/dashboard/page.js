@@ -1,4 +1,3 @@
-// src/app/dashboard/page.js
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -10,13 +9,11 @@ import {
   query,
   where,
   onSnapshot,
-  doc,
-  onSnapshot as onDocSnapshot,
+  doc
 } from "firebase/firestore";
 import { auth, signOutUser } from "@/lib/firebaseAuth";
 import { getSessionId, pingSession, clearSession } from "@/lib/sessionManager";
 import { APP_VERSION, LASTUPDATE_DATE, CHANGELOG } from "@/lib/appVersion";
-import { isSubscriptionActive } from "@/lib/subscriptionManager";
 import {
   LayoutDashboardIcon,
   LogOut,
@@ -34,22 +31,22 @@ import styles from "./page.module.css";
 
 /* ─── Default Tools ─────────────────────────────────────── */
 const DEFAULT_TOOLS = [
-  { id: "Notes",          title: "Notes",            desc: "Create & export notes",                    icon: "📝", color: "#4361ee", pinned: false },
-  { id: "myfinancials",   title: "My Financials",     desc: "Track investments & profit",               icon: "📈", color: "#0f9d6e", pinned: true  },
+  { id: "Notes",          title: "Notes",            desc: "Create & export notes",                     icon: "📝", color: "#4361ee", pinned: false },
+  { id: "myfinancials",   title: "My Financials",     desc: "Track investments & profit",                icon: "📈", color: "#0f9d6e", pinned: true  },
   { id: "img-to-pdf",     title: "Image → PDF",       desc: "Convert images to PDF",                    icon: "🖼️", color: "#f77f00", pinned: false },
-  { id: "all-in-one-img", title: "All-in-One Image",  desc: "Convert, resize, crop, compress & more",   icon: "✂️", color: "#9b5de5", pinned: false },
-  { id: "pdftool",        title: "PDF Tool",          desc: "Resize, convert & edit PDFs",              icon: "📄", color: "#e63946", pinned: false },
-  { id: "video-to-img",   title: "Video → Image",     desc: "Capture video frames as images",           icon: "🎬", color: "#3a86ff", pinned: false },
-  { id: "webchat",        title: "Web Chat",          desc: "Real-time messaging",                      icon: "💬", color: "#f15bb5", pinned: false, isWebchat: true },
-  { id: "myvideoeditor",  title: "My Video Editor",   desc: "Edit short-form videos",                   icon: "🎞️", color: "#06d6a0", pinned: false },
+  { id: "all-in-one-img", title: "All-in-One Image",  desc: "Convert, resize, crop, compress & more",    icon: "✂️", color: "#9b5de5", pinned: false },
+  { id: "pdftool",        title: "PDF Tool",          desc: "Resize, convert & edit PDFs",               icon: "📄", color: "#e63946", pinned: false },
+  { id: "video-to-img",   title: "Video → Image",     desc: "Capture video frames as images",            icon: "🎬", color: "#3a86ff", pinned: false },
+  { id: "webchat",        title: "Web Chat",          desc: "Real-time messaging",                     icon: "💬", color: "#f15bb5", pinned: false, isWebchat: true },
+  { id: "myvideoeditor",  title: "My Video Editor",   desc: "Edit short-form videos",                    icon: "🎞️", color: "#06d6a0", pinned: false },
   { id: "file-studio",    title: "All File Studio",   desc: "Preview & convert any file format",        icon: "📁", color: "#4361ee", pinned: false },
   { id: "studytool",      title: "Study Tool",        desc: "Manage Timetable and review study materials", icon: "📚", color: "#4361ee", pinned: false },
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
 const VIEW_ICONS = {
-  grid:    <LayoutGrid size={15} />,
-  list:    <List size={15} />,
+  grid:     <LayoutGrid size={15} />,
+  list:     <List size={15} />,
   compact: <Columns size={15} />,
 };
 const STORAGE_KEY = "dash_tool_order_v2";
@@ -89,13 +86,8 @@ export default function DashboardPage() {
   const [missedVideo, setMissedVideo] = useState(0);
   const [kicked, setKicked]       = useState(false);
 
-  // Subscription
-  const [subChecked, setSubChecked] = useState(false);
-  const [subActive, setSubActive]   = useState(false);
-
-  // Version modal
   const [showChangelog, setShowChangelog] = useState(false);
-  const [activeVersion, setActiveVersion] = useState(null); // which version is expanded
+  const [activeVersion, setActiveVersion] = useState(null); 
 
   const dragIdx  = useRef(null);
   const dragOver = useRef(null);
@@ -114,8 +106,13 @@ export default function DashboardPage() {
     } catch (_) {}
   }, []);
 
-  /* ── Auth + session + subscription ── */
+  /* ── Auth + session tracking + Webchat Subscription Fix ── */
   useEffect(() => {
+    let sessionUnsub = () => {};
+    let u1 = () => {};
+    let u2 = () => {};
+    let u3 = () => {};
+
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) { router.replace("/login"); return; }
       setUser(u);
@@ -123,13 +120,8 @@ export default function DashboardPage() {
       const db  = getFirestore();
       const uid = u.uid;
 
-      // Check subscription
-      const active = await isSubscriptionActive(uid);
-      setSubActive(active);
-      setSubChecked(true);
-
       // Realtime session watcher
-      const sessionUnsub = onDocSnapshot(doc(db, "user_sessions", uid), (snap) => {
+      sessionUnsub = onSnapshot(doc(db, "user_sessions", uid), (snap) => {
         if (!snap.exists()) return;
         const data = snap.data();
         if (data?.sessionId && data.sessionId !== getSessionId()) setKicked(true);
@@ -137,19 +129,26 @@ export default function DashboardPage() {
 
       pingRef.current = setInterval(() => pingSession(uid), 60_000);
 
-      // Firestore messages
+      // Firestore webchat live subscriptions
       const ref     = collection(db, "messages");
       const unreadQ = query(ref, where("participants","array-contains",uid), where("read","==",false));
       const voiceQ  = query(ref, where("participants","array-contains",uid), where("type","==","call"), where("callStatus","==","missed"), where("callType","==","audio"), where("read","==",false));
       const videoQ  = query(ref, where("participants","array-contains",uid), where("type","==","call"), where("callStatus","==","missed"), where("callType","==","video"), where("read","==",false));
 
-      const u1 = onSnapshot(unreadQ, (s) => setUnread(s.docs.filter((d) => d.data().senderId !== uid && d.data().type !== "call").length));
-      const u2 = onSnapshot(voiceQ,  (s) => setMissedVoice(s.docs.filter((d) => d.data().senderId !== uid).length));
-      const u3 = onSnapshot(videoQ,  (s) => setMissedVideo(s.docs.filter((d) => d.data().senderId !== uid).length));
-
-      return () => { sessionUnsub(); u1(); u2(); u3(); clearInterval(pingRef.current); };
+      u1 = onSnapshot(unreadQ, (s) => setUnread(s.docs.filter((d) => d.data().senderId !== uid && d.data().type !== "call").length));
+      u2 = onSnapshot(voiceQ,  (s) => setMissedVoice(s.docs.filter((d) => d.data().senderId !== uid).length));
+      u3 = onSnapshot(videoQ,  (s) => setMissedVideo(s.docs.filter((d) => d.data().senderId !== uid).length));
     });
-    return () => { unsub(); clearInterval(pingRef.current); };
+
+    // कॉम्पोनेंट अनमाउंट होने पर सारे सब्सक्रिप्शन पूरी तरह से बंद होंगे
+    return () => { 
+      unsub(); 
+      sessionUnsub(); 
+      u1(); 
+      u2(); 
+      u3(); 
+      if (pingRef.current) clearInterval(pingRef.current); 
+    };
   }, [router]);
 
   /* ── Outside click close dropdown ── */
@@ -167,10 +166,9 @@ export default function DashboardPage() {
   }, []);
 
   const handleKickedLogout = useCallback(async () => {
-    clearInterval(pingRef.current);
+    if (pingRef.current) clearInterval(pingRef.current);
     if (user) await clearSession(user.uid);
-    sessionStorage.removeItem("app_session_id");
-    sessionStorage.removeItem("user_session");
+    sessionStorage.clear();
     localStorage.removeItem("user_session");
     await signOutUser();
     router.replace("/login");
@@ -206,17 +204,16 @@ export default function DashboardPage() {
 
   const handleLogout = async () => {
     try {
-      clearInterval(pingRef.current);
+      if (pingRef.current) clearInterval(pingRef.current);
       if (user) await clearSession(user.uid);
-      sessionStorage.removeItem("app_session_id");
-      sessionStorage.removeItem("user_session");
+      sessionStorage.clear();
       localStorage.removeItem("user_session");
       await signOutUser();
       router.replace("/login");
     } catch (err) { console.error("Logout error:", err); }
   };
 
-  if (!user || !subChecked) {
+  if (!user) {
     return (
       <div className={styles.loaderWrap}>
         <div className={styles.loaderSpinner} />
@@ -235,35 +232,12 @@ export default function DashboardPage() {
 
       {/* ════ KICKED MODAL ════ */}
       {kicked && (
-        <div className={styles.kickedOverlay}>
-          <div className={styles.kickedModal}>
-            <div className={styles.kickedIcon}>🔒</div>
-            <h2 className={styles.kickedTitle}>Session Ended</h2>
-            <p className={styles.kickedDesc}>You were logged out because your account was signed in on another device.</p>
-            <div className={styles.kickedInfo}><span>If this wasn't you, change your password immediately.</span></div>
-            <button className={styles.kickedBtn} onClick={handleKickedLogout}>OK, Go to Login</button>
-          </div>
-        </div>
-      )}
-
-      {/* ════ SUBSCRIPTION LOCK OVERLAY ════ */}
-      {!subActive && (
-        <div className={styles.subLockOverlay}>
-          <div className={styles.subLockModal}>
-            <div className={styles.subLockIcon}>💎</div>
-            <h2 className={styles.subLockTitle}></h2>
-            <p className={styles.subLockDesc}>
-              Get full access to all {DEFAULT_TOOLS.length} tools — Image, PDF, Video, Financials, Chat & more.
-            </p>
-            <div className={styles.subLockPrice}>
-              <div className={styles.subLockPriceLabel}>Yearly Plan</div>
-              <div className={styles.subLockPriceBig}>₹999<span className={styles.subLockPricePer}>/year</span></div>
-              <div className={styles.subLockPriceNote}>≈ ₹83/month</div>
-            </div>
-            <button className={styles.subLockBtn} onClick={() => router.push("/profile")}>
-              🔓 Subscribe Now — Go to Profile
-            </button>
-            <p className={styles.subLockFooter}>Secured by Razorpay · UPI, Cards, Net Banking</p>
+        <div className={styles.clOverlay}>
+          <div className={styles.clModal} style={{ padding: '24px', textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🔒</div>
+            <h2 className={styles.clTitle} style={{ marginBottom: '8px' }}>Session Ended</h2>
+            <p className={styles.toolDesc} style={{ marginBottom: '16px' }}>You were logged out because your account was signed in on another device.</p>
+            <button className={styles.emptySearch + " button"} style={{ margin: '0 auto', display: 'block' }} onClick={handleKickedLogout}>OK, Go to Login</button>
           </div>
         </div>
       )}
@@ -272,7 +246,6 @@ export default function DashboardPage() {
       {showChangelog && (
         <div className={styles.clOverlay} onClick={() => setShowChangelog(false)}>
           <div className={styles.clModal} onClick={(e) => e.stopPropagation()}>
-            {/* Modal header */}
             <div className={styles.clHeader}>
               <div className={styles.clHeaderLeft}>
                 <div className={styles.clAppIcon}>🚀</div>
@@ -284,14 +257,12 @@ export default function DashboardPage() {
               <button className={styles.clClose} onClick={() => setShowChangelog(false)}>✕</button>
             </div>
 
-            {/* Current version hero */}
             <div className={styles.clHero}>
               <span className={styles.clHeroVersion}>{APP_VERSION}</span>
               <span className={styles.clHeroDate}>Released {LASTUPDATE_DATE}</span>
               <span className={styles.clLatestBadge}>● Latest</span>
             </div>
 
-            {/* Changelog list */}
             <div className={styles.clList}>
               {CHANGELOG.map((entry, i) => {
                 const meta      = TYPE_META[entry.type] || TYPE_META.minor;
@@ -299,48 +270,25 @@ export default function DashboardPage() {
                 const isLatest   = i === 0;
 
                 return (
-                  <div
-                    key={entry.version}
-                    className={`${styles.clEntry} ${isLatest ? styles.clEntryLatest : ""}`}
-                  >
-                    {/* Timeline dot */}
+                  <div key={entry.version} className={styles.clEntry}>
                     <div className={styles.clTimeline}>
-                      <div
-                        className={`${styles.clDot} ${isLatest ? styles.clDotLatest : ""}`}
-                        style={{ borderColor: isLatest ? meta.color : undefined }}
-                      />
+                      <div className={`${styles.clDot} ${isLatest ? styles.clDotLatest : ""}`} style={{ borderColor: isLatest ? meta.color : undefined }} />
                       {i < CHANGELOG.length - 1 && <div className={styles.clLine} />}
                     </div>
 
-                    {/* Entry content */}
                     <div className={styles.clEntryBody}>
-                      <div
-                        className={styles.clEntryHeader}
-                        onClick={() => setActiveVersion(isExpanded && !isLatest ? null : entry.version)}
-                      >
+                      <div className={styles.clEntryHeader} onClick={() => setActiveVersion(isExpanded && !isLatest ? null : entry.version)}>
                         <div className={styles.clEntryLeft}>
                           <span className={styles.clVersion}>{entry.version}</span>
-                          <span
-                            className={styles.clTypeBadge}
-                            style={{ color: meta.color, background: meta.bg }}
-                          >
-                            {meta.label}
-                          </span>
-                          {entry.label && (
-                            <span className={styles.clSpecialBadge}>{entry.label}</span>
-                          )}
+                          <span className={styles.clTypeBadge} style={{ color: meta.color, background: meta.bg }}>{meta.label}</span>
+                          {entry.label && <span className={styles.clSpecialBadge}>{entry.label}</span>}
                         </div>
                         <div className={styles.clEntryRight}>
                           <span className={styles.clDate}>{entry.date}</span>
-                          {!isLatest && (
-                            <span className={styles.clChevron}>
-                              {isExpanded ? "▲" : "▼"}
-                            </span>
-                          )}
+                          {!isLatest && <span className={styles.clChevron}>{isExpanded ? "▲" : "▼"}</span>}
                         </div>
                       </div>
 
-                      {/* Changes list — always visible for latest, toggle for others */}
                       {isExpanded && (
                         <ul className={styles.clChanges}>
                           {entry.changes.map((change, ci) => (
@@ -477,13 +425,9 @@ export default function DashboardPage() {
         ))}
       </main>
 
-      {/* ── FOOTER — click version to open changelog ── */}
+      {/* ── FOOTER ── */}
       <footer className={styles.footer}>
-        <button
-          className={styles.versionBtn}
-          onClick={() => { setShowChangelog(true); setActiveVersion(null); }}
-          title="View release notes"
-        >
+        <button className={styles.versionBtn} onClick={() => { setShowChangelog(true); setActiveVersion(null); }} title="View release notes">
           <span className={styles.versionDot} />
           MyDashboard {APP_VERSION}
         </button>
