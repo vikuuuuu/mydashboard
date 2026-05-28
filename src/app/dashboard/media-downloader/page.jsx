@@ -32,7 +32,7 @@ export default function MediaDownloader() {
     }
   }, [url]);
 
-  // Extract YouTube Video ID safely
+  // Extract YouTube Video ID for preview
   const extractYoutubeId = (url) => {
     const regExp = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([^&?/]+)/;
     const match = url.match(regExp);
@@ -43,7 +43,7 @@ export default function MediaDownloader() {
     return `${styles.presetChip} ${platform === name ? styles.presetActive : ""}`;
   };
 
-  // ── CORE MEDIA PARSER ENGINE ──
+  // ── CORE MEDIA PARSER ENGINE (CONNECTED TO BACKEND) ──
   const handleFetchPreview = async (e) => {
     e.preventDefault();
     if (!url) return;
@@ -52,97 +52,63 @@ export default function MediaDownloader() {
     setMediaData(null);
 
     try {
+      // 🚀 ASLI BACKEND FETCH ENGINE CALL
+      const response = await fetch("/api/download", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: url }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Backend server response failed");
+      }
+
+      const backendData = await response.json();
+
+      let previewLink = url;
       if (platform === "youtube") {
         const videoId = extractYoutubeId(url);
-        if (!videoId) {
-          alert("Invalid YouTube URL format.");
-          setLoading(false);
-          return;
-        }
-
-        // ⚠️ CORS restrict hone ki wajah se direct video streams proxy backend ke bina client par download nahi ho sakte.
-        // Par testing ke liye hum live standard dynamic format links setup kar rhe hain.
-        setMediaData({
-          title: `YouTube Video Stream [ID: ${videoId}]`,
-          type: "youtube",
-          preview: `https://www.youtube.com/embed/${videoId}`,
-          // Live playable proxy mp4 stream link for standard testing structures
-          downloadUrl: `https://www.w3schools.com/html/mov_bbb.mp4`, 
-          thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-          quality: "1080p Full HD",
-          size: "Dynamic Stream",
-          originalUrl: url
-        });
-      } 
-      
-      else if (platform === "instagram" || platform === "twitter" || platform === "linkedin") {
-        // Direct integration blueprint mapping (Real API implementation wrapper)
-        // Testing purpose ke liye live dynamic direct asset container set kiya hai
-        setMediaData({
-          title: `${platform.toUpperCase()} Extracted Media Stream`,
-          type: "video",
-          preview: "https://www.w3schools.com/html/movie.mp4", // Real temporary structural payload link
-          downloadUrl: "https://www.w3schools.com/html/movie.mp4",
-          quality: "Source High Dynamic",
-          size: "Adaptive Profile",
-          originalUrl: url
-        });
-      } 
-      
-      else {
-        // Fallback for custom image formats or generic standard items
-        setMediaData({
-          title: "External Web Media Asset",
-          type: "image",
-          preview: url, // Dynamic target URL mapped directly
-          downloadUrl: url,
-          quality: "Original Resolution",
-          size: "Calculated Asset",
-          originalUrl: url
-        });
+        if (videoId) previewLink = `https://www.youtube.com/embed/${videoId}`;
       }
+
+      setMediaData({
+        title: backendData.title || "Extracted Video Stream",
+        type: platform === "youtube" ? "youtube" : "video",
+        preview: previewLink, // Embed Live View for User
+        downloadUrl: backendData.downloadUrl, // 💥 TARGET REAL INPUT URL BASED DOWNLOAD
+        quality: backendData.quality || "High Definition",
+        size: backendData.size || "Dynamic Size",
+        originalUrl: url
+      });
+
     } catch (err) {
       console.error("Preview Exception:", err);
-      alert("Failed to extract media asset metadata.");
+      alert("Failed to extract media asset. Make sure backend route is created.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── ADVANCED BLOB DOWNLOAD GENERATOR ──
+  // ── ADVANCED BINARY DOWNLOAD STREAMER ──
   const triggerBinaryDownload = async () => {
     if (!mediaData || !mediaData.downloadUrl) return;
 
     setDownloading(true);
     try {
-      // Fetching the raw asset byte data stream
-      const res = await fetch(mediaData.downloadUrl, {
-        method: "GET",
-        headers: {}
-      });
-
-      if (!res.ok) throw new Error("Network stream structure response was not ok.");
-      
-      const blob = await res.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-
-      // Programmatic injection of trigger framework
+      // Direct high speed anchor dispatch method
       const anchor = document.createElement("a");
-      anchor.href = blobUrl;
-      
-      // Extension detection system rules
-      const fileExt = mediaData.type === "image" ? "jpg" : "mp4";
-      anchor.download = `MediaAsset-${Date.now()}.${fileExt}`;
+      anchor.href = mediaData.downloadUrl;
+      anchor.target = "_blank";
+      // Force download attribute rule
+      anchor.download = `MediaAsset-${Date.now()}.mp4`;
       
       document.body.appendChild(anchor);
       anchor.click();
-      
-      // Memory cleanup sequence
       document.body.removeChild(anchor);
-      window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error("Download pipeline error:", err);
-      // Fallback redirection rules system if CORS blocks local blob generation
       window.open(mediaData.downloadUrl, "_blank");
     } finally {
       setDownloading(false);
@@ -161,9 +127,9 @@ export default function MediaDownloader() {
           <span>Universal Media Downloader</span>
         </div>
         <div className={styles.topStats}>
-          <span className={styles.statChip}>v2.5.0</span>
+          <span className={styles.statChip}>v3.0.0</span>
           <span className={styles.statChip} style={{ borderColor: "var(--buy)", color: "var(--buy)" }}>
-            ● Download Pipeline Engine Active
+            ● Real Live Parsing Server Connected
           </span>
         </div>
       </header>
@@ -206,7 +172,7 @@ export default function MediaDownloader() {
 
               {loading && (
                 <div className={styles.progressTrack}>
-                  <div className={styles.progressFill} style={{ width: '85%', transition: 'width 1.5s' }}></div>
+                  <div className={styles.progressFill} style={{ width: '90%', transition: 'width 2s' }}></div>
                 </div>
               )}
             </div>
@@ -229,7 +195,7 @@ export default function MediaDownloader() {
 
           {loading && (
             <div className={styles.loadingNote}>
-              De-assembling data streams and extracting system metadata attributes...
+              De-assembling data streams from backend server pipeline...
             </div>
           )}
 
@@ -252,25 +218,11 @@ export default function MediaDownloader() {
                     style={{ borderRadius: "8px", border: "none" }}
                     title="Live Media Render Pipeline Preview"
                   />
-                ) : mediaData.type === "video" ? (
+                ) : (
                   <video
                     src={mediaData.preview}
                     controls
                     style={{ width: "100%", maxHeight: "400px", borderRadius: "8px" }}
-                  />
-                ) : (
-                  <img
-                    src={mediaData.preview}
-                    style={{
-                      width: "100%",
-                      maxHeight: "400px",
-                      objectFit: "contain",
-                      borderRadius: "8px",
-                    }}
-                    alt="Extracted Media Rendering Layout Source"
-                    onError={(e) => {
-                      e.target.src = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600";
-                    }}
                   />
                 )}
 
@@ -302,25 +254,20 @@ export default function MediaDownloader() {
                 </div>
               </div>
 
-              {/* ⚡ DIRECT TRIGGER ACTION CONTROL DOWNLOAD BUTTON */}
+              {/* ⚡ DOWNLOADS THE ACTUAL USER TARGET URL */}
               <button 
                 onClick={triggerBinaryDownload} 
                 className={styles.convertBtn}
                 style={{ width: '100%', fontWeight: '600' }}
                 disabled={downloading}
               >
-                {downloading ? "Downloading Stream Binary..." : "⚡ Download File Now"}
+                {downloading ? "Processing Download..." : "⚡ Download File Now"}
               </button>
 
               <div style={{ marginTop: '12px', textAlign: 'center' }}>
-                <a 
-                  href={mediaData.originalUrl} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textDecoration: 'underline' }}
-                >
-                  Verify Original Stream Link Source
-                </a>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                  Processes directly via target data stream packet proxy.
+                </span>
               </div>
             </div>
           ) : (
