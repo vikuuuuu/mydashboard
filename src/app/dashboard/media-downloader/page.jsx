@@ -82,8 +82,8 @@ export default function MediaDownloader() {
         data = {
           title: "YouTube Video Preview",
           type: "youtube",
-          preview: `https://www.youtube.com/embed/${videoId}`,
-          thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+          preview: "https://www.youtube.com/embed/" + videoId,
+          thumbnail: "https://img.youtube.com/vi/" + videoId + "/maxresdefault.jpg",
           quality: "1080p Full HD",
           size: "Streaming Source",
         };
