@@ -1,3 +1,4 @@
+```jsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,20 +8,28 @@ export default function MediaDownloader() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [mediaData, setMediaData] = useState(null);
-  const [platform, setPlatform] = useState(""); // Dynamic active chip highlighting
+  const [platform, setPlatform] = useState("");
 
-  // Input url change hote hi automatically platform detect karne ke liye
+  // Detect Platform
   useEffect(() => {
     if (!url) {
       setPlatform("");
       return;
     }
+
     const lowerUrl = url.toLowerCase();
-    if (lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be")) {
+
+    if (
+      lowerUrl.includes("youtube.com") ||
+      lowerUrl.includes("youtu.be")
+    ) {
       setPlatform("youtube");
     } else if (lowerUrl.includes("instagram.com")) {
       setPlatform("instagram");
-    } else if (lowerUrl.includes("x.com") || lowerUrl.includes("twitter.com")) {
+    } else if (
+      lowerUrl.includes("x.com") ||
+      lowerUrl.includes("twitter.com")
+    ) {
       setPlatform("twitter");
     } else if (lowerUrl.includes("linkedin.com")) {
       setPlatform("linkedin");
@@ -29,81 +38,120 @@ export default function MediaDownloader() {
     }
   }, [url]);
 
+  // Extract YouTube Video ID
+  const extractYoutubeId = (url) => {
+    const regExp =
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([^&?/]+)/;
+
+    const match = url.match(regExp);
+
+    return match ? match[1] : null;
+  };
+
   const handleFetchPreview = async (e) => {
     e.preventDefault();
+
     if (!url) return;
 
     setLoading(true);
-    setMediaData(null); // Clear previous preview on new fetch
+    setMediaData(null);
 
     try {
-      /* 
-        ======================================================================
-        🚀 PRODUCTION NOTE (Real Backend Integration):
-        Real project me aap niche diye gye code ki tarah apna backend endpoint call karenge:
-        
-        const response = await fetch('/api/download', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url })
-        });
-        const data = await response.json();
-        setMediaData(data);
-        ======================================================================
-      */
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      // Simulating Network Delay
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+      let data = {
+        title: "Media Content",
+        type: "image",
+        preview: "",
+        quality: "HD",
+        size: "Unknown",
+      };
 
-      // Upgraded Simulation Logic (Ab yeh custom inputs ke basis par mock metadata banayega)
-      let title = "Fetched Media Content";
-      let detectedType = "video";
-      let previewUrl = "";
-      let quality = "1080p (Source Quality)";
-      let size = "12.4 MB";
-
-      // Creating a cleaner mock look matching your input
+      // =========================
+      // YOUTUBE
+      // =========================
       if (platform === "youtube") {
-        title = "YouTube Video / Reel Content";
-        previewUrl = "https://www.w3schools.com/html/mov_bbb.mp4"; // Default fallback sample video
-        quality = "1080p Full HD";
-        size = "18.5 MB";
-      } else if (platform === "instagram") {
-        title = "Instagram Reel / Media Post";
-        previewUrl = "https://www.w3schools.com/html/movie.mp4"; 
-        quality = "HD (Source Stream)";
-        size = "8.2 MB";
-      } else if (platform === "twitter") {
-        title = "X (Twitter) Video Stream";
-        previewUrl = "https://www.w3schools.com/html/mov_bbb.mp4";
-        quality = "720p HD";
-        size = "4.1 MB";
-      } else if (platform === "linkedin") {
-        title = "LinkedIn Professional Video";
-        previewUrl = "https://www.w3schools.com/html/movie.mp4";
-        quality = "1080p Quality";
-        size = "22.0 MB";
-      } else {
-        // Fallback standard image preview
-        detectedType = "image";
-        title = "External Web Resource Image";
-        previewUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800";
-        quality = "Source Resolution";
-        size = "1.8 MB";
+        const videoId = extractYoutubeId(url);
+
+        if (!videoId) {
+          alert("Invalid YouTube URL");
+          setLoading(false);
+          return;
+        }
+
+        data = {
+          title: "YouTube Video Preview",
+          type: "youtube",
+          preview: `https://www.youtube.com/embed/${videoId}`,
+          thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+          quality: "1080p Full HD",
+          size: "Streaming Source",
+        };
+      }
+
+      // =========================
+      // INSTAGRAM
+      // =========================
+      else if (platform === "instagram") {
+        data = {
+          title: "Instagram Reel / Post",
+          type: "instagram",
+          preview:
+            "https://images.unsplash.com/photo-1524250502761-1ac6f2e30d43?q=80&w=1200",
+          quality: "HD Reel",
+          size: "Protected Stream",
+        };
+      }
+
+      // =========================
+      // TWITTER / X
+      // =========================
+      else if (platform === "twitter") {
+        data = {
+          title: "Twitter / X Video",
+          type: "twitter",
+          preview:
+            "https://images.unsplash.com/photo-1611605698335-8b1569810432?q=80&w=1200",
+          quality: "720p Stream",
+          size: "Protected Stream",
+        };
+      }
+
+      // =========================
+      // LINKEDIN
+      // =========================
+      else if (platform === "linkedin") {
+        data = {
+          title: "LinkedIn Media",
+          type: "linkedin",
+          preview:
+            "https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=1200",
+          quality: "Professional HD",
+          size: "Protected Stream",
+        };
+      }
+
+      // =========================
+      // UNKNOWN
+      // =========================
+      else {
+        data = {
+          title: "External Web Resource",
+          type: "image",
+          preview:
+            "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200",
+          quality: "Source Resolution",
+          size: "Unknown",
+        };
       }
 
       setMediaData({
-        title: title,
-        type: detectedType,
-        preview: previewUrl,
-        quality: quality,
-        size: size,
-        originalUrl: url
+        ...data,
+        originalUrl: url,
       });
-
     } catch (error) {
-      console.error("Error fetching media:", error);
-      alert("Failed to fetch media metadata. Please check the network or URL.");
+      console.error(error);
+      alert("Failed to fetch preview");
     } finally {
       setLoading(false);
     }
@@ -111,50 +159,103 @@ export default function MediaDownloader() {
 
   return (
     <div className={styles.page}>
-      {/* ── TOP BAR ── */}
+      {/* TOP BAR */}
       <header className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => window.history.back()}>
+        <button
+          className={styles.backBtn}
+          onClick={() => window.history.back()}
+        >
           ← Back to Dashboard
         </button>
+
         <div className={styles.brand}>
           <div className={styles.brandIcon}>🚀</div>
           <span>Universal Media Downloader</span>
         </div>
+
         <div className={styles.topStats}>
-          <span className={styles.statChip}>v1.1.0</span>
-          <span className={styles.statChip} style={{ borderColor: "var(--buy)", color: "var(--buy)" }}>
-            ● Advanced Engine Active
+          <span className={styles.statChip}>v2.0.0</span>
+
+          <span
+            className={styles.statChip}
+            style={{
+              borderColor: "var(--buy)",
+              color: "var(--buy)",
+            }}
+          >
+            ● Smart Preview Engine
           </span>
         </div>
       </header>
 
-      {/* ── LAYOUT (3-Panel Grid) ── */}
+      {/* MAIN LAYOUT */}
       <div className={styles.layout}>
-        
-        {/* 1. LEFT PANEL: URL Inputs & Source Selection */}
+        {/* LEFT PANEL */}
         <aside className={styles.leftPanel}>
           <div className={styles.panelHeader}>
             <span className={styles.panelTitle}>Paste Link</span>
           </div>
 
           <div className={styles.controls}>
-            <form onSubmit={handleFetchPreview} className={styles.section}>
+            <form
+              onSubmit={handleFetchPreview}
+              className={styles.section}
+            >
+              {/* PLATFORM CHIPS */}
               <div className={styles.field}>
                 <label>Supported Platforms</label>
+
                 <div className={styles.presets}>
-                  <span className={`${styles.presetChip} ${platform === "youtube" ? styles.presetActive : ""}`}>YouTube</span>
-                  <span className={`${styles.presetChip} ${platform === "instagram" ? styles.presetActive : ""}`}>Instagram</span>
-                  <span className={`${styles.presetChip} ${platform === "twitter" ? styles.presetActive : ""}`}>X (Twitter)</span>
-                  <span className={`${styles.presetChip} ${platform === "linkedin" ? styles.presetActive : ""}`}>LinkedIn</span>
+                  <span
+                    className={`${styles.presetChip} ${
+                      platform === "youtube"
+                        ? styles.presetActive
+                        : ""
+                    }`}
+                  >
+                    YouTube
+                  </span>
+
+                  <span
+                    className={`${styles.presetChip} ${
+                      platform === "instagram"
+                        ? styles.presetActive
+                        : ""
+                    }`}
+                  >
+                    Instagram
+                  </span>
+
+                  <span
+                    className={`${styles.presetChip} ${
+                      platform === "twitter"
+                        ? styles.presetActive
+                        : ""
+                    }`}
+                  >
+                    X (Twitter)
+                  </span>
+
+                  <span
+                    className={`${styles.presetChip} ${
+                      platform === "linkedin"
+                        ? styles.presetActive
+                        : ""
+                    }`}
+                  >
+                    LinkedIn
+                  </span>
                 </div>
               </div>
 
+              {/* URL INPUT */}
               <div className={styles.field}>
                 <label htmlFor="media-url">Media URL</label>
+
                 <input
                   id="media-url"
                   type="url"
-                  placeholder="Paste YouTube video/shorts or Instagram reel link..."
+                  placeholder="Paste YouTube / Instagram / Twitter URL..."
                   className={styles.textInput}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
@@ -162,10 +263,16 @@ export default function MediaDownloader() {
                 />
               </div>
 
-              <button type="submit" className={styles.actionBtn} disabled={loading}>
+              {/* BUTTON */}
+              <button
+                type="submit"
+                className={styles.actionBtn}
+                disabled={loading}
+              >
                 {loading ? (
                   <>
-                    <span className={styles.spinner}></span> Analyzing URL...
+                    <span className={styles.spinner}></span>
+                    Analyzing URL...
                   </>
                 ) : (
                   "Fetch Preview"
@@ -173,17 +280,27 @@ export default function MediaDownloader() {
               </button>
             </form>
 
+            {/* LOADING BAR */}
             {loading && (
               <div className={styles.progressTrack}>
-                <div className={styles.progressFill} style={{ width: "85%", transition: "width 2s ease" }}></div>
+                <div
+                  className={styles.progressFill}
+                  style={{
+                    width: "85%",
+                    transition: "width 2s ease",
+                  }}
+                ></div>
               </div>
             )}
           </div>
         </aside>
 
-        {/* 2. MIDDLE PANEL: Live Interactive Preview */}
+        {/* MIDDLE PANEL */}
         <main className={styles.middlePanel}>
-          <h2 className={styles.sectionTitle} style={{ marginBottom: "20px" }}>
+          <h2
+            className={styles.sectionTitle}
+            style={{ marginBottom: "20px" }}
+          >
             Live Media Preview
           </h2>
 
@@ -191,22 +308,41 @@ export default function MediaDownloader() {
             <div className={styles.dropZone}>
               <div className={styles.dropContent}>
                 <div className={styles.dropEmoji}>📥</div>
-                <p className={styles.dropText}>No Active Stream Detected</p>
+
+                <p className={styles.dropText}>
+                  No Active Stream Detected
+                </p>
+
                 <span className={styles.dropSub}>
-                  Paste a valid link from social media on the left panel to generate a live preview.
+                  Paste a valid media link to generate preview.
                 </span>
               </div>
             </div>
           )}
 
+          {/* LOADING */}
           {loading && (
-            <div className={styles.loadingNote} style={{ textAlign: "center", color: "var(--text-muted)" }}>
-              ⏳ Parsing media headers, validating content lengths, and extracting resolutions...
+            <div
+              className={styles.loadingNote}
+              style={{
+                textAlign: "center",
+                color: "var(--text-muted)",
+              }}
+            >
+              ⏳ Extracting media metadata...
             </div>
           )}
 
+          {/* MEDIA PREVIEW */}
           {mediaData && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px", alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+                alignItems: "center",
+              }}
+            >
               <div
                 style={{
                   background: "var(--surface)",
@@ -217,18 +353,42 @@ export default function MediaDownloader() {
                   boxShadow: "var(--shadow-md)",
                 }}
               >
-                {mediaData.type === "video" ? (
-                  <video 
-                    src={mediaData.preview} 
-                    controls 
-                    key={mediaData.preview} // Form reset trigger for new video streams
-                    className={styles.previewImg} 
-                    style={{ maxHeight: "400px", width: "100%", borderRadius: "8px" }} 
-                  />
+                {/* YOUTUBE */}
+                {mediaData.type === "youtube" ? (
+                  <iframe
+                    width="100%"
+                    height="420"
+                    src={mediaData.preview}
+                    title="YouTube Preview"
+                    frameBorder="0"
+                    allowFullScreen
+                    style={{
+                      borderRadius: "10px",
+                    }}
+                  ></iframe>
                 ) : (
-                  <img src={mediaData.preview} alt="Preview" className={styles.previewImg} style={{ maxHeight: "400px", objectFit: "contain" }} />
+                  <img
+                    src={mediaData.preview}
+                    alt="Preview"
+                    className={styles.previewImg}
+                    style={{
+                      maxHeight: "420px",
+                      width: "100%",
+                      objectFit: "cover",
+                      borderRadius: "10px",
+                    }}
+                  />
                 )}
-                <h3 className={styles.dropText} style={{ marginTop: "14px", textAlign: "left", fontSize: "1.1rem" }}>
+
+                {/* TITLE */}
+                <h3
+                  className={styles.dropText}
+                  style={{
+                    marginTop: "16px",
+                    textAlign: "left",
+                    fontSize: "1.1rem",
+                  }}
+                >
                   {mediaData.title}
                 </h3>
               </div>
@@ -236,53 +396,128 @@ export default function MediaDownloader() {
           )}
         </main>
 
-        {/* 3. RIGHT PANEL: Quality Config & Download Actions */}
+        {/* RIGHT PANEL */}
         <aside className={styles.rightPanel}>
           <div className={styles.panelHeader}>
-            <span className={styles.panelTitle}>Download Engine</span>
+            <span className={styles.panelTitle}>
+              Download Engine
+            </span>
           </div>
 
           {mediaData ? (
-            <div className={styles.settingsPanel} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div
+              className={styles.settingsPanel}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "20px",
+              }}
+            >
+              {/* ANALYTICS */}
               <div className={styles.section}>
-                <h4 className={styles.sectionTitle}>File Analytics</h4>
+                <h4 className={styles.sectionTitle}>
+                  File Analytics
+                </h4>
+
                 <div className={styles.infoBox}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <div><strong>Platform:</strong> <span className={styles.valLabel} style={{ textTransform: "uppercase" }}>{platform}</span></div>
-                    <div><strong>Detected Quality:</strong> <span className={styles.valLabel}>{mediaData.quality}</span></div>
-                    <div><strong>Estimated Size:</strong> <span className={styles.valLabel}>{mediaData.size}</span></div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    <div>
+                      <strong>Platform:</strong>{" "}
+                      <span
+                        className={styles.valLabel}
+                        style={{
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {platform}
+                      </span>
+                    </div>
+
+                    <div>
+                      <strong>Quality:</strong>{" "}
+                      <span className={styles.valLabel}>
+                        {mediaData.quality}
+                      </span>
+                    </div>
+
+                    <div>
+                      <strong>Size:</strong>{" "}
+                      <span className={styles.valLabel}>
+                        {mediaData.size}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
 
+              {/* QUALITY OPTIONS */}
               <div className={styles.field}>
                 <label>Target Resolution</label>
-                <div className={styles.formatGrid}>
-                  <div className={`${styles.formatChip} ${styles.formatActive}`}>Max</div>
-                  <div className={styles.formatChip}>1080p</div>
-                  <div className={styles.formatChip}>720p</div>
-                  <div className={styles.formatChip}>MP3 Audio</div>
-                </div>
-              </div>
 
-              <div className={styles.resultBox} style={{ margin: "0" }}>
-                <div className={styles.resultLeft}>
-                  <div className={styles.resultIcon}>✨</div>
-                  <div>
-                    <div className={styles.resultName}>Ready to Pack</div>
-                    <div className={styles.resultMeta}>High-Bitrate Asset Container</div>
+                <div className={styles.formatGrid}>
+                  <div
+                    className={`${styles.formatChip} ${styles.formatActive}`}
+                  >
+                    MAX
+                  </div>
+
+                  <div className={styles.formatChip}>
+                    1080p
+                  </div>
+
+                  <div className={styles.formatChip}>
+                    720p
+                  </div>
+
+                  <div className={styles.formatChip}>
+                    MP3
                   </div>
                 </div>
               </div>
 
-              {/* Real architecture handles cross-origin direct download cleanly */}
-              <a href={mediaData.preview} download="media-asset" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-                <button className={styles.convertBtn}>⚡ Download Asset Stream</button>
+              {/* STATUS */}
+              <div
+                className={styles.resultBox}
+                style={{ margin: "0" }}
+              >
+                <div className={styles.resultLeft}>
+                  <div className={styles.resultIcon}>✨</div>
+
+                  <div>
+                    <div className={styles.resultName}>
+                      Stream Ready
+                    </div>
+
+                    <div className={styles.resultMeta}>
+                      Preview Successfully Generated
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* DOWNLOAD */}
+              <a
+                href={mediaData.originalUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  textDecoration: "none",
+                }}
+              >
+                <button className={styles.convertBtn}>
+                  ⚡ Open Original Media
+                </button>
               </a>
             </div>
           ) : (
             <div className={styles.histEmpty}>
-              Ready for extraction. Enter a link to configure downloading protocols.
+              Ready for extraction.
             </div>
           )}
         </aside>
@@ -290,3 +525,4 @@ export default function MediaDownloader() {
     </div>
   );
 }
+```
