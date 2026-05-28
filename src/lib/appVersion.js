@@ -1,7 +1,7 @@
 // src/lib/appVersion.js
 
-export const APP_VERSION = "v1.3.7";
-export const LASTUPDATE_DATE = "23 May 2026";
+export const APP_VERSION = "v1.3.8";
+export const LASTUPDATE_DATE = "28 May 2026";
 
 /**
  * Full changelog — latest first.
@@ -9,10 +9,21 @@ export const LASTUPDATE_DATE = "23 May 2026";
  */
 export const CHANGELOG = [
   {
+    version: "v1.3.8",
+    date: "28 May 2026, 10:30pm",
+    type: "minor",
+    label: "latest",
+    changes: [
+      "📥 Universal Media Downloader integration — YouTube, Instagram, Facebook, X (Twitter), LinkedIn",
+      "🖥️ Real-time video/image layout media stream validation preview system",
+      "⚡ Full High-Bitrate multi-resolution architecture matching toolLayout layout system",
+    ],
+  },
+  {
     version: "v1.3.7",
     date: "23 May 2026, 06:50pm",
     type: "minor",
-    label: "latest",
+    label: null,
     changes: [
       "📒 Khata Book Finance page :-  💸 Expense , 🔴 Payment Given , 🟢 Payment Received ",
       "📜 Version History in Notes Page",
