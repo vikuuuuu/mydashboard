@@ -1,51 +1,109 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styles from "../common/toolLayout.module.css";
 
 export default function MediaDownloader() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mediaData, setMediaData] = useState(null); // Preview data store karne ke liye
+  const [mediaData, setMediaData] = useState(null);
+  const [platform, setPlatform] = useState(""); // Dynamic active chip highlighting
 
-  // Yeh function aapke backend API routes ya Kisi third-party scraper se connect hoga
+  // Input url change hote hi automatically platform detect karne ke liye
+  useEffect(() => {
+    if (!url) {
+      setPlatform("");
+      return;
+    }
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be")) {
+      setPlatform("youtube");
+    } else if (lowerUrl.includes("instagram.com")) {
+      setPlatform("instagram");
+    } else if (lowerUrl.includes("x.com") || lowerUrl.includes("twitter.com")) {
+      setPlatform("twitter");
+    } else if (lowerUrl.includes("linkedin.com")) {
+      setPlatform("linkedin");
+    } else {
+      setPlatform("unknown");
+    }
+  }, [url]);
+
   const handleFetchPreview = async (e) => {
     e.preventDefault();
     if (!url) return;
 
     setLoading(true);
-    setMediaData(null);
+    setMediaData(null); // Clear previous preview on new fetch
 
     try {
-      // 📝 Note: Real production me aap yahan fetch('/api/download', { method: 'POST', body: ... }) karenge.
-      // Abhi preview dikhane ke liye hum ek mock delay aur dummy data use kar rahe hain.
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      /* 
+        ======================================================================
+        🚀 PRODUCTION NOTE (Real Backend Integration):
+        Real project me aap niche diye gye code ki tarah apna backend endpoint call karenge:
+        
+        const response = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url })
+        });
+        const data = await response.json();
+        setMediaData(data);
+        ======================================================================
+      */
 
-      // Dummy state check karne ke liye ki link kis platform ka hai
-      let detectedType = "image";
+      // Simulating Network Delay
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+
+      // Upgraded Simulation Logic (Ab yeh custom inputs ke basis par mock metadata banayega)
       let title = "Fetched Media Content";
-      let previewUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800"; // Sample high-quality art
+      let detectedType = "video";
+      let previewUrl = "";
+      let quality = "1080p (Source Quality)";
+      let size = "12.4 MB";
 
-      if (url.includes("youtube.com") || url.includes("youtu.be")) {
-        detectedType = "video";
-        title = "YouTube Video Title Preview";
-        previewUrl = "https://www.w3schools.com/html/mov_bbb.mp4"; // Sample open video
-      } else if (url.includes("instagram.com") || url.includes("fb.com") || url.includes("facebook.com")) {
-        detectedType = "video";
-        title = "Social Media Reel / Video";
+      // Creating a cleaner mock look matching your input
+      if (platform === "youtube") {
+        title = "YouTube Video / Reel Content";
+        previewUrl = "https://www.w3schools.com/html/mov_bbb.mp4"; // Default fallback sample video
+        quality = "1080p Full HD";
+        size = "18.5 MB";
+      } else if (platform === "instagram") {
+        title = "Instagram Reel / Media Post";
+        previewUrl = "https://www.w3schools.com/html/movie.mp4"; 
+        quality = "HD (Source Stream)";
+        size = "8.2 MB";
+      } else if (platform === "twitter") {
+        title = "X (Twitter) Video Stream";
+        previewUrl = "https://www.w3schools.com/html/mov_bbb.mp4";
+        quality = "720p HD";
+        size = "4.1 MB";
+      } else if (platform === "linkedin") {
+        title = "LinkedIn Professional Video";
         previewUrl = "https://www.w3schools.com/html/movie.mp4";
+        quality = "1080p Quality";
+        size = "22.0 MB";
+      } else {
+        // Fallback standard image preview
+        detectedType = "image";
+        title = "External Web Resource Image";
+        previewUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800";
+        quality = "Source Resolution";
+        size = "1.8 MB";
       }
 
       setMediaData({
         title: title,
         type: detectedType,
         preview: previewUrl,
-        quality: "4K / Ultra HD (1080p Source)",
-        size: detectedType === "video" ? "24.5 MB" : "4.2 MB",
+        quality: quality,
+        size: size,
+        originalUrl: url
       });
+
     } catch (error) {
       console.error("Error fetching media:", error);
-      alert("Failed to fetch media. Please check the URL.");
+      alert("Failed to fetch media metadata. Please check the network or URL.");
     } finally {
       setLoading(false);
     }
@@ -63,14 +121,14 @@ export default function MediaDownloader() {
           <span>Universal Media Downloader</span>
         </div>
         <div className={styles.topStats}>
-          <span className={styles.statChip}>v1.0.0</span>
+          <span className={styles.statChip}>v1.1.0</span>
           <span className={styles.statChip} style={{ borderColor: "var(--buy)", color: "var(--buy)" }}>
-            ● Active Engine
+            ● Advanced Engine Active
           </span>
         </div>
       </header>
 
-      {/* ── LAYOUT (3-Panel Grid matching your CSS) ── */}
+      {/* ── LAYOUT (3-Panel Grid) ── */}
       <div className={styles.layout}>
         
         {/* 1. LEFT PANEL: URL Inputs & Source Selection */}
@@ -84,10 +142,10 @@ export default function MediaDownloader() {
               <div className={styles.field}>
                 <label>Supported Platforms</label>
                 <div className={styles.presets}>
-                  <span className={`${styles.presetChip} ${styles.presetActive}`}>YouTube</span>
-                  <span className={`${styles.presetChip} ${styles.presetActive}`}>Instagram</span>
-                  <span className={`${styles.presetChip} ${styles.presetActive}`}>X (Twitter)</span>
-                  <span className={`${styles.presetChip} ${styles.presetActive}`}>LinkedIn</span>
+                  <span className={`${styles.presetChip} ${platform === "youtube" ? styles.presetActive : ""}`}>YouTube</span>
+                  <span className={`${styles.presetChip} ${platform === "instagram" ? styles.presetActive : ""}`}>Instagram</span>
+                  <span className={`${styles.presetChip} ${platform === "twitter" ? styles.presetActive : ""}`}>X (Twitter)</span>
+                  <span className={`${styles.presetChip} ${platform === "linkedin" ? styles.presetActive : ""}`}>LinkedIn</span>
                 </div>
               </div>
 
@@ -96,7 +154,7 @@ export default function MediaDownloader() {
                 <input
                   id="media-url"
                   type="url"
-                  placeholder="https://www.youtube.com/watch?v=... or Insta link"
+                  placeholder="Paste YouTube video/shorts or Instagram reel link..."
                   className={styles.textInput}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
@@ -107,7 +165,7 @@ export default function MediaDownloader() {
               <button type="submit" className={styles.actionBtn} disabled={loading}>
                 {loading ? (
                   <>
-                    <span className={styles.spinner}></span> Fetching Media...
+                    <span className={styles.spinner}></span> Analyzing URL...
                   </>
                 ) : (
                   "Fetch Preview"
@@ -117,7 +175,7 @@ export default function MediaDownloader() {
 
             {loading && (
               <div className={styles.progressTrack}>
-                <div className={styles.progressFill} style={{ width: "70%" }}></div>
+                <div className={styles.progressFill} style={{ width: "85%", transition: "width 2s ease" }}></div>
               </div>
             )}
           </div>
@@ -135,13 +193,17 @@ export default function MediaDownloader() {
                 <div className={styles.dropEmoji}>📥</div>
                 <p className={styles.dropText}>No Active Stream Detected</p>
                 <span className={styles.dropSub}>
-                  Paste a valid link from social media on the left panel to generate preview.
+                  Paste a valid link from social media on the left panel to generate a live preview.
                 </span>
               </div>
             </div>
           )}
 
-          {loading && <div className={styles.loadingNote}>Parsing media headers, checking for maximum resolutions...</div>}
+          {loading && (
+            <div className={styles.loadingNote} style={{ textAlign: "center", color: "var(--text-muted)" }}>
+              ⏳ Parsing media headers, validating content lengths, and extracting resolutions...
+            </div>
+          )}
 
           {mediaData && (
             <div style={{ display: "flex", flexDirection: "column", gap: "16px", alignItems: "center" }}>
@@ -156,11 +218,17 @@ export default function MediaDownloader() {
                 }}
               >
                 {mediaData.type === "video" ? (
-                  <video src={mediaData.preview} controls className={styles.previewImg} style={{ maxHeight: "400px" }} />
+                  <video 
+                    src={mediaData.preview} 
+                    controls 
+                    key={mediaData.preview} // Form reset trigger for new video streams
+                    className={styles.previewImg} 
+                    style={{ maxHeight: "400px", width: "100%", borderRadius: "8px" }} 
+                  />
                 ) : (
-                  <img src={mediaData.preview} alt="Preview" className={styles.previewImg} style={{ maxHeight: "400px" }} />
+                  <img src={mediaData.preview} alt="Preview" className={styles.previewImg} style={{ maxHeight: "400px", objectFit: "contain" }} />
                 )}
-                <h3 className={styles.dropText} style={{ marginTop: "14px", textAlign: "left" }}>
+                <h3 className={styles.dropText} style={{ marginTop: "14px", textAlign: "left", fontSize: "1.1rem" }}>
                   {mediaData.title}
                 </h3>
               </div>
@@ -179,7 +247,8 @@ export default function MediaDownloader() {
               <div className={styles.section}>
                 <h4 className={styles.sectionTitle}>File Analytics</h4>
                 <div className={styles.infoBox}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div><strong>Platform:</strong> <span className={styles.valLabel} style={{ textTransform: "uppercase" }}>{platform}</span></div>
                     <div><strong>Detected Quality:</strong> <span className={styles.valLabel}>{mediaData.quality}</span></div>
                     <div><strong>Estimated Size:</strong> <span className={styles.valLabel}>{mediaData.size}</span></div>
                   </div>
@@ -201,13 +270,14 @@ export default function MediaDownloader() {
                   <div className={styles.resultIcon}>✨</div>
                   <div>
                     <div className={styles.resultName}>Ready to Pack</div>
-                    <div className={styles.resultMeta}>High-Bitrate Container</div>
+                    <div className={styles.resultMeta}>High-Bitrate Asset Container</div>
                   </div>
                 </div>
               </div>
 
-              <a href={mediaData.preview} download target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-                <button className={styles.convertBtn}>⚡ Download High Quality</button>
+              {/* Real architecture handles cross-origin direct download cleanly */}
+              <a href={mediaData.preview} download="media-asset" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <button className={styles.convertBtn}>⚡ Download Asset Stream</button>
               </a>
             </div>
           ) : (
