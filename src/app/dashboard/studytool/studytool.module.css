@@ -22,7 +22,7 @@
   --shadow:   0 4px 20px rgba(67,97,238,0.07);
   --shadowMd: 0 8px 32px rgba(67,97,238,0.14);
 }
-:global() {
+:global(:global([data-theme="dark"])) {
   --bg:       #0f172a;
   --bg2:      #1e293b;
   --surface:  #1e293b;
@@ -101,7 +101,7 @@
   display:flex; align-items:center; gap:10px;
   color:#92400e; font-weight:600; font-size:0.88rem;
 }
- .upcomingAlert { background:linear-gradient(135deg,#78350f,#92400e); border-color:#b45309; color:#fef3c7; }
+:global([data-theme="dark"]) .upcomingAlert { background:linear-gradient(135deg,#78350f,#92400e); border-color:#b45309; color:#fef3c7; }
 .activeClassBanner {
   background:linear-gradient(135deg,#ef4444,#dc2626);
   border-radius:var(--radius); padding:14px 20px; margin-bottom:14px;
