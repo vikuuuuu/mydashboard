@@ -370,7 +370,7 @@ export default function AIVideoEditor() {
       <header className={styles.topbar}>
         <div className={styles.topbarLeft}>
           <button className={styles.backBtn} onClick={() => window.history.back()}>
-            ← Back
+            ← Back to Dashboard
           </button>
           <div className={styles.brand}>
             <div className={styles.brandIcon}>⚡</div>
