@@ -41,7 +41,7 @@ const DEFAULT_TOOLS = [
   { id: "webchat",          title: "Web Chat",          desc: "Real-time messaging",                     icon: "💬", color: "#f15bb5", pinned: false, isWebchat: true },
   { id: "myvideoeditor",    title: "My Video Editor",   desc: "Edit short-form videos",                    icon: "🎞️", color: "#06d6a0", pinned: false },
   { id: "file-studio",      title: "All File Studio",   desc: "Preview & convert any file format",        icon: "📁", color: "#4361ee", pinned: false },
-  { id: "studytool",        title: "Study Tool",        desc: "Manage Timetable and review study materials", icon: "📚", color: "#4361ee", pinned: false },
+  { id: "studyhub",        title: "Study Hub",        desc: "Manage Timetable and review study materials", icon: "📚", color: "#4361ee", pinned: false },
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
