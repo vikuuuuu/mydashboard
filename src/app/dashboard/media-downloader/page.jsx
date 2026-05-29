@@ -129,7 +129,7 @@ export default function MediaDownloader() {
         <div className={styles.topStats}>
           <span className={styles.statChip}>v3.0.0</span>
           <span className={styles.statChip} style={{ borderColor: "var(--buy)", color: "var(--buy)" }}>
-            ● Real Live Parsing Server Connected
+            ● Under Construction Page
           </span>
         </div>
       </header>
