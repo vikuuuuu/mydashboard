@@ -22,7 +22,7 @@
   --shadow:   0 4px 20px rgba(67,97,238,0.07);
   --shadowMd: 0 8px 32px rgba(67,97,238,0.14);
 }
-:global(:global([data-theme="dark"])) {
+:global([data-theme="dark"]) {
   --bg:       #0f172a;
   --bg2:      #1e293b;
   --surface:  #1e293b;
