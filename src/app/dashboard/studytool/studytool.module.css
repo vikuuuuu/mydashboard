@@ -1,5 +1,5 @@
 /* ─── TOKENS ─────────────────────────────────────────────────────────────── */
-:root {
+:global(:root) {
   --bg:       #f8fbff;
   --bg2:      #eef2ff;
   --surface:  #ffffff;
@@ -39,7 +39,7 @@
   --shadow:   0 4px 20px rgba(0,0,0,0.3);
   --shadowMd: 0 8px 32px rgba(0,0,0,0.4);
 }
-* { margin:0; padding:0; box-sizing:border-box; }
+:global(*) { margin:0; padding:0; box-sizing:border-box; }
 
 /* ─── PAGE ───────────────────────────────────────────────────────────────── */
 .page {
