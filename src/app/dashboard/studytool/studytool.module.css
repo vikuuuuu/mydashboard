@@ -22,7 +22,7 @@
   --shadow:   0 4px 20px rgba(67,97,238,0.07);
   --shadowMd: 0 8px 32px rgba(67,97,238,0.14);
 }
-:global([data-theme="dark"]) {
+:global() {
   --bg:       #0f172a;
   --bg2:      #1e293b;
   --surface:  #1e293b;
@@ -101,7 +101,7 @@
   display:flex; align-items:center; gap:10px;
   color:#92400e; font-weight:600; font-size:0.88rem;
 }
-[data-theme="dark"] .upcomingAlert { background:linear-gradient(135deg,#78350f,#92400e); border-color:#b45309; color:#fef3c7; }
+ .upcomingAlert { background:linear-gradient(135deg,#78350f,#92400e); border-color:#b45309; color:#fef3c7; }
 .activeClassBanner {
   background:linear-gradient(135deg,#ef4444,#dc2626);
   border-radius:var(--radius); padding:14px 20px; margin-bottom:14px;
@@ -279,7 +279,7 @@
   border:2px solid var(--live);
   animation:taskPulse 2s infinite;
 }
-[data-theme="dark"] .activeTaskCard { background:linear-gradient(135deg,#450a0a,#7f1d1d); }
+:global([data-theme="dark"]) .activeTaskCard { background:linear-gradient(135deg,#450a0a,#7f1d1d); }
 @keyframes taskPulse { 0%,100%{box-shadow:0 0 12px rgba(239,68,68,0.2)} 50%{box-shadow:0 0 24px rgba(239,68,68,0.4)} }
 .taskInfo { flex:1; min-width:0; }
 .taskTop { display:flex; align-items:center; gap:6px; margin-bottom:5px; flex-wrap:wrap; }
@@ -331,7 +331,7 @@
 .presetBtnActive { background:var(--accent); color:#fff; border-color:var(--accent); }
 .pomodoroDisplay { text-align:center; padding:18px; background:var(--surface2); border-radius:var(--radius); border:1px solid var(--border); margin-bottom:12px; }
 .pomodoroBreak { background:linear-gradient(135deg,#ecfdf5,#d1fae5); border-color:#6ee7b7; }
-[data-theme="dark"] .pomodoroBreak { background:linear-gradient(135deg,#064e3b,#065f46); }
+:global([data-theme="dark"]) .pomodoroBreak { background:linear-gradient(135deg,#064e3b,#065f46); }
 .pomodoroPhaseLabel { font-size:0.86rem; font-weight:700; color:var(--text2); margin-bottom:7px; }
 .pomodoroTime { font-size:3.2rem; font-weight:900; color:var(--text); letter-spacing:4px; font-variant-numeric:tabular-nums; }
 .pomodoroCount { font-size:1rem; color:var(--text2); margin-top:7px; }
@@ -389,22 +389,22 @@
 .examForm .formInput, .examForm .formSelect { flex:1; min-width:130px; }
 .examDeadlineList { display:flex; flex-direction:column; gap:10px; }
 .examCountdownCard { background:linear-gradient(135deg,#fff1f2,#ffe4e6); border:1px solid #fecdd3; border-radius:13px; padding:14px 16px; display:flex; justify-content:space-between; align-items:flex-start; transition:all 0.2s; }
-[data-theme="dark"] .examCountdownCard { background:linear-gradient(135deg,#450a0a,#7f1d1d); border-color:#991b1b; }
+:global([data-theme="dark"]) .examCountdownCard { background:linear-gradient(135deg,#450a0a,#7f1d1d); border-color:#991b1b; }
 .examCountdownCard:hover { transform:translateX(3px); box-shadow:0 4px 14px rgba(220,38,38,0.18); }
 .examUrgent  { border-color:#ef4444; box-shadow:0 0 14px rgba(239,68,68,0.25); }
 .examWarning { border-color:#f59e0b; }
 .examHeader { display:flex; align-items:center; gap:9px; margin-bottom:7px; }
 .examHeader h4 { color:#991b1b; font-size:1rem; font-weight:700; }
-[data-theme="dark"] .examHeader h4 { color:#fca5a5; }
+:global([data-theme="dark"]) .examHeader h4 { color:#fca5a5; }
 .examSubjects { font-size:0.8rem; color:#b91c1c; margin-bottom:4px; }
 .examNotes    { font-size:0.78rem; color:#b91c1c; margin-bottom:8px; font-style:italic; }
-[data-theme="dark"] .examSubjects,[data-theme="dark"] .examNotes { color:#f87171; }
+:global([data-theme="dark"]) .examSubjects,:global([data-theme="dark"]) .examNotes { color:#f87171; }
 .countdownGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
 .countdownUnit { background:rgba(220,38,38,0.1); padding:7px; border-radius:8px; text-align:center; }
 .countdownNumber { display:block; font-size:1.4rem; font-weight:800; color:#dc2626; font-variant-numeric:tabular-nums; }
-[data-theme="dark"] .countdownNumber { color:#fca5a5; }
+:global([data-theme="dark"]) .countdownNumber { color:#fca5a5; }
 .countdownLabel { display:block; font-size:0.62rem; color:#991b1b; font-weight:700; text-transform:uppercase; margin-top:1px; }
-[data-theme="dark"] .countdownLabel { color:#fca5a5; }
+:global([data-theme="dark"]) .countdownLabel { color:#fca5a5; }
 .examCompletedText { color:#059669; font-weight:700; font-size:0.95rem; }
 .priorityBadge { padding:2px 9px; border-radius:999px; font-size:10.5px; font-weight:700; }
 .priority_high   { background:rgba(239,68,68,0.12);  color:#ef4444; }
@@ -446,7 +446,7 @@
 .showAnswerBtn { padding:11px 26px; border-radius:var(--radiusSm); border:2px solid var(--accent); background:var(--accentS); color:var(--accent); font-family:inherit; font-size:0.95rem; font-weight:700; cursor:pointer; transition:all 0.2s; }
 .showAnswerBtn:hover { background:var(--accent); color:#fff; }
 .reviewAnswer { font-size:1.05rem; color:var(--text); background:linear-gradient(135deg,#ecfdf5,#d1fae5); border-radius:var(--radius); padding:16px; margin-bottom:16px; line-height:1.6; }
-[data-theme="dark"] .reviewAnswer { background:linear-gradient(135deg,#064e3b,#065f46); }
+:global([data-theme="dark"]) .reviewAnswer { background:linear-gradient(135deg,#064e3b,#065f46); }
 .rateButtons { display:flex; gap:7px; flex-wrap:wrap; justify-content:center; }
 .rateBtn { padding:8px 12px; border-radius:9px; border:1px solid var(--border2); background:var(--surface2); color:var(--text); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.2s; }
 .rateBtn:hover { transform:scale(1.05); }
@@ -518,7 +518,7 @@
 .noSlots { text-align:center; color:var(--text3); font-size:0.82rem; padding:14px 0; }
 .fullScreenSlot { background:var(--surface2); padding:9px 11px; border-radius:9px; border:1px solid var(--border); }
 .activeSlot { background:linear-gradient(135deg,#fef2f2,#fee2e2); border:2px solid #ef4444; }
-[data-theme="dark"] .activeSlot { background:linear-gradient(135deg,#450a0a,#7f1d1d); }
+:global([data-theme="dark"]) .activeSlot { background:linear-gradient(135deg,#450a0a,#7f1d1d); }
 .slotTime { display:block; font-size:0.72rem; color:var(--text2); font-weight:600; margin-bottom:3px; }
 .slotNote { font-size:0.72rem; color:var(--text3); font-style:italic; margin-top:4px; }
 .fullScreenSlot h4 { font-size:0.87rem; color:var(--text); margin-bottom:5px; font-weight:700; }
