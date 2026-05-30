@@ -642,7 +642,7 @@ export default function UltraStudyHub() {
       <div className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => router.push("/dashboard")}>← Back</button>
         <div className={styles.titleArea}>
-          <h1 className={styles.title}>⚡ Ultra Study Hub <span className={styles.vBadge}>v3.0</span></h1>
+          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v3.0</span></h1>
           <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} • {currentDayName}, {currentTime.toLocaleDateString("en-IN")}</p>
         </div>
         <div className={styles.headerControls}>
