@@ -176,6 +176,7 @@ export default function UltraStudyHub() {
     listenCol("study_todos", setTodos);
     listenCol("study_achievements", setAchievements);
     listenCol("study_notes", setSavedNotes);
+    listenCol("study_habits", setHabits);
     const qSess = query(collection(db, "study_sessions"), where("userId", "==", uid));
     unsubs.push(onSnapshot(qSess, snap => {
       const sessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -516,29 +517,53 @@ export default function UltraStudyHub() {
   const toggleTodo = async (id, completed) => { await updateDoc(doc(db, "study_todos", id), { completed: !completed }); };
   const deleteTodo = async (id) => { await deleteDoc(doc(db, "study_todos", id)); showToast("Todo deleted"); };
 
-  const loadHabits = (uid) => {
-    const saved = localStorage.getItem(`habits_${uid}`);
-    if (saved) setHabits(JSON.parse(saved));
-  };
-  const saveHabits = (updated) => {
-    if (!user) return;
-    localStorage.setItem(`habits_${user.uid}`, JSON.stringify(updated));
-    setHabits(updated);
-  };
-  const addHabit = () => {
-    if (!newHabit.trim()) return;
-    saveHabits([...habits, { id: Date.now(), text: newHabit, freq: habitFreq, completedDates: [] }]);
-    setNewHabit(""); showToast("Habit added! 🌱");
-  };
-  const toggleHabit = (id) => {
-    const today = new Date().toDateString();
-    saveHabits(habits.map(h => {
-      if (h.id !== id) return h;
-      const done = h.completedDates.includes(today);
-      return { ...h, completedDates: done ? h.completedDates.filter(d => d !== today) : [...h.completedDates, today] };
-    }));
-  };
-  const deleteHabit = (id) => { saveHabits(habits.filter(h => h.id !== id)); showToast("Habit deleted"); };
+  // ─── FIREBASE DRIVEN HABITS ─────────────────────────────────────────────
+
+const addHabit = async () => {
+  if (!newHabit.trim() || !user) return;
+  try {
+    await addDoc(collection(db, "study_habits"), {
+      userId: user.uid,
+      text: newHabit.trim(),
+      freq: habitFreq,
+      completedDates: [], // Khali array shuruat mein
+      createdAt: serverTimestamp()
+    });
+    setNewHabit(""); 
+    showToast("Habit added! 🌱");
+  } catch (e) {
+    showToast("Error adding habit", "error");
+  }
+};
+
+const toggleHabit = async (id) => {
+  if (!user) return;
+  const today = new Date().toDateString();
+  const habitToToggle = habits.find(h => h.id === id);
+  if (!habitToToggle) return;
+
+  const isDoneToday = habitToToggle.completedDates.includes(today);
+  const updatedDates = isDoneToday
+    ? habitToToggle.completedDates.filter(d => d !== today) // Uncheck karne par date remove hogi
+    : [...habitToToggle.completedDates, today];            // Check karne par add hogi
+
+  try {
+    await updateDoc(doc(db, "study_habits", id), {
+      completedDates: updatedDates
+    });
+  } catch (e) {
+    showToast("Error updating habit", "error");
+  }
+};
+
+const deleteHabit = async (id) => {
+  try {
+    await deleteDoc(doc(db, "study_habits", id));
+    showToast("Habit deleted");
+  } catch (e) {
+    showToast("Error deleting habit", "error");
+  }
+};
 
   const totalStudiedMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
   const avgAccuracy = studySessions.length ? Math.round(studySessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / studySessions.length) : 0;
