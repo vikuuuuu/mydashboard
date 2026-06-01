@@ -636,7 +636,7 @@ export default function ImageStudioPro() {
 
       {/* ── TOP BAR ── */}
       <div style={S.topBar}>
-        <button className="backBtn" style={S.backBtn} onClick={() => router.push("/dashboard")}>← Back</button>
+        <button className="backBtn" style={S.backBtn} onClick={() => router.push("/dashboard")}>← Back to Dashboard</button>
         <div style={S.brand}>
           <div style={S.brandIcon}>✦</div>
           <span>Image Studio Pro</span>
