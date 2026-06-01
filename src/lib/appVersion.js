@@ -22,7 +22,7 @@ export const CHANGELOG = [
     version: "v1.3.8",
     date: "28 May 2026, 10:30pm",
     type: "minor",
-    label: "latest",
+    label: null,
     changes: [
       "📥 Universal Media Downloader integration — YouTube, Instagram, Facebook, X (Twitter), LinkedIn",
       "🖥️ Real-time video/image layout media stream validation preview system",
