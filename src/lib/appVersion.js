@@ -1,13 +1,23 @@
 // src/lib/appVersion.js
 
-export const APP_VERSION = "v1.3.8";
-export const LASTUPDATE_DATE = "28 May 2026";
+export const APP_VERSION = "v1.3.9";
+export const LASTUPDATE_DATE = "01 June 2026";
 
 /**
  * Full changelog — latest first.
  * type: "major" | "minor" | "patch" | "fix"
  */
 export const CHANGELOG = [
+   {
+    version: "v1.3.",
+    date: "01 June 2026, 11:01PM",
+    type: "fix",
+    label: "latest",
+    changes: [
+      "📥 BG Remove, BG Blur -Fix in all-in-img pages",
+      "⛓ Multi-Edit Pipeline ",
+    ],
+  },
   {
     version: "v1.3.8",
     date: "28 May 2026, 10:30pm",
