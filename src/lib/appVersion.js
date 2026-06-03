@@ -9,7 +9,7 @@ export const LASTUPDATE_DATE = "03 June 2026";
  */
 export const CHANGELOG = [
     {
-    version: "v1.3.9",
+    version: "v1.4.0",
     date: "01 June 2026, 11:01PM",
     type: "patch",
     label: "latest",
