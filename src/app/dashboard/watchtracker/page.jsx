@@ -678,7 +678,7 @@ export default function WatchTrackerPage() {
 
         {/* Back to Dashboard */}
         <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>
-          ← Back to Dashboard
+          ← Back
         </button>
 
         <div className={styles.brand}>
