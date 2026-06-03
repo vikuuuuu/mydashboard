@@ -1,18 +1,31 @@
 // src/lib/appVersion.js
 
-export const APP_VERSION = "v1.3.9";
-export const LASTUPDATE_DATE = "01 June 2026";
+export const APP_VERSION = "v1.4.0";
+export const LASTUPDATE_DATE = "03 June 2026";
 
 /**
  * Full changelog — latest first.
  * type: "major" | "minor" | "patch" | "fix"
  */
 export const CHANGELOG = [
+    {
+    version: "v1.3.9",
+    date: "01 June 2026, 11:01PM",
+    type: "patch",
+    label: "latest",
+    changes: [
+      "🎬 Create Watchtracker Page",
+      "All Feature in Pages",
+      "▶ Continue Watching ",
+       "🔥 Trending Picks",
+       "🗓 Coming Soon",
+    ],
+  },
    {
     version: "v1.3.9",
     date: "01 June 2026, 11:01PM",
     type: "fix",
-    label: "latest",
+    label: ,
     changes: [
       "📥 BG Remove, BG Blur -Fix in all-in-img pages",
       "⛓ Multi-Edit Pipeline ",
