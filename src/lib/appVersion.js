@@ -10,8 +10,8 @@ export const LASTUPDATE_DATE = "03 June 2026";
 export const CHANGELOG = [
     {
     version: "v1.4.0",
-    date: "01 June 2026, 11:01PM",
-    type: "patch",
+    date: "03 June 2026, 04:50AM",
+    type: "major",
     label: "latest",
     changes: [
       "🎬 Create Watchtracker Page",
@@ -25,7 +25,7 @@ export const CHANGELOG = [
     version: "v1.3.9",
     date: "01 June 2026, 11:01PM",
     type: "fix",
-    label: ,
+    label: null ,
     changes: [
       "📥 BG Remove, BG Blur -Fix in all-in-img pages",
       "⛓ Multi-Edit Pipeline ",
