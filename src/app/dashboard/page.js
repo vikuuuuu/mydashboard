@@ -42,9 +42,8 @@ const DEFAULT_TOOLS = [
   { id: "myvideoeditor",    title: "My Video Editor",   desc: "Edit short-form videos",                    icon: "🎞️", color: "#06d6a0", pinned: false },
   { id: "file-studio",      title: "All File Studio",   desc: "Preview & convert any file format",        icon: "📁", color: "#4361ee", pinned: false },
   { id: "studytool",        title: "Study Tool",        desc: "Manage Timetable and review study materials", icon: "📚", color: "#4361ee", pinned: false },
-  { id: "watchtracker",     title: "Watch Tracker Tool",   desc: "Manage watched movies and web series",   icon: "🎬",   color: "#4361ee",
-  pinned: false
-},
+  { id: "watchtracker",     title: "Watch Tracker Tool",   desc: "Manage watched movies and web series",   icon: "🎬",   color: "#4361ee", pinned: false},
+  { id: "panorama",     title: "Panorama 360 Degree",   desc: "Panorama 360 degree capture",   icon: "🎬",   color: "#4361ee", pinned: false},
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
