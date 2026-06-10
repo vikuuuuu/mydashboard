@@ -507,7 +507,11 @@ export default function NotesDashboard() {
   // ── Auth ──────────────────────────────────────────────────
   useEffect(() => {
     if (!user) router.replace("/login");
-    else logToolUsage({ userId:user.uid, tool:"Notes Dashboard - Page Visit" });
+    else logToolUsage({
+      userId:user.uid,
+      tool:"Notes",
+      action:"PAGE_VISIT"
+    });
   }, [user, router]);
 
   // ── Load data ─────────────────────────────────────────────
@@ -622,6 +626,15 @@ export default function NotesDashboard() {
     const name = prompt("Folder name:");
     if (!name?.trim()) return;
     await addDoc(collection(db, "folders"), { userId:user.uid, name:name.trim(), createdAt:serverTimestamp() });
+    
+// --PgeVisit logtoolUsage---
+    await logToolUsage({
+       userId: user.uid,
+       tool: "Notes",
+       action: "Create_Folder",
+       resourceId: ref.id,
+       resourceName: title,
+  });
     loadFolders();
   };
 
@@ -630,6 +643,14 @@ export default function NotesDashboard() {
     const name = prompt("New folder name:", folder.name);
     if (!name?.trim() || name === folder.name) return;
     await updateDoc(doc(db, "folders", folder.id), { name:name.trim() });
+    
+    await logToolUsage({
+       userId: user.uid,
+       tool: "Notes",
+       action: "Rename_Folder",
+       resourceId: ref.id,
+       resourceName: title,
+    });
     loadFolders();
   };
 
@@ -647,6 +668,15 @@ export default function NotesDashboard() {
       },
       onCancel: () => setConfirmDialog(null),
     });
+    //----Delele Folder logtoolusage---
+     await logToolUsage({
+       userId: user.uid,
+       tool: "Notes",
+       action: "Delete_Folder",
+       resourceId: ref.id,
+       resourceName: title,
+    });
+    
   };
 
   // ── SECURITY LOCK ─────────────────────────────────────────
