@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   collection, getDocs, addDoc, updateDoc,
@@ -56,36 +56,52 @@ function Spinner() {
 }
 
 /* ══════════════════════════════════════════════
-   MEDIA CARD
+   MEDIA CARD (ENHANCED LAYOUT)
 ══════════════════════════════════════════════ */
 function MediaCard({ item, onClick, onEdit, onDelete }) {
+  const [imgError, setImgError] = useState(false);
+
   return (
     <div className={styles.mediaCard}>
       <div className={styles.cardPosterPlaceholder} onClick={() => onClick(item)}>
-        {item.posterUrl ? (
-          <img src={item.posterUrl} alt={item.title} className={styles.cardPosterImg} loading="lazy" />
+        {item.posterUrl && !imgError ? (
+          <img 
+            src={item.posterUrl} 
+            alt={item.title} 
+            className={styles.cardPosterImg} 
+            loading="lazy" 
+            onError={() => setImgError(true)}
+          />
         ) : (
-          <span className={styles.cardEmojiFallback}>{item.emoji}</span>
+          <div className={styles.gradientFallbackContainer}>
+            <span className={styles.cardEmojiFallback}>{item.emoji}</span>
+          </div>
         )}
+        <div className={styles.cardPlatformFloatingTag}>{item.platform}</div>
       </div>
-      {item.status === 'watched' && <div className={styles.watchedOverlay}>✓</div>}
+      {item.status === 'watched' && <div className={styles.watchedOverlay}>✓ Completed</div>}
       <div className={styles.cardBody} onClick={() => onClick(item)}>
         <div className={styles.cardTitle}>{item.title}</div>
         <div className={styles.cardMeta}>
-          <PlatformBadge platform={item.platform} />
-          <span className={`${styles.badge} ${styles.badgeType}`}>{item.type}</span>
+          <span className={`${styles.badge} ${styles.badgeType}`}>{item.genre}</span>
+          <span className={`${styles.badge} ${styles.badgeYear}`}>{item.year}</span>
         </div>
-        <StatusBadge status={item.status} />
-        {item.nextDate && <div className={styles.cardDate}>🗓 {item.nextDate}</div>}
+        
         {item.status === 'watching' && (
-          <div className={styles.cardProgress}>
-            <div className={styles.cardProgressFill} style={{ width: `${item.progress || 0}%` }} />
+          <div className={styles.progressContainerBlock}>
+            <div className={styles.progressLabelRow}>
+              <span>Progress</span>
+              <span>{item.progress || 0}%</span>
+            </div>
+            <div className={styles.cardProgress}>
+              <div className={styles.cardProgressFill} style={{ width: `${item.progress || 0}%` }} />
+            </div>
           </div>
         )}
       </div>
       <div className={styles.cardFooterActions}>
-        <button className={styles.cardEditBtn} onClick={e => { e.stopPropagation(); onEdit(item); }} title="Edit">✏️</button>
-        <button className={styles.cardDeleteBtn} onClick={e => { e.stopPropagation(); onDelete(item.id); }} title="Delete">🗑</button>
+        <button className={styles.cardEditBtn} onClick={e => { e.stopPropagation(); onEdit(item); }} title="Edit Entry">✏️ Edit</button>
+        <button className={styles.cardDeleteBtn} onClick={e => { e.stopPropagation(); onDelete(item.id); }} title="Delete Entry">🗑</button>
       </div>
     </div>
   );
@@ -109,21 +125,20 @@ function FormModal({ editItem, onClose, onSave, saving }) {
       <div className={`${styles.modal} ${styles.formModal}`}>
         <button className={styles.modalClose} onClick={onClose}>✕</button>
         <div className={styles.formModalTitle}>
-          {editItem ? '✏️ Edit Entry' : '➕ Add New Entry'}
+          {editItem ? '✏️ Edit Media Log' : '➕ Add To Hub'}
         </div>
 
-        {/* POSTER URL FIELD */}
         <div className={styles.formField}>
-          <label className={styles.formLabel}>Movie/Series Poster URL</label>
+          <label className={styles.formLabel}>Poster Image URL</label>
           <input 
             className={styles.formInput} 
             value={form.posterUrl || ''} 
             onChange={e => set('posterUrl', e.target.value)} 
-            placeholder="https://example.com/poster.jpg" 
+            placeholder="https://images.unsplash.com/photo-example.jpg" 
           />
           {form.posterUrl && (
             <div className={styles.livePreviewContainer}>
-              <p className={styles.previewLabel}>Live Poster Preview:</p>
+              <p className={styles.previewLabel}>Live Stream Engine Preview:</p>
               <img 
                 src={form.posterUrl} 
                 alt="Live Preview" 
@@ -134,10 +149,9 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           )}
         </div>
 
-        {/* EMOJI PICKER FALLBACK */}
         {!form.posterUrl && (
           <div className={styles.formField}>
-            <label className={styles.formLabel}>Fallback Emoji / Icon</label>
+            <label className={styles.formLabel}>Fallback Avatar Emoji</label>
             <div className={styles.emojiGrid}>
               {EMOJIS.map(e => (
                 <button
@@ -151,45 +165,41 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           </div>
         )}
 
-        {/* TITLE */}
         <div className={styles.formField}>
           <label className={styles.formLabel}>Title *</label>
-          <input className={styles.formInput} value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Inception" />
+          <input className={styles.formInput} value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Stranger Things" />
         </div>
 
-        {/* TYPE & PLATFORM */}
         <div className={styles.formRow}>
           <div className={styles.formField}>
-            <label className={styles.formLabel}>Type</label>
+            <label className={styles.formLabel}>Streaming Type</label>
             <select className={styles.formSelect} value={form.type} onChange={e => set('type', e.target.value)}>
               {TYPES.map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
           <div className={styles.formField}>
-            <label className={styles.formLabel}>Platform</label>
+            <label className={styles.formLabel}>Network Platform</label>
             <select className={styles.formSelect} value={form.platform} onChange={e => set('platform', e.target.value)}>
               {PLATFORMS.map(p => <option key={p}>{p}</option>)}
             </select>
           </div>
         </div>
 
-        {/* GENRE & YEAR */}
         <div className={styles.formRow}>
           <div className={styles.formField}>
-            <label className={styles.formLabel}>Genre</label>
+            <label className={styles.formLabel}>Genre Spectrum</label>
             <select className={styles.formSelect} value={form.genre} onChange={e => set('genre', e.target.value)}>
               {GENRES.map(g => <option key={g}>{g}</option>)}
             </select>
           </div>
           <div className={styles.formField}>
-            <label className={styles.formLabel}>Year</label>
+            <label className={styles.formLabel}>Launch Year</label>
             <input className={styles.formInput} value={form.year} onChange={e => set('year', e.target.value)} placeholder="2026" />
           </div>
         </div>
 
-        {/* STATUS */}
         <div className={styles.formField}>
-          <label className={styles.formLabel}>Status</label>
+          <label className={styles.formLabel}>Status Matrix</label>
           <div className={styles.statusChips}>
             {STATUSES.map(s => (
               <button type="button" key={s} className={`${styles.statusChip} ${form.status === s ? styles.statusChipActive : ''}`} onClick={() => set('status', s)}>
@@ -199,13 +209,12 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           </div>
         </div>
 
-        {/* SERIES EXTENSIONS */}
         {form.type === 'Series' && (
           <>
             <div className={styles.formRow}>
               <div className={styles.formField}>
                 <label className={styles.formLabel}>Total Seasons</label>
-                <input className={styles.formInput} type="number" value={form.seasons || ''} onChange={e => set('seasons', e.target.value)} placeholder="2" />
+                <input className={styles.formInput} type="number" value={form.seasons || ''} onChange={e => set('seasons', e.target.value)} placeholder="5" />
               </div>
               <div className={styles.formField}>
                 <label className={styles.formLabel}>Current Season</label>
@@ -214,31 +223,29 @@ function FormModal({ editItem, onClose, onSave, saving }) {
             </div>
             <div className={styles.formRow}>
               <div className={styles.formField}>
-                <label className={styles.formLabel}>Current Ep</label>
-                <input className={styles.formInput} type="number" value={form.currentEp || ''} onChange={e => set('currentEp', e.target.value)} placeholder="4" />
+                <label className={styles.formLabel}>Current Episode</label>
+                <input className={styles.formInput} type="number" value={form.currentEp || ''} onChange={e => set('currentEp', e.target.value)} placeholder="3" />
               </div>
               <div className={styles.formField}>
-                <label className={styles.formLabel}>Total Ep</label>
+                <label className={styles.formLabel}>Episodes Inside Season</label>
                 <input className={styles.formInput} type="number" value={form.totalEp || ''} onChange={e => set('totalEp', e.target.value)} placeholder="8" />
               </div>
             </div>
           </>
         )}
 
-        {/* PROGRESS SLIDER */}
         {form.status === 'watching' && (
           <div className={styles.formField}>
-            <label className={styles.formLabel}>Progress — {form.progress}%</label>
+            <label className={styles.formLabel}>Timeline Progress Tracker — {form.progress}%</label>
             <input className={styles.formRange} type="range" min="0" max="100" value={form.progress}
               onChange={e => set('progress', Number(e.target.value))} />
           </div>
         )}
 
-        {/* FORM CONTROLS */}
         <div className={styles.formActions}>
           <button type="button" className={styles.modalBtn} onClick={onClose}>Cancel</button>
           <button type="button" className={`${styles.modalBtn} ${styles.primary}`} onClick={handleSubmit} disabled={saving}>
-            {saving ? <><Spinner /> Saving...</> : (editItem ? '✓ Update' : '+ Add')}
+            {saving ? <><Spinner /> Storing...</> : (editItem ? '✓ Save Layout' : '🧬 Append Log')}
           </button>
         </div>
       </div>
@@ -290,7 +297,7 @@ function DetailModal({ item, onClose, onStatusChange, onEdit, saving }) {
 }
 
 /* ══════════════════════════════════════════════
-   MAIN WATCH TRACKER PAGE
+   MAIN CONTAINER ENGINE
 ══════════════════════════════════════════════ */
 export default function WatchTrackerPage() {
   const router = useRouter();
@@ -300,6 +307,7 @@ export default function WatchTrackerPage() {
   const [items, setItems] = useState([]);
   const [activeTab, setActiveTab] = useState('home');
   const [searchQ, setSearchQ] = useState('');
+  const [selectedPlatformFilter, setSelectedPlatformFilter] = useState('All');
   const [isDark, setIsDark] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -329,20 +337,21 @@ export default function WatchTrackerPage() {
     load();
   }, [uid]);
 
-  const watchlist = items.filter(x => x.status === 'watchlist');
-  const watching  = items.filter(x => x.status === 'watching');
-  const watched   = items.filter(x => x.status === 'watched');
-  const upcoming  = items.filter(x => x.status === 'upcoming');
+  // Master Filter Engine (Search + Toolbar Toggle Context)
+  const filteredItems = useMemo(() => {
+    return items.filter(x => {
+      const matchesPlatform = selectedPlatformFilter === 'All' || x.platform === selectedPlatformFilter;
+      const matchesSearch = !searchQ.trim() || 
+        x.title.toLowerCase().includes(searchQ.toLowerCase()) ||
+        (x.genre || '').toLowerCase().includes(searchQ.toLowerCase());
+      return matchesPlatform && matchesSearch;
+    });
+  }, [items, selectedPlatformFilter, searchQ]);
 
-  const searchResults = useCallback(() => {
-    if (!searchQ.trim()) return [];
-    const q = searchQ.toLowerCase();
-    return items.filter(x =>
-      x.title.toLowerCase().includes(q) ||
-      (x.genre || '').toLowerCase().includes(q) ||
-      (x.platform || '').toLowerCase().includes(q)
-    );
-  }, [searchQ, items]);
+  const watchlist = filteredItems.filter(x => x.status === 'watchlist');
+  const watching  = filteredItems.filter(x => x.status === 'watching');
+  const watched   = filteredItems.filter(x => x.status === 'watched');
+  const upcoming  = filteredItems.filter(x => x.status === 'upcoming');
 
   const saveItem = async (form) => {
     if (!uid) return;
@@ -377,14 +386,14 @@ export default function WatchTrackerPage() {
       setEditItem(null);
     } catch (e) {
       console.error(e);
-      alert('Error updating tracker backend reference.');
+      alert('Error updating core tracking nodes.');
     } finally {
       setSaving(false);
     }
   };
 
   const deleteItem = async (id) => {
-    if (!uid || !confirm('Are you sure you want to delete this?')) return;
+    if (!uid || !confirm('Permanently wipe this media logs asset?')) return;
     try {
       await deleteDoc(doc(db, `users/${uid}/watchtracker`, id));
       setItems(prev => prev.filter(x => x.id !== id));
@@ -406,14 +415,29 @@ export default function WatchTrackerPage() {
   const openAdd  = () => { setEditItem(null); setShowForm(true); };
 
   const HomeTab = () => {
-    const results = searchResults();
     return (
       <>
+        {/* Dynamic Matrix Filter Strip */}
+        <div className={styles.platformQuickRowContainer}>
+          <p className={styles.toolbarLabel}>Filter Engine Engine:</p>
+          <div className={styles.platformToolbarPillsScroll}>
+            {['All', ...PLATFORMS].map(plat => (
+              <button 
+                key={plat}
+                className={`${styles.toolbarFilterPillBtn} ${selectedPlatformFilter === plat ? styles.activeToolbarPill : ''}`}
+                onClick={() => setSelectedPlatformFilter(plat)}
+              >
+                {plat}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className={styles.statsRow}>
-          {[{ num: watching.length, label: 'Watching' },
-            { num: watchlist.length, label: 'Watchlist' },
-            { num: watched.length, label: 'Completed' },
-            { num: upcoming.length, label: 'Upcoming' }].map(s => (
+          {[{ num: watching.length, label: 'Active Streams' },
+            { num: watchlist.length, label: 'Unopened Vault' },
+            { num: watched.length, label: 'Binge Completed' },
+            { num: upcoming.length, label: 'Radar Pipeline' }].map(s => (
             <div key={s.label} className={styles.statChip}>
               <div className={styles.statNum}>{s.num}</div>
               <div className={styles.statLabel}>{s.label}</div>
@@ -421,25 +445,9 @@ export default function WatchTrackerPage() {
           ))}
         </div>
 
-        {searchQ && (
-          <div className={styles.searchResults}>
-            {results.map(r => (
-              <div key={r.id} className={styles.searchResultItem} onClick={() => setDetailItem(r)}>
-                <div className={styles.srPosterContainer}>
-                  {r.posterUrl ? <img src={r.posterUrl} alt={r.title} className={styles.srMiniPoster} /> : r.emoji}
-                </div>
-                <div className={styles.srInfo}>
-                  <div className={styles.srTitle}>{r.title}</div>
-                  <div className={styles.srDesc}>{r.type} · {r.genre}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
         {watching.length > 0 && (
           <>
-            <div className={styles.sectionHeader}><div className={styles.sectionTitle}>▶ Continue Watching</div></div>
+            <div className={styles.sectionHeader}><div className={styles.sectionTitle}>▶ In Midst of Streaming</div></div>
             <div className={styles.cardsGrid}>
               {watching.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}
             </div>
@@ -448,9 +456,9 @@ export default function WatchTrackerPage() {
 
         {watchlist.length > 0 && (
           <>
-            <div className={styles.sectionHeader}><div className={styles.sectionTitle}>📋 Watchlist</div></div>
+            <div className={styles.sectionHeader}><div className={styles.sectionTitle}>📋 Primary Watchlist Vault</div></div>
             <div className={styles.cardsGrid}>
-              {watchlist.slice(0, 6).map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}
+              {watchlist.slice(0, 12).map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}
             </div>
           </>
         )}
@@ -458,28 +466,35 @@ export default function WatchTrackerPage() {
     );
   };
 
-  if (loading) return <div className={styles.loadingScreen}><Spinner /><p>Loading Premium Tracker Engine...</p></div>;
+  if (loading) return <div className={styles.loadingScreen}><Spinner /><p>Initializing Advanced Sync Engine...</p></div>;
 
   return (
     <div className={styles.page} data-theme={isDark ? 'dark' : ''}>
       <div className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>← Dashboard</button>
-        <div className={styles.brand}><div className={styles.brandIcon}>🎬</div>WatchTracker Pro</div>
+        <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>← Portal</button>
+        <div className={styles.brand}><div className={styles.brandIcon}>🚀</div>WatchTracker Apex</div>
         <div className={styles.searchWrap}>
-          <input className={styles.searchInput} placeholder="Search anything instantly..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+          <input className={styles.searchInput} placeholder="Query dynamic title, genre, attributes..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
         </div>
-        <button className={styles.addNewBtn} onClick={openAdd}>+ Add New</button>
+        <button className={styles.addNewBtn} onClick={openAdd}>+ Mount Asset</button>
         <button className={styles.themeBtn} onClick={() => setIsDark(!isDark)}>{isDark ? '☀️' : '🌙'}</button>
       </div>
 
       <div className={styles.tabs}>
-        {[['home', '🏠 Dashboard'], ['watchlist', '📋 My Watchlist'], ['upcoming', '🗓 Upcoming'], ['watched', '✅ History']].map(([id, label]) => (
+        {[['home', '📊 System Hub'], ['watchlist', '📋 Queue List'], ['upcoming', '🗓 Pipeline Radar'], ['watched', '✅ Ledger Vault']].map(([id, label]) => (
           <button key={id} className={`${styles.tabBtn} ${activeTab === id ? styles.active : ''}`} onClick={() => setActiveTab(id)}>{label}</button>
         ))}
       </div>
 
       <div className={styles.content}>
         {activeTab === 'home' && <HomeTab />}
+        {activeTab !== 'home' && (
+          <div className={styles.cardsGrid}>
+            {activeTab === 'watchlist' && watchlist.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}
+            {activeTab === 'upcoming' && upcoming.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}
+            {activeTab === 'watched' && watched.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}
+          </div>
+        )}
       </div>
 
       {detailItem && <DetailModal item={detailItem} onClose={() => setDetailItem(null)} onStatusChange={changeStatus} onEdit={openEdit} saving={saving} />}
