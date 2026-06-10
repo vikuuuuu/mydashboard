@@ -27,7 +27,7 @@ const PLATFORM_CLASS = {
 
 const EMPTY_FORM = {
   title: '', type: 'Series', emoji: '🎬', posterUrl: '', platform: 'Netflix',
-  genre: 'Drama', year: new Date().getFullYear().toString(),
+  genre: 'Drama', year: '2026',
   desc: '', seasons: '', currentSeason: '', currentEp: '',
   totalEp: '', nextEp: '', nextDate: '', status: 'watchlist', progress: 0,
 };
@@ -52,11 +52,11 @@ function StatusBadge({ status }) {
 }
 
 function Spinner() {
-  return <div className={styles.spinner}><div className={styles.spinnerInner}/></div>;
+  return <div className={styles.spinner}><div className={styles.spinnerInner} /></div>;
 }
 
 /* ══════════════════════════════════════════════
-   MEDIA CARD (With Image URL Support)
+   MEDIA CARD
 ══════════════════════════════════════════════ */
 function MediaCard({ item, onClick, onEdit, onDelete }) {
   return (
@@ -70,7 +70,7 @@ function MediaCard({ item, onClick, onEdit, onDelete }) {
       </div>
       {item.status === 'watched' && <div className={styles.watchedOverlay}>✓</div>}
       <div className={styles.cardBody} onClick={() => onClick(item)}>
-        <div className={styles.cardTitle} desert-title={item.title}>{item.title}</div>
+        <div className={styles.cardTitle}>{item.title}</div>
         <div className={styles.cardMeta}>
           <PlatformBadge platform={item.platform} />
           <span className={`${styles.badge} ${styles.badgeType}`}>{item.type}</span>
@@ -92,7 +92,7 @@ function MediaCard({ item, onClick, onEdit, onDelete }) {
 }
 
 /* ══════════════════════════════════════════════
-   ADD / EDIT FORM MODAL (With Live Image Preview)
+   ADD / EDIT FORM MODAL
 ══════════════════════════════════════════════ */
 function FormModal({ editItem, onClose, onSave, saving }) {
   const [form, setForm] = useState(editItem ? { ...editItem } : { ...EMPTY_FORM });
@@ -112,7 +112,7 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           {editItem ? '✏️ Edit Entry' : '➕ Add New Entry'}
         </div>
 
-        {/* POSTER IMAGE LINK & LIVE PREVIEW */}
+        {/* POSTER URL FIELD */}
         <div className={styles.formField}>
           <label className={styles.formLabel}>Movie/Series Poster URL</label>
           <input 
@@ -134,7 +134,7 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           )}
         </div>
 
-        {/* EMOJI FALLBACK (Only shows logic importance if no URL provided) */}
+        {/* EMOJI PICKER FALLBACK */}
         {!form.posterUrl && (
           <div className={styles.formField}>
             <label className={styles.formLabel}>Fallback Emoji / Icon</label>
@@ -157,7 +157,7 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           <input className={styles.formInput} value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Inception" />
         </div>
 
-        {/* TYPE + PLATFORM */}
+        {/* TYPE & PLATFORM */}
         <div className={styles.formRow}>
           <div className={styles.formField}>
             <label className={styles.formLabel}>Type</label>
@@ -173,7 +173,7 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           </div>
         </div>
 
-        {/* GENRE + YEAR */}
+        {/* GENRE & YEAR */}
         <div className={styles.formRow}>
           <div className={styles.formField}>
             <label className={styles.formLabel}>Genre</label>
@@ -199,7 +199,7 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           </div>
         </div>
 
-        {/* SERIES ONLY FIELDS */}
+        {/* SERIES EXTENSIONS */}
         {form.type === 'Series' && (
           <>
             <div className={styles.formRow}>
@@ -225,7 +225,7 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           </>
         )}
 
-        {/* PROGRESS */}
+        {/* PROGRESS SLIDER */}
         {form.status === 'watching' && (
           <div className={styles.formField}>
             <label className={styles.formLabel}>Progress — {form.progress}%</label>
@@ -234,7 +234,7 @@ function FormModal({ editItem, onClose, onSave, saving }) {
           </div>
         )}
 
-        {/* ACTIONS */}
+        {/* FORM CONTROLS */}
         <div className={styles.formActions}>
           <button type="button" className={styles.modalBtn} onClick={onClose}>Cancel</button>
           <button type="button" className={`${styles.modalBtn} ${styles.primary}`} onClick={handleSubmit} disabled={saving}>
@@ -290,7 +290,7 @@ function DetailModal({ item, onClose, onStatusChange, onEdit, saving }) {
 }
 
 /* ══════════════════════════════════════════════
-   MAIN COMPONENT
+   MAIN WATCH TRACKER PAGE
 ══════════════════════════════════════════════ */
 export default function WatchTrackerPage() {
   const router = useRouter();
@@ -300,7 +300,6 @@ export default function WatchTrackerPage() {
   const [items, setItems] = useState([]);
   const [activeTab, setActiveTab] = useState('home');
   const [searchQ, setSearchQ] = useState('');
-  const [filter, setFilter] = useState('all');
   const [isDark, setIsDark] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -378,7 +377,7 @@ export default function WatchTrackerPage() {
       setEditItem(null);
     } catch (e) {
       console.error(e);
-      alert('Error updating database.');
+      alert('Error updating tracker backend reference.');
     } finally {
       setSaving(false);
     }
@@ -427,7 +426,7 @@ export default function WatchTrackerPage() {
             {results.map(r => (
               <div key={r.id} className={styles.searchResultItem} onClick={() => setDetailItem(r)}>
                 <div className={styles.srPosterContainer}>
-                  {r.posterUrl ? <img src={r.posterUrl} className={styles.srMiniPoster} /> : r.emoji}
+                  {r.posterUrl ? <img src={r.posterUrl} alt={r.title} className={styles.srMiniPoster} /> : r.emoji}
                 </div>
                 <div className={styles.srInfo}>
                   <div className={styles.srTitle}>{r.title}</div>
