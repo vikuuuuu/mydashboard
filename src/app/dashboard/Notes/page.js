@@ -1,4 +1,3 @@
-// File: app/dashboard/Notes/page.js
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
@@ -15,14 +14,13 @@ import RichEditor from "@/components/RichEditor";
 import styles from "./notes.module.css";
 
 import {
-  Save, Trash2, FileText, FileDown, FolderPlus, Search,
+  Save, Trash2, FileText, FolderPlus, Search,
   Pin, PinOff, Plus, X, Tag, Clock, FileEdit, ChevronRight,
   Hash, Grid, List, Copy, FolderInput, RotateCcw, Maximize2,
   Minimize2, Eye, EyeOff, AlignLeft, BookOpen, SortAsc,
   Download, Keyboard, Folder, Edit2, Zap, Lock, Unlock,
-  Smile, Bell, BellOff, BarChart2, Link, Moon, Sun,
-  AlertTriangle, CheckCircle, Sparkles, Shield, ShieldOff,
-  Calendar, TrendingUp, Flame,
+  Smile, Bell, BellOff, BarChart2, Moon, Sun,
+  AlertTriangle, Shield, ShieldOff, Calendar
 } from "lucide-react";
 
 const db = getFirestore(app);
@@ -51,7 +49,7 @@ const NOTE_BG_COLORS = [
 ];
 
 const MOOD_OPTIONS = [
-  { id:"none",      emoji:"",   label:"No mood"    },
+  { id:"none",      emoji:"",    label:"No mood"    },
   { id:"happy",     emoji:"😊", label:"Happy"      },
   { id:"focused",   emoji:"🎯", label:"Focused"    },
   { id:"creative",  emoji:"🎨", label:"Creative"   },
@@ -101,9 +99,8 @@ const formatTime = (ts) => {
 };
 
 const getLabelColor = (id) => LABEL_COLORS.find(c => c.id === id)?.hex || "transparent";
-const getNoteBg    = (id) => NOTE_BG_COLORS.find(c => c.id === id)?.hex || "#fdfaf5";
+const getNoteBg     = (id) => NOTE_BG_COLORS.find(c => c.id === id)?.hex || "#fdfaf5";
 
-// Hash PIN to store (simple sha-256-like via btoa)
 const hashPin = async (pin) => {
   const enc = new TextEncoder();
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(pin + "notes_salt_mydashboard"));
@@ -232,7 +229,7 @@ function AISummaryModal({ summary, loading, onClose }) {
     <div className={styles.dialogOverlay} onClick={onClose}>
       <div className={styles.aiModal} onClick={e => e.stopPropagation()}>
         <div className={styles.templateHeader}>
-          <span className={styles.templateTitle}><Sparkles size={16}/> AI Summary</span>
+          <span className={styles.templateTitle}><Zap size={16}/> AI Summary</span>
           <button onClick={onClose} className={styles.iconBtnSmall}><X size={14}/></button>
         </div>
         <div className={styles.aiSummaryBody}>
@@ -444,47 +441,47 @@ export default function NotesDashboard() {
   const [loading,      setLoading     ] = useState(true);
 
   // Editor
-  const [title,       setTitle      ] = useState("");
-  const [content,     setContent    ] = useState("");
+  const [title,        setTitle      ] = useState("");
+  const [content,      setContent    ] = useState("");
   const [activeLabel, setActiveLabel] = useState("none");
-  const [noteBg,      setNoteBg     ] = useState("default");
-  const [mood,        setMood       ] = useState("none");
-  const [dueDate,     setDueDate    ] = useState("");
-  const [lastSaved,   setLastSaved  ] = useState(null);
-  const [isSaving,    setIsSaving   ] = useState(false);
-  const [isNewNote,   setIsNewNote  ] = useState(false);
-  const [isDirty,     setIsDirty    ] = useState(false);
+  const [noteBg,       setNoteBg      ] = useState("default");
+  const [mood,         setMood        ] = useState("none");
+  const [dueDate,      setDueDate    ] = useState("");
+  const [lastSaved,    setLastSaved  ] = useState(null);
+  const [isSaving,     setIsSaving    ] = useState(false);
+  const [isNewNote,     setIsNewNote   ] = useState(false);
+  const [isDirty,      setIsDirty     ] = useState(false);
 
   // Security
   const [isNoteUnlocked,     setIsNoteUnlocked     ] = useState(false);
   const [showSecurityDialog, setShowSecurityDialog ] = useState(false);
-  const [securityMode,       setSecurityMode       ] = useState("set"); // set | unlock | change
+  const [securityMode,       setSecurityMode       ] = useState("set"); 
   const [securityError,      setSecurityError      ] = useState("");
 
   // UI
-  const [search,         setSearch        ] = useState("");
-  const [showSearch,     setShowSearch    ] = useState(false);
-  const [viewMode,       setViewMode      ] = useState("list");
-  const [sortBy,         setSortBy        ] = useState("updated_desc");
-  const [showLabels,     setShowLabels    ] = useState(false);
-  const [showBgPicker,   setShowBgPicker  ] = useState(false);
-  const [showSortMenu,   setShowSortMenu  ] = useState(false);
-  const [showExport,     setShowExport    ] = useState(false);
-  const [showTemplates,  setShowTemplates ] = useState(false);
-  const [showMoveFolder, setShowMoveFolder] = useState(false);
-  const [showShortcuts,  setShowShortcuts ] = useState(false);
-  const [showMoodPicker, setShowMoodPicker] = useState(false);
-  const [showReminder,   setShowReminder  ] = useState(false);
-  const [showAISummary,  setShowAISummary ] = useState(false);
-  const [showAnalytics,  setShowAnalytics ] = useState(false);
+  const [search,           setSearch        ] = useState("");
+  const [showSearch,       setShowSearch    ] = useState(false);
+  const [viewMode,         setViewMode      ] = useState("list");
+  const [sortBy,           setSortBy        ] = useState("updated_desc");
+  const [showLabels,       setShowLabels    ] = useState(false);
+  const [showBgPicker,     setShowBgPicker  ] = useState(false);
+  const [showSortMenu,     setShowSortMenu  ] = useState(false);
+  const [showExport,       setShowExport    ] = useState(false);
+  const [showTemplates,     setShowTemplates ] = useState(false);
+  const [showMoveFolder,   setShowMoveFolder] = useState(false);
+  const [showShortcuts,    setShowShortcuts ] = useState(false);
+  const [showMoodPicker,   setShowMoodPicker] = useState(false);
+  const [showReminder,     setShowReminder  ] = useState(false);
+  const [showAISummary,    setShowAISummary ] = useState(false);
+  const [showAnalytics,    setShowAnalytics ] = useState(false);
   const [showQuickCapture, setShowQuickCapture] = useState(false);
-  const [aiSummary,      setAiSummary     ] = useState("");
-  const [aiLoading,      setAiLoading     ] = useState(false);
-  const [focusMode,      setFocusMode     ] = useState(false);
-  const [readOnly,       setReadOnly      ] = useState(false);
-  const [showTrash,      setShowTrash     ] = useState(false);
-  const [confirmDialog,  setConfirmDialog ] = useState(null);
-  const [darkMode,       setDarkMode      ] = useState(false);
+  const [aiSummary,        setAiSummary     ] = useState("");
+  const [aiLoading,        setAiLoading     ] = useState(false);
+  const [focusMode,        setFocusMode     ] = useState(false);
+  const [readOnly,         setReadOnly      ] = useState(false);
+  const [showTrash,        setShowTrash     ] = useState(false);
+  const [confirmDialog,    setConfirmDialog ] = useState(null);
+  const [darkMode,         setDarkMode      ] = useState(false);
 
   // Stats
   const [wordCount, setWordCount] = useState(0);
@@ -506,12 +503,15 @@ export default function NotesDashboard() {
 
   // ── Auth ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!user) router.replace("/login");
-    else logToolUsage({
-      userId:user.uid,
-      tool:"Notes",
-      action:"PAGE_VISIT"
-    });
+    if (!user) {
+      router.replace("/login");
+    } else {
+      logToolUsage({
+        userId: user.uid,
+        tool: "Notes",
+        action: "PAGE_VISIT"
+      });
+    }
   }, [user, router]);
 
   // ── Load data ─────────────────────────────────────────────
@@ -525,7 +525,9 @@ export default function NotesDashboard() {
   const loadNotes = useCallback(async (folderId = null, trashed = false) => {
     if (!user) return;
     let q = query(collection(db, "notes"), where("userId","==",user.uid), where("deleted","==",trashed));
-    if (folderId && !trashed) q = query(collection(db,"notes"), where("userId","==",user.uid), where("folderId","==",folderId), where("deleted","==",false));
+    if (folderId && !trashed) {
+      q = query(collection(db,"notes"), where("userId","==",user.uid), where("folderId","==",folderId), where("deleted","==",false));
+    }
     const snap = await getDocs(q);
     const list = snap.docs.map(d => ({ id:d.id, ...d.data() }));
     if (trashed) setTrashedNotes(list);
@@ -553,10 +555,10 @@ export default function NotesDashboard() {
   useEffect(() => {
     if (activeNote?.id !== prevNoteId.current) {
       prevNoteId.current = activeNote?.id || null;
-      return; // Don't mark dirty on note switch
+      return; 
     }
     setIsDirty(true);
-  }, [title, content, activeLabel, noteBg, mood, dueDate]);
+  }, [title, content, activeLabel, noteBg, mood, dueDate, activeNote]);
 
   // ── Auto-save every 30s ───────────────────────────────────
   useEffect(() => {
@@ -566,7 +568,7 @@ export default function NotesDashboard() {
       if (isDirty && (title || content)) saveNote(true);
     }, 30000);
     return () => clearTimeout(autoSaveRef.current);
-  }, [isDirty, title, content]);
+  }, [isDirty, title, content, saveNote]);
 
   // ── Keyboard shortcuts ────────────────────────────────────
   useHotkeys({
@@ -625,16 +627,15 @@ export default function NotesDashboard() {
   const createFolder = async () => {
     const name = prompt("Folder name:");
     if (!name?.trim()) return;
-    await addDoc(collection(db, "folders"), { userId:user.uid, name:name.trim(), createdAt:serverTimestamp() });
+    const ref = await addDoc(collection(db, "folders"), { userId:user.uid, name:name.trim(), createdAt:serverTimestamp() });
     
-// --PgeVisit logtoolUsage---
     await logToolUsage({
        userId: user.uid,
        tool: "Notes",
-       action: "Create_Folder",
+       action: "Created_Folder",
        resourceId: ref.id,
-       resourceName: title,
-  });
+       resourceName: name.trim(),
+    });
     loadFolders();
   };
 
@@ -647,15 +648,16 @@ export default function NotesDashboard() {
     await logToolUsage({
        userId: user.uid,
        tool: "Notes",
-       action: "Rename_Folder",
-       resourceId: ref.id,
-       resourceName: title,
+       action: "Edited_Folder",
+       resourceId: folder.id,
+       resourceName: name.trim(),
     });
     loadFolders();
   };
 
   const deleteFolder = async (folderId, e) => {
     e.stopPropagation();
+    const targetFolder = folders.find(f => f.id === folderId);
     setConfirmDialog({
       message:"Delete this folder? Notes inside will be moved to All Notes.",
       onConfirm: async () => {
@@ -663,20 +665,20 @@ export default function NotesDashboard() {
         const q    = query(collection(db,"notes"), where("folderId","==",folderId));
         const snap = await getDocs(q);
         await Promise.all(snap.docs.map(d => updateDoc(doc(db,"notes",d.id), { folderId:null })));
+        
+        await logToolUsage({
+           userId: user.uid,
+           tool: "Notes",
+           action: "Deleted_Folder",
+           resourceId: folderId,
+           resourceName: targetFolder ? targetFolder.name : "Unknown",
+        });
+
         if (activeFolder===folderId) { setActiveFolder(null); loadNotes(); }
         loadFolders(); setConfirmDialog(null);
       },
       onCancel: () => setConfirmDialog(null),
     });
-    //----Delele Folder logtoolusage---
-     await logToolUsage({
-       userId: user.uid,
-       tool: "Notes",
-       action: "Delete_Folder",
-       resourceId: ref.id,
-       resourceName: title,
-    });
-    
   };
 
   // ── SECURITY LOCK ─────────────────────────────────────────
@@ -696,6 +698,15 @@ export default function NotesDashboard() {
       message: "Remove security lock from this note?",
       onConfirm: async () => {
         await updateDoc(doc(db,"notes",activeNote.id), { isLocked:false, pinHash:null });
+        
+        await logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "Edited",
+          resourceId: activeNote.id,
+          resourceName: activeNote.title || "Untitled",
+        });
+
         setActiveNote(p => ({ ...p, isLocked:false, pinHash:null }));
         setIsNoteUnlocked(false);
         loadNotes(activeFolder);
@@ -711,6 +722,15 @@ export default function NotesDashboard() {
       if (pin.length < 4) { setSecurityError("PIN must be at least 4 characters"); return; }
       const hash = await hashPin(pin);
       await updateDoc(doc(db,"notes",activeNote.id), { isLocked:true, pinHash:hash });
+      
+      await logToolUsage({
+        userId: user.uid,
+        tool: "Notes",
+        action: "Edited",
+        resourceId: activeNote.id,
+        resourceName: activeNote.title || "Untitled",
+      });
+
       setActiveNote(p => ({ ...p, isLocked:true, pinHash:hash }));
       setIsNoteUnlocked(true);
       loadNotes(activeFolder);
@@ -740,7 +760,6 @@ export default function NotesDashboard() {
     setIsNewNote(false);
     setIsDirty(false);
     setReadOnly(false);
-    // If locked, show unlock dialog
     if (n.isLocked) {
       setIsNoteUnlocked(false);
       setSecurityMode("unlock");
@@ -764,6 +783,15 @@ export default function NotesDashboard() {
       };
       if (activeNote) {
         await updateDoc(doc(db,"notes",activeNote.id), payload);
+        
+        await logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "Edited",
+          resourceId: activeNote.id,
+          resourceName: title || "Untitled",
+        });
+
         setActiveNote(prev => ({ ...prev, ...payload }));
       } else {
         const ref = await addDoc(collection(db,"notes"), {
@@ -772,8 +800,17 @@ export default function NotesDashboard() {
           isLocked:false, pinHash:null,
           tags:[], createdAt:serverTimestamp(),
         });
-        const newNote = { id:ref.id, ...payload, pinned:false, deleted:false, isLocked:false, pinHash:null, tags:[], folderId:activeFolder||null };
-        setActiveNote(newNote);
+
+        await logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "Created",
+          resourceId: ref.id,
+          resourceName: title || "Untitled",
+        });
+
+        const nNote = { id:ref.id, ...payload, pinned:false, deleted:false, isLocked:false, pinHash:null, tags:[], folderId:activeFolder||null };
+        setActiveNote(nNote);
         setIsNoteUnlocked(true);
         setIsNewNote(false);
       }
@@ -790,6 +827,15 @@ export default function NotesDashboard() {
     e?.stopPropagation();
     const newVal = !note.pinned;
     await updateDoc(doc(db,"notes",note.id), { pinned:newVal });
+    
+    await logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "Pinned",
+      resourceId: note.id,
+      resourceName: note.title || "Untitled",
+    });
+
     if (activeNote?.id===note.id) setActiveNote(p => ({ ...p, pinned:newVal }));
     loadNotes(activeFolder);
   }, [activeNote, activeFolder, loadNotes]);
@@ -816,7 +862,7 @@ export default function NotesDashboard() {
     }
   };
 
-  // ── AI SUMMARIZE ─────────────────────────────────────────
+  // ── AI SUMMARY ENGINE ─────────────────────────────────────
   const generateAISummary = async () => {
     if (!content || !isNoteUnlocked) return;
     setShowAISummary(true);
@@ -848,9 +894,10 @@ export default function NotesDashboard() {
 
   // ── QUICK CAPTURE ─────────────────────────────────────────
   const saveQuickCapture = async (qTitle, qText) => {
-    await addDoc(collection(db,"notes"), {
+    const finalTitle = qTitle || "Quick Note";
+    const ref = await addDoc(collection(db,"notes"), {
       userId:user.uid, folderId:activeFolder||null,
-      title:qTitle||"Quick Note",
+      title:finalTitle,
       content:`<p>${qText.replace(/\n/g,"</p><p>")}</p>`,
       label:"none", noteBg:"default",
       mood:"none", dueDate:null,
@@ -858,17 +905,35 @@ export default function NotesDashboard() {
       isLocked:false, pinHash:null,
       tags:[], createdAt:serverTimestamp(), updatedAt:serverTimestamp(),
     });
+
+    await logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "Created",
+      resourceId: ref.id,
+      resourceName: finalTitle,
+    });
+
     loadNotes(activeFolder);
     setShowQuickCapture(false);
   };
 
-  // ── SOFT DELETE / RESTORE / HARD DELETE ───────────────────
+  // ── DELETE / RESTORE / DESTROY HANDLERS ───────────────────
   const deleteNote = useCallback(async () => {
     if (!activeNote) return;
     setConfirmDialog({
       message:"Move this note to Trash?",
       onConfirm: async () => {
         await updateDoc(doc(db,"notes",activeNote.id), { deleted:true, deletedAt:serverTimestamp() });
+        
+        await logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "Deleted",
+          resourceId: activeNote.id,
+          resourceName: activeNote.title || "Untitled",
+        });
+
         resetEditor();
         loadNotes(activeFolder);
         loadNotes(null, true);
@@ -880,6 +945,15 @@ export default function NotesDashboard() {
 
   const restoreNote = async (note) => {
     await updateDoc(doc(db,"notes",note.id), { deleted:false, deletedAt:null });
+    
+    await logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "Restored",
+      resourceId: note.id,
+      resourceName: note.title || "Untitled",
+    });
+
     loadNotes(activeFolder);
     loadNotes(null, true);
   };
@@ -912,9 +986,10 @@ export default function NotesDashboard() {
   // ── DUPLICATE ─────────────────────────────────────────────
   const duplicateNote = useCallback(async () => {
     if (!activeNote) return;
-    await addDoc(collection(db,"notes"), {
+    const finalTitle = `${activeNote.title||"Untitled"} (copy)`;
+    const ref = await addDoc(collection(db,"notes"), {
       userId:user.uid, folderId:activeNote.folderId||activeFolder||null,
-      title:`${activeNote.title||"Untitled"} (copy)`,
+      title:finalTitle,
       content:activeNote.content||"",
       label:activeNote.label||"none",
       noteBg:activeNote.noteBg||"default",
@@ -925,6 +1000,15 @@ export default function NotesDashboard() {
       tags:activeNote.tags||[],
       createdAt:serverTimestamp(), updatedAt:serverTimestamp(),
     });
+
+    await logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "Created",
+      resourceId: ref.id,
+      resourceName: finalTitle,
+    });
+
     loadNotes(activeFolder);
   }, [activeNote, activeFolder, user, loadNotes]);
 
@@ -959,7 +1043,18 @@ export default function NotesDashboard() {
     setIsNoteUnlocked(false);
   };
 
-  // ── EXPORT ────────────────────────────────────────────────
+  // ── EXPORT ENGINE FORMATS ─────────────────────────────────
+  const triggerExportLog = (formatType) => {
+    if (!activeNote) return;
+    logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "Exported",
+      resourceId: activeNote.id,
+      resourceName: `${activeNote.title || "Untitled"}.${formatType.toLowerCase()}`
+    });
+  };
+
   const exportPDF = () => {
     const pdf   = new jsPDF();
     const plain = getHtmlToText(content);
@@ -971,12 +1066,14 @@ export default function NotesDashboard() {
     const lines = pdf.splitTextToSize(plain, 182);
     pdf.text(lines, 14, 32);
     pdf.save(`${title||"note"}.pdf`);
+    triggerExportLog("PDF");
     setShowExport(false);
   };
 
   const exportTXT = () => {
     const blob = new Blob([`${title}\n\n${getHtmlToText(content)}`], { type:"text/plain" });
     const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`${title||"note"}.txt`; a.click();
+    triggerExportLog("TXT");
     setShowExport(false);
   };
 
@@ -984,6 +1081,7 @@ export default function NotesDashboard() {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;padding:0 20px;line-height:1.8;color:#2c2416}h1{margin-bottom:24px}</style></head><body><h1>${title||"Untitled"}</h1>${content}</body></html>`;
     const blob = new Blob([html], { type:"text/html" });
     const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`${title||"note"}.html`; a.click();
+    triggerExportLog("HTML");
     setShowExport(false);
   };
 
@@ -991,6 +1089,7 @@ export default function NotesDashboard() {
     const md   = `# ${title||"Untitled"}\n\n${getHtmlToText(content)}`;
     const blob = new Blob([md], { type:"text/markdown" });
     const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`${title||"note"}.md`; a.click();
+    triggerExportLog("MD");
     setShowExport(false);
   };
 
@@ -1001,7 +1100,6 @@ export default function NotesDashboard() {
     { label:"Markdown", icon:"#️⃣", fn:exportMD   },
   ];
 
-  // ── Due date helpers ──────────────────────────────────────
   const isOverdue = (note) => note.dueDate && new Date(note.dueDate) < new Date();
   const isDueSoon = (note) => {
     if (!note.dueDate) return false;
@@ -1061,11 +1159,9 @@ export default function NotesDashboard() {
             <button className={`${styles.iconBtn} ${viewMode==="grid"?styles.iconBtnActive:""}`} onClick={() => setViewMode(v => v==="list"?"grid":"list")} title="Toggle view">
               {viewMode==="list" ? <Grid size={16}/> : <List size={16}/>}
             </button>
-            {/* Dark mode toggle */}
             <button className={`${styles.iconBtn} ${darkMode?styles.iconBtnActive:""}`} onClick={() => setDarkMode(d=>!d)} title="Toggle dark mode">
               {darkMode ? <Sun size={16}/> : <Moon size={16}/>}
             </button>
-            {/* Sort */}
             <div className={styles.dropWrap}>
               <button className={styles.iconBtn} onClick={() => setShowSortMenu(s=>!s)} title="Sort"><SortAsc size={16}/></button>
               {showSortMenu && (
@@ -1099,7 +1195,6 @@ export default function NotesDashboard() {
       )}
 
       <div className={`${styles.layout} ${focusMode ? styles.layoutFocus : ""}`}>
-
         {/* ── SIDEBAR ── */}
         {!focusMode && (
           <aside className={styles.sidebar}>
@@ -1212,7 +1307,6 @@ export default function NotesDashboard() {
                         )}
                       </div>
 
-                      {/* Locked preview */}
                       {n.isLocked ? (
                         <p className={styles.notePreview} style={{ color:isDark?"#aaa":"", fontStyle:"italic", opacity:0.6 }}>
                           🔒 Content locked — click to unlock
@@ -1229,7 +1323,6 @@ export default function NotesDashboard() {
                         </div>
                       )}
 
-                      {/* Due date badge */}
                       {n.dueDate && (
                         <div className={`${styles.dueBadge} ${overdue?styles.dueBadgeOverdue:dueSoon?styles.dueBadgeSoon:""}`}>
                           <Bell size={9}/>
@@ -1263,7 +1356,6 @@ export default function NotesDashboard() {
             </div>
           ) : (
             <>
-              {/* Editor toolbar */}
               <div className={styles.editorTopBar} style={{ background:isDarkBg?"rgba(0,0,0,0.2)":"", borderColor:isDarkBg?"rgba(255,255,255,0.1)":"" }}>
                 <div className={styles.editorMeta}>
                   {activeNote?.createdAt && (
@@ -1275,7 +1367,6 @@ export default function NotesDashboard() {
                     <span className={styles.savedBadge}>✓ Saved {lastSaved.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}</span>
                   )}
                   {isSaving && <span className={styles.savingBadge}>Saving…</span>}
-                  {/* Due date display */}
                   {dueDate && (
                     <span className={`${styles.dueDateBadge} ${isOverdue(activeNote)?styles.dueDateBadgeOverdue:""}`}>
                       <Calendar size={10}/> {new Date(dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
@@ -1284,7 +1375,6 @@ export default function NotesDashboard() {
                 </div>
 
                 <div className={styles.editorToolbar}>
-                  {/* AI Summarize */}
                   <button
                     className={styles.toolbarBtn}
                     onClick={generateAISummary}
@@ -1295,7 +1385,6 @@ export default function NotesDashboard() {
                     <Sparkles size={14}/>
                   </button>
 
-                  {/* Mood picker */}
                   <div className={styles.dropWrap}>
                     <button className={`${styles.toolbarBtn} ${mood!=="none"?styles.toolbarBtnActive:""}`} onClick={()=>{setShowMoodPicker(s=>!s);}} title="Set mood">
                       {currentMoodEmoji ? <span style={{ fontSize:14 }}>{currentMoodEmoji}</span> : <Smile size={14}/>}
@@ -1312,7 +1401,6 @@ export default function NotesDashboard() {
                     )}
                   </div>
 
-                  {/* Reminder */}
                   <button
                     className={`${styles.toolbarBtn} ${dueDate?styles.toolbarBtnActive:""}`}
                     onClick={()=>setShowReminder(true)}
@@ -1321,7 +1409,6 @@ export default function NotesDashboard() {
                     {dueDate ? <BellOff size={14}/> : <Bell size={14}/>}
                   </button>
 
-                  {/* Security lock */}
                   {activeNote && (
                     <button
                       className={`${styles.toolbarBtn} ${activeNote.isLocked?styles.toolbarBtnLocked:""}`}
@@ -1332,23 +1419,18 @@ export default function NotesDashboard() {
                     </button>
                   )}
 
-                  {/* Read-only toggle */}
                   <button className={`${styles.toolbarBtn} ${readOnly?styles.toolbarBtnActive:""}`} onClick={()=>setReadOnly(r=>!r)} title={readOnly?"Edit":"Read Only"}>
                     {readOnly?<EyeOff size={14}/>:<Eye size={14}/>}
                   </button>
 
-                  {/* Focus mode */}
                   <button className={`${styles.toolbarBtn} ${focusMode?styles.toolbarBtnActive:""}`} onClick={()=>setFocusMode(f=>!f)} title="Focus Mode">
                     {focusMode?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
                   </button>
 
-                  {/* Duplicate */}
                   {activeNote && <button className={styles.toolbarBtn} onClick={duplicateNote} title="Duplicate (Ctrl+D)"><Copy size={14}/></button>}
 
-                  {/* Move to folder */}
                   {activeNote && <button className={styles.toolbarBtn} onClick={()=>setShowMoveFolder(true)} title="Move to folder"><FolderInput size={14}/></button>}
 
-                  {/* Label picker */}
                   <div className={styles.dropWrap}>
                     <button className={styles.toolbarBtn} onClick={()=>{setShowLabels(s=>!s);setShowBgPicker(false);}} title="Label color">
                       <Tag size={14}/>
@@ -1367,7 +1449,6 @@ export default function NotesDashboard() {
                     )}
                   </div>
 
-                  {/* Note background */}
                   <div className={styles.dropWrap}>
                     <button className={styles.toolbarBtn} onClick={()=>{setShowBgPicker(s=>!s);setShowLabels(false);}} title="Note background">
                       <AlignLeft size={14}/>
@@ -1385,7 +1466,6 @@ export default function NotesDashboard() {
                     )}
                   </div>
 
-                  {/* Export */}
                   <div className={styles.dropWrap}>
                     <button className={styles.toolbarBtn} onClick={()=>setShowExport(s=>!s)} title="Export">
                       <Download size={14}/>
@@ -1404,7 +1484,6 @@ export default function NotesDashboard() {
                 </div>
               </div>
 
-              {/* Title */}
               <input
                 ref={titleRef}
                 className={styles.titleInput}
@@ -1415,7 +1494,6 @@ export default function NotesDashboard() {
                 style={{ background:editorBg, color:isDarkBg?"#fff":"", borderColor:isDarkBg?"rgba(255,255,255,0.1)":"" }}
               />
 
-              {/* Tags */}
               <TagsInput
                 tags={activeNote?.tags||[]}
                 readOnly={readOnly || (activeNote?.isLocked && !isNoteUnlocked)}
@@ -1436,7 +1514,6 @@ export default function NotesDashboard() {
                 }}
               />
 
-              {/* Editor body — show locked overlay if needed */}
               <div className={styles.editorBody} style={{ position:"relative" }}>
                 {activeNote?.isLocked && !isNoteUnlocked ? (
                   <LockedNoteOverlay onUnlock={() => { setSecurityMode("unlock"); setSecurityError(""); setShowSecurityDialog(true); }}/>
@@ -1447,7 +1524,6 @@ export default function NotesDashboard() {
                 )}
               </div>
 
-              {/* Stats bar */}
               <div className={styles.statsBar} style={{ background:isDarkBg?"rgba(0,0,0,0.2)":"", borderColor:isDarkBg?"rgba(255,255,255,0.1)":"", color:isDarkBg?"#666":"" }}>
                 <span><Hash size={11}/> {wordCount} words</span>
                 <span>{charCount} chars</span>
@@ -1458,7 +1534,6 @@ export default function NotesDashboard() {
                 {focusMode && <button className={styles.exitFocusBtn} onClick={()=>setFocusMode(false)}><Minimize2 size={12}/> Exit Focus</button>}
               </div>
 
-              {/* Actions */}
               <div className={styles.actions} style={{ background:isDarkBg?"rgba(0,0,0,0.2)":"", borderColor:isDarkBg?"rgba(255,255,255,0.1)":"" }}>
                 <button
                   className={`${styles.primary} ${isSaving?styles.saving:""} ${(!isDirty&&activeNote)?styles.primaryDisabled:""}`}
@@ -1495,7 +1570,6 @@ export default function NotesDashboard() {
         </section>
       </div>
 
-      {/* Floating Quick Capture Button */}
       {!focusMode && (
         <button
           className={styles.floatingQuickBtn}
