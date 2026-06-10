@@ -12,6 +12,7 @@ import { app } from "@/lib/firebase";
 import { getCurrentUser } from "@/lib/firebaseAuth";
 import RichEditor from "@/components/RichEditor";
 import styles from "./notes.module.css";
+import { Sparkles } from "lucide-react";
 
 import {
   Save, Trash2, FileText, FolderPlus, Search,
@@ -1457,25 +1458,25 @@ export default function NotesDashboard() {
                 style={{ background:editorBg, color:isDarkBg?"#fff":"", borderColor:isDarkBg?"rgba(255,255,255,0.1)":"" }}
               />
 
-              <TagsInput
-                tags={activeNote?.tags||[]}
-                readOnly={readOnly || (activeNote?.isLocked && !isNoteUnlocked)}
-                isDark={isDarkBg}
-                onAdd={async (tag) => {
-                  if (!activeNote) return;
-                  const newTags = [...new Set([...(activeNote.tags||[]), tag])];
-                  await updateDoc(doc(db,"notes",activeNote.id), { tags:newTags });
-                  setActiveNote(p=>({...p,tags:newTags}));
-                  loadNotes(activeFolder);
-                }}
-                onRemove={async (tag) => {
-                  if (!activeNote) return;
-                  const newTags = (activeNote.tags||[]).filter(t=>t!==tag);
-                  await updateDoc(doc(db,"notes",activeNote.id), { tags:newTags });
-                  setActiveNote(p=>({...p,tags:newTags}));
-                  loadNotes(activeFolder);
-                }}
-              />
+              // <TagsInput
+              //   tags={activeNote?.tags||[]}
+              //   readOnly={readOnly || (activeNote?.isLocked && !isNoteUnlocked)}
+              //   isDark={isDarkBg}
+              //   onAdd={async (tag) => {
+              //     if (!activeNote) return;
+              //     const newTags = [...new Set([...(activeNote.tags||[]), tag])];
+              //     await updateDoc(doc(db,"notes",activeNote.id), { tags:newTags });
+              //     setActiveNote(p=>({...p,tags:newTags}));
+              //     loadNotes(activeFolder);
+              //   }}
+              //   onRemove={async (tag) => {
+              //     if (!activeNote) return;
+              //     const newTags = (activeNote.tags||[]).filter(t=>t!==tag);
+              //     await updateDoc(doc(db,"notes",activeNote.id), { tags:newTags });
+              //     setActiveNote(p=>({...p,tags:newTags}));
+              //     loadNotes(activeFolder);
+              //   }}
+              // />
 
               <div className={styles.editorBody} style={{ position:"relative" }}>
                 {activeNote?.isLocked && !isNoteUnlocked ? (
