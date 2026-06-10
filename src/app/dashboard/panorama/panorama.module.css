@@ -1,9 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
 /* ═══════════════════════════════════════════════════════════
    File: app/dashboard/panorama/panorama.module.css
-   MyDashboard theme — 360° Panorama Studio
+   MyDashboard theme — 360° Panorama Studio (Production Ready)
    ═══════════════════════════════════════════════════════════ */
-
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 .page {
   --bg:          #f8fbff;
@@ -120,8 +120,8 @@
 .renameCancel { background:var(--danger-soft); color:var(--danger); border:none; border-radius:6px; padding:5px 9px; cursor:pointer; font-size:13px; }
 
 /* ══════ CAPTURE — IDLE ══════ */
-.captureWrap     { max-width:760px; margin:0 auto; }
-.captureIdle     { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:40px 36px; box-shadow:var(--shadow-sm); text-align:center; }
+.captureWrap      { max-width:760px; margin:0 auto; }
+.captureIdle      { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:40px 36px; box-shadow:var(--shadow-sm); text-align:center; }
 .captureIdleIcon  { font-size:3.5rem; margin-bottom:14px; }
 .captureIdleTitle { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; color:var(--text); margin-bottom:10px; }
 .captureIdleSub   { font-size:14px; color:var(--text2); line-height:1.7; max-width:480px; margin:0 auto 24px; }
@@ -159,7 +159,7 @@
 .shutterInner { width:46px; height:46px; background:rgba(255,255,255,0.9); border-radius:50%; transition:all 0.15s; }
 .shutterBtnReady .shutterInner { background:#0f9d6e; }
 
-/* ══════ DIRECTION GUIDE ══════ */
+/* ── DIRECTION GUIDE ── */
 .dirGuide { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; display:flex; gap:18px; align-items:flex-start; box-shadow:var(--shadow-sm); flex-wrap:wrap; }
 
 /* Sphere top-view map */
@@ -174,6 +174,7 @@
 
 /* Direction info */
 .dirInfo    { flex:1; min-width:200px; display:flex; flex-direction:column; gap:8px; }
+.dirGuideNotifDot { width: 7px; height: 7px; background: var(--danger); border-radius: 50%; display: inline-block; margin-left: 2px; }
 .dirLevel   { display:flex; align-items:center; gap:8px; }
 .dirLevelIcon { font-size:1.3rem; }
 .dirLevelText { font-family:'Syne',sans-serif; font-size:14px; font-weight:800; color:var(--text); }
@@ -187,7 +188,7 @@
 .dirRowPill { font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:999px; background:var(--surface2); border:1px solid var(--border); color:var(--text2); transition:all 0.2s; }
 .dirRowPillActive { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
 
-/* ══════ CAPTURING ══════ */
+/* ── CAPTURING ── */
 .capturingWrap       { display:flex; flex-direction:column; gap:14px; }
 .cancelCaptureBtn    { align-self:center; margin-top:4px; }
 .frameStrip          { display:flex; gap:6px; overflow-x:auto; padding:6px 0; scrollbar-width:thin; scrollbar-color:var(--border2) transparent; }
@@ -199,10 +200,10 @@
 .captureProgressFill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:999px; transition:width 0.35s ease; }
 .captureProgressLabel { text-align:center; font-size:12.5px; color:var(--text2); font-family:'DM Mono',monospace; }
 
-/* ══════ STITCHING ══════ */
+/* ── STITCHING ── */
 .stitchingWrap  { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:60px 40px; text-align:center; box-shadow:var(--shadow-sm); }
 .stitchingIcon  { font-size:3rem; margin-bottom:14px; animation:stitch 1.2s linear infinite; }
 @keyframes stitch { 0%,100%{transform:rotate(-12deg)} 50%{transform:rotate(12deg)} }
 .stitchingTitle { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--text); margin-bottom:10px; }
 .stitchingSub   { font-size:13.5px; color:var(--text2); margin-bottom:28px; }
-.stitchingBar   { height:6px; background:var(--surface2); border-radius:999px; overflow:hidden; border:1px solid var(--bo
+.stitchingBar   { height:6px; background:var(--surface2); border-radius:999px; overflow:hidden; border:1px solid var(--border); }
