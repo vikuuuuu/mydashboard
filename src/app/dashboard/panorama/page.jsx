@@ -996,7 +996,7 @@ export default function PanoramaPage() {
       {/* ═══ TOP BAR ═══ */}
       <div className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>
-          ← Dashboard
+          ← Back
         </button>
         <div className={styles.brand}>
           <div className={styles.brandIcon}>🌐</div>
