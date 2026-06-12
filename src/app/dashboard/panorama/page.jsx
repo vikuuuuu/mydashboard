@@ -597,7 +597,7 @@ export default function PanoramaPage() {
 
       {/* TOP BAR */}
       <div className={styles.topBar}>
-        <button className={styles.backBtn} onClick={()=>router.push('/dashboard')}>← Dashboard</button>
+        <button className={styles.backBtn} onClick={()=>router.push('/dashboard')}>← Back</button>
         <div className={styles.brand}><div className={styles.brandIcon}>🌐</div><span>360 Panorama</span></div>
         <div className={styles.topRight}>
           <label className={styles.upBtn}>⬆ Upload<input type="file" accept="image/*" style={{display:'none'}} onChange={uploadFile}/></label>
