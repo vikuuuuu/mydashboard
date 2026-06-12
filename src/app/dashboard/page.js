@@ -34,7 +34,7 @@ const DEFAULT_TOOLS = [
   { id: "Notes",            title: "Notes",              desc: "Create & export notes",                    icon: "📝", color: "#4361ee", pinned: false },
   { id: "myfinancials",     title: "My Financials",      desc: "Track investments & profit",               icon: "💰", color: "#0f9d6e", pinned: false },
   { id: "media-downloader", title: "Media Downloader",   desc: "Download high quality videos & images",    icon: "📥", color: "#3a86ff", pinned: false },
-  { id: "img-to-pdf",       title: "Image → PDF",        desc: "Convert images to PDF",                    icon: "🖼️", color: "#f77f00", pinned: false },
+  { id: "img-to-pdf",       title: "Image → PDF Tool",        desc: "Convert images to PDF",                    icon: "🖼️", color: "#f77f00", pinned: false },
   { id: "all-in-one-img",   title: "All-in-One Image",   desc: "Convert, resize, crop, compress & more",  icon: "🎨", color: "#9b5de5", pinned: false },
   { id: "pdftool",          title: "PDF Tool",           desc: "Resize, convert & edit PDFs",              icon: "📄", color: "#e63946", pinned: false },
   { id: "video-to-img",     title: "Video → Image",      desc: "Capture video frames as images",           icon: "🎬", color: "#3a86ff", pinned: false },
