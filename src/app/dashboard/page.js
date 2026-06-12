@@ -32,13 +32,13 @@ import styles from "./page.module.css";
 /* ─── Default Tools (Updated with Media Downloader) ─────────────────────────────────────── */
 const DEFAULT_TOOLS = [
   { id: "Notes",            title: "Notes",           desc: "Create & export notes",                    icon: "📝", color: "#4361ee", pinned: false },
-  { id: "myfinancials",     title: "My Financials",   desc: "Track investments & profit",                icon: "📈", color: "#0f9d6e", pinned: true  },
+  { id: "myfinancials",     title: "My Financials",   desc: "Track investments & profit",                icon: "📈", color: "#0f9d6e", pinned: false  },
   { id: "media-downloader", title: "Media Downloader",desc: "Download high quality videos & images from URLs",icon: "📥", color: "#3a86ff", pinned: false },
   { id: "img-to-pdf",       title: "Image → PDF",       desc: "Convert images to PDF",                    icon: "🖼️", color: "#f77f00", pinned: false },
   { id: "all-in-one-img",   title: "All-in-One Image",  desc: "Convert, resize, crop, compress & more",    icon: "✂️", color: "#9b5de5", pinned: false },
   { id: "pdftool",          title: "PDF Tool",          desc: "Resize, convert & edit PDFs",               icon: "📄", color: "#e63946", pinned: false },
   { id: "video-to-img",     title: "Video → Image",     desc: "Capture video frames as images",            icon: "🎬", color: "#3a86ff", pinned: false },
-  { id: "webchat",          title: "Web Chat",          desc: "Real-time messaging",                     icon: "💬", color: "#f15bb5", pinned: false, isWebchat: true },
+  { id: "webchat",          title: "Web Chat",          desc: "Real-time messaging",                     icon: "💬", color: "#f15bb5", pinned: false},
   { id: "myvideoeditor",    title: "My Video Editor",   desc: "Edit short-form videos",                    icon: "🎞️", color: "#06d6a0", pinned: false },
   { id: "file-studio",      title: "All File Studio",   desc: "Preview & convert any file format",        icon: "📁", color: "#4361ee", pinned: false },
   { id: "studytool",        title: "Study Tool",        desc: "Manage Timetable and review study materials", icon: "📚", color: "#4361ee", pinned: false },
