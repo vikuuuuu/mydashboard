@@ -11,7 +11,7 @@ import { db, auth } from "@/lib/firebase";
 import { logToolUsage } from "@/lib/firestore";
 
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-const DEFAULT_SUBJECTS = ["Mathematics","Reasoning","English Language","General Knowledge","Science","History","Geography","Computer Science","Physics","Chemistry","Biology","Economics","Current Affairs","Hindi"];
+const DEFAULT_SUBJECTS = ["Mathematics","Reasoning","English Language","Rajasthan Arts & Culture","General Science","History","Geography","Computer Science","Physics","Chemistry","Biology","Economics","Current Affairs","Hindi"];
 const TASK_TYPES = ["Class","Revision","Practice","Mock Test","Assignment","Self Study","Group Study","Doubt Session","Lab Work","Project Work"];
 const POMODORO_PRESETS = [
   { label:"Classic",   work:25, short:5  },
