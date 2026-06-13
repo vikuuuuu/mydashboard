@@ -22,6 +22,7 @@
   color: var(--text);
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 .page[data-theme="dark"] {
@@ -67,15 +68,14 @@
   background: var(--accent); color: #fff; border: none; font-family: 'Syne', sans-serif;
   font-weight: 700; padding: 8px 18px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px;
 }
-.themeBtn {
-  background: var(--surface2); border: 1px solid var(--border2); width: 36px; height: 36px;
-  border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
-}
+.mobileVisibleLabel { display: none; }
 
 .contentLayout {
   display: grid; grid-template-columns: 1fr 380px; gap: 24px;
   padding: 24px 32px; max-width: 1440px; margin: 0 auto; width: 100%; box-sizing: border-box;
 }
+
+.mainFeedSection { min-width: 0; width: 100%; box-sizing: border-box; }
 
 .ingestContainer {
   background: var(--surface); border: 1px solid var(--border);
@@ -104,16 +104,43 @@
 .viewPortContainer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
 .sectionHeading { font-size: 13px; font-weight: 700; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; }
 .trackListList { display: flex; flex-direction: column; gap: 8px; }
+
 .trackRowItem {
-  display: flex; align-items: center; gap: 14px; padding: 10px 14px;
+  display: flex; align-items: center; gap: 14px; padding: 12px 16px;
   background: var(--surface2); border: 1px solid transparent; border-radius: var(--radius-sm);
-  cursor: pointer; transition: all 0.2s ease;
+  cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 .trackRowItem:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Highlight Active Playing Node Track */
+.activeTrackHighlightPulseNode {
+  background: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+.activeTrackHighlightPulseNode .trackName {
+  color: var(--accent) !important;
+  font-weight: 700;
+}
+
 .rowPlayIndicator { color: var(--accent); font-size: 11px; }
-.rowDetails { flex: 1; min-width: 0; }
+.rowDetails { flex: 1; min-width: 0; padding-right: 8px; }
 .trackName { font-size: 13.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trackIdx { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text3); }
+
+/* Track Interaction Actions Cluster */
+.trackMutationInterfaceActionCluster {
+  display: flex; align-items: center; gap: 4px; opacity: 0.4; transition: opacity 0.2s;
+}
+.trackRowItem:hover .trackMutationInterfaceActionCluster { opacity: 1; }
+.mutationArrowBtn, .mutationDeleteBtn {
+  background: var(--surface); border: 1px solid var(--border2);
+  color: var(--text2); border-radius: 4px; cursor: pointer;
+  padding: 2px 6px; font-size: 10px; display: flex; align-items: center; justify-content: center;
+}
+.mutationArrowBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+.mutationDeleteBtn:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
 
 .playlistsVerticalGrid { display: flex; flex-direction: column; gap: 20px; }
 .playlistMegaBlock {
@@ -125,23 +152,27 @@
   border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-sm);
 }
 .playlistBlockHeader { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px; gap: 10px; }
+.playlistHeaderControlsActionStackRow { display: flex; align-items: center; gap: 6px; }
+
 .pNameDisplay { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; }
 .pDescDisplay { font-size: 12px; color: var(--text2); margin-top: 2px; }
 .shareActionTrigger {
   background: var(--accent-soft); color: var(--accent); border: 1px solid transparent;
   padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
-.shareActionTrigger:hover { border-color: var(--accent); }
+.purgePlaylistTriggerBtn {
+  background: var(--danger-soft); color: var(--danger); border: 1px solid transparent;
+  padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
 .playlistTracksInternalWrap { display: flex; flex-direction: column; gap: 6px; }
 
-/* SHARED MATRIX NODE TRANSPARENCY DISPLAY */
 .sharedUsersTransparencyTrack {
   display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
   padding: 8px 12px; background: var(--surface2); border-radius: var(--radius-sm); margin-bottom: 12px;
 }
 .transparencyLabel { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; }
 .sharedUserChipBadge {
-  background: var(--surface); border: 1px solid var(--border2); font-size: 11.5px;
+  background: var(--surface); border: 1px solid var(--border2); font-size: 11px;
   padding: 3px 10px; border-radius: 999px; color: var(--text2);
 }
 .privilegeRoleLabelBadge {
@@ -160,6 +191,7 @@
 .activeTrackConsoleDisplayMetadata { background: var(--surface2); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
 .livePulseHeading { font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; }
 .liveTrackTitleText { font-size: 13px; font-weight: 700; color: var(--text); margin-top: 4px; }
+.queueMetadataContextIndexChip { display: inline-block; font-size: 11px; color: var(--text2); margin-top: 6px; font-style: italic; }
 
 .playerStandbyScreen {
   aspect-ratio: 16 / 10; display: flex; flex-direction: column;
@@ -187,14 +219,18 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 .emptyText, .emptyTextSub { font-size: 12.5px; color: var(--text3); text-align: center; padding: 14px; }
 
-/* ── ADAPTIVE RESPONSIVE COMPATIBILITY MATRIX ── */
+/* ── HIGH PERFORMANCE ADAPTIVE MOBILE BREAKPOINTS MATRIX ── */
 @media (max-width: 1024px) {
-  .contentLayout { grid-template-columns: 1fr; gap: 20px; padding: 16px; }
+  .contentLayout { grid-template-columns: 1fr; gap: 24px; padding: 16px; }
   .stickyHardwarePlayer { position: relative; top: 0; }
 }
 
 @media (max-width: 768px) {
   .formRow { grid-template-columns: 1fr; gap: 8px; }
-  .topBar { padding: 10px 14px; gap: 8px; }
-  .searchWrap { order: 4; max-width: 100%; width: 100%; margin-left: 0; }
+  .topBar { padding: 10px 14px; gap: 8px; justify-content: space-between; }
+  .searchWrap { order: 4; max-width: 100%; width: 100%; margin-left: 0; min-width: 100%; }
+  .mobileHiddenLabel { display: none; }
+  .mobileVisibleLabel { display: inline-block; font-size: 14px; font-weight: bold; }
+  .trackMutationInterfaceActionCluster { opacity: 1; }
+  .playlistBlockHeader { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
