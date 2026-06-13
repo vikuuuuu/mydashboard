@@ -471,7 +471,7 @@ export default function WatchTrackerPage() {
   return (
     <div className={styles.page} data-theme={isDark ? 'dark' : ''}>
       <div className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>← Portal</button>
+        <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>← Back</button>
         <div className={styles.brand}><div className={styles.brandIcon}>🚀</div>WatchTracker Apex</div>
         <div className={styles.searchWrap}>
           <input className={styles.searchInput} placeholder="Query dynamic title, genre, attributes..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
