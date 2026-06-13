@@ -21,37 +21,37 @@ const extractYoutubeId = (url) => {
 export default function MusicHubPage() {
   const router = useRouter();
   
-  // Core Authentication & Profile States
+  // Auth & Profile States
   const [uid, setUid] = useState(null);
   const [currentUserData, setCurrentUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  // Real-Time Reactive Local Vectors
+  // Real-Time Local Vectors
   const [playlists, setPlaylists] = useState([]);
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
   const [quickSongs, setQuickSongs] = useState([]);
   const [allUsers, setAllUsers] = useState([]); 
 
-  // Viewport Player & Tab States
+  // Player & UI Control States
   const [activeTab, setActiveTab] = useState('hub');
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [currentTrackTitle, setCurrentTrackTitle] = useState('');
   const [searchQ, setSearchQ] = useState('');
   const [isDark, setIsDark] = useState(false);
 
-  // Automated Queue Matrix Binders
+  // Queue Binders
   const [activePlaylistQueue, setActivePlaylistQueue] = useState(null);
   const [activeTrackIndex, setActiveTrackIndex] = useState(-1);
   
-  // Modals Framework Control
+  // Modals Framework
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
 
-  // Inline Inline Mutation Nodes (Editing Tracks/Playlists)
+  // Inline Editing States
   const [editingPlaylistId, setEditingPlaylistId] = useState(null);
-  const [editingPlaylistName, setEditingPlaylistIdName] = useState('');
+  const [editingPlaylistName, setEditingPlaylistName] = useState('');
   const [editingTrackIndex, setEditingTrackIndex] = useState(null);
   const [editingTrackForm, setEditingTrackForm] = useState({ title: '', url: '' });
   const [editingQuickSongId, setEditingQuickSongId] = useState(null);
@@ -60,7 +60,7 @@ export default function MusicHubPage() {
   const [playlistForm, setPlaylistForm] = useState({ name: '', desc: '' });
   const [songForm, setFormSong] = useState({ title: '', url: '', targetPlaylist: 'quick' });
   const [shareForm, setShareForm] = useState({ targetEmail: '', permission: 'view' });
-  const [commentInputs, setCommentInputs] = useState({}); // Bound by playlist.id
+  const [commentInputs, setCommentInputs] = useState({}); 
 
   const iframeRef = useRef(null);
 
@@ -68,7 +68,7 @@ export default function MusicHubPage() {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUid(user.uid);
-        setCurrentUserData({ uid: user.uid, email: user.email, displayName: user.displayName || 'User Node' });
+        setCurrentUserData({ uid: user.uid, email: user.email, displayName: user.displayName || 'User' });
         logToolUsage({ userId: user.uid, tool: 'MusicHub', action: 'PAGE_VISIT' });
       } else {
         router.push('/login');
@@ -82,23 +82,20 @@ export default function MusicHubPage() {
     try {
       const playlistsRef = collection(db, 'playlists');
       
-      const qOwned = query(playlistsRef, where('ownerId', '==', uid));
-      const ownedSnap = await getDocs(qOwned);
-      setPlaylists(ownedSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const pOwned = await getDocs(query(playlistsRef, where('ownerId', '==', uid)));
+      setPlaylists(pOwned.docs.map(d => ({ id: d.id, ...d.data() })));
 
-      const qShared = query(playlistsRef, where('sharedWithEmails', 'array-contains', currentUserData.email));
-      const sharedSnap = await getDocs(qShared);
-      setSharedPlaylists(sharedSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const pShared = await getDocs(query(playlistsRef, where('sharedWithEmails', 'array-contains', currentUserData.email)));
+      setSharedPlaylists(pShared.docs.map(d => ({ id: d.id, ...d.data() })));
 
-      const quickRef = collection(db, `users/${uid}/quicksongs`);
-      const qSnap = await getDocs(query(quickRef, orderBy('createdAt', 'desc')));
+      const qSnap = await getDocs(query(collection(db, `users/${uid}/quicksongs`), orderBy('createdAt', 'desc')));
       setQuickSongs(qSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
       const usersSnap = await getDocs(collection(db, 'users'));
       setAllUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== uid));
 
     } catch (err) {
-      console.error('System synchronization error:', err);
+      console.error('Data Sync Anomaly:', err);
     } finally {
       setLoading(false);
     }
@@ -140,14 +137,14 @@ export default function MusicHubPage() {
 
   const handleInitializePlaybackNode = (url, title, playlistContext = null, index = -1) => {
     const vId = extractYoutubeId(url);
-    if (!vId) return alert('Invalid stream asset location.');
+    if (!vId) return alert('Invalid Link Asset.');
     setActiveVideoId(vId);
     setCurrentTrackTitle(title);
     setActivePlaylistQueue(playlistContext);
     setActiveTrackIndex(index);
   };
 
-  /* ── PLAYLIST CORE MUTATIONS ── */
+  /* ── PLAYLIST ACTIONS ── */
   const handleCreatePlaylist = async () => {
     if (!playlistForm.name.trim()) return alert('Playlist name required.');
     setSaving(true);
@@ -187,7 +184,7 @@ export default function MusicHubPage() {
   };
 
   const handlePurgeWholePlaylistNode = async (playlistId) => {
-    if (!confirm('Permanently delete this playlist structure?')) return;
+    if (!confirm('Are you sure you want to delete this playlist?')) return;
     try {
       await deleteDoc(doc(db, 'playlists', playlistId));
       await fetchCoreHubData();
@@ -197,7 +194,7 @@ export default function MusicHubPage() {
   };
 
   const handleSelfRemoveFromSharedPlaylist = async (playlist) => {
-    if (!confirm('Remove yourself from this shared ecosystem playlist?')) return;
+    if (!confirm('Remove yourself from this shared playlist?')) return;
     try {
       const updatedSharedWith = playlist.sharedWith.filter(u => u.email !== currentUserData.email);
       const updatedEmails = playlist.sharedWithEmails.filter(e => e !== currentUserData.email);
@@ -211,11 +208,11 @@ export default function MusicHubPage() {
     }
   };
 
-  /* ── TRACKS CONFIGURATION MUTATIONS ── */
+  /* ── TRACK MATRIX OPERATIONS (MOVE INTO/OUT OF PLAYLIST) ── */
   const handleAddSong = async () => {
-    if (!songForm.title.trim() || !songForm.url.trim()) return alert('Fields cannot be blank.');
+    if (!songForm.title.trim() || !songForm.url.trim()) return alert('Please fill in all inputs.');
     const targetVideoId = extractYoutubeId(songForm.url);
-    if (!targetVideoId) return alert('Invalid YouTube stream pattern URL.');
+    if (!targetVideoId) return alert('Invalid video URL structure.');
 
     setSaving(true);
     try {
@@ -228,7 +225,6 @@ export default function MusicHubPage() {
 
       if (songForm.targetPlaylist === 'quick') {
         await addDoc(collection(db, `users/${uid}/quicksongs`), { ...trackPayload, createdAt: serverTimestamp() });
-        setQuickSongs(prev => [trackPayload, ...prev]); // Optimistic instant render update
       } else {
         const playlistId = songForm.targetPlaylist;
         const currentP = allAvailablePlaylists.find(p => p.id === playlistId);
@@ -238,7 +234,6 @@ export default function MusicHubPage() {
           setSaving(false);
           return;
         }
-
         const updatedTracks = [...(currentP.tracks || []), trackPayload];
         await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
       }
@@ -252,12 +247,46 @@ export default function MusicHubPage() {
     }
   };
 
+  const handleMoveQuickTrackToPlaylist = async (song, playlistId) => {
+    if (!playlistId) return;
+    try {
+      const targetP = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
+      if (!targetP) return;
+
+      const trackPayload = { title: song.title, url: song.url, videoId: song.videoId, createdAt: new Date().toISOString() };
+      const updatedTracks = [...(targetP.tracks || []), trackPayload];
+      
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
+      await deleteDoc(doc(db, `users/${uid}/quicksongs`, song.id));
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handlePullTrackOutOfPlaylist = async (playlistId, index) => {
+    const targetP = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
+    if (!targetP) return;
+
+    const track = targetP.tracks[index];
+    try {
+      await addDoc(collection(db, `users/${uid}/quicksongs`), {
+        title: track.title, url: track.url, videoId: track.videoId, createdAt: serverTimestamp()
+      });
+      const updatedTracks = targetP.tracks.filter((_, idx) => idx !== index);
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleInlineTrackEditSave = async (playlistId, index) => {
     const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
     if (!targetP || !editingTrackForm.title.trim()) return;
 
     const vId = extractYoutubeId(editingTrackForm.url);
-    if (!vId) return alert('Invalid video location asset URL.');
+    if (!vId) return alert('Invalid video link.');
 
     const updatedTracks = [...targetP.tracks];
     updatedTracks[index] = {
@@ -277,21 +306,19 @@ export default function MusicHubPage() {
   };
 
   const handleEraseTrackFromContainer = async (playlistId, index) => {
-    if (!confirm('Remove track from this playlist container?')) return;
+    if (!confirm('Remove track from this playlist?')) return;
     const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
     if (!targetP) return;
 
     const modifiedTracks = (targetP.tracks || []).filter((_, idx) => idx !== index);
     try {
       await updateDoc(doc(db, 'playlists', playlistId), { tracks: modifiedTracks });
-      setPlaylists(prev => prev.map(p => p.id === playlistId ? { ...p, tracks: modifiedTracks } : p)); // Instant rendering sync mutation
       await fetchCoreHubData();
     } catch (err) {
       console.error(err);
     }
   };
 
-  /* ── ISOLATED QUICK NOTE TRACKS EDIT/DELETE ── */
   const handleUpdateQuickSongInline = async (id, updatedTitle) => {
     if (!updatedTitle.trim()) return;
     try {
@@ -304,10 +331,10 @@ export default function MusicHubPage() {
   };
 
   const handlePurgeQuickSong = async (id) => {
-    if (!confirm('Delete this single quick asset?')) return;
+    if (!confirm('Delete this track?')) return;
     try {
       await deleteDoc(doc(db, `users/${uid}/quicksongs`, id));
-      setQuickSongs(prev => prev.filter(s => s.id !== id));
+      await fetchCoreHubData();
     } catch (err) {
       console.error(err);
     }
@@ -333,11 +360,11 @@ export default function MusicHubPage() {
     }
   };
 
-  /* ── ACCESS PRIVILEGE DISTRIBUTION ROUTING ── */
+  /* ── SHARING & PRIVILEGES MUTATIONS ── */
   const handleApplySharePermission = async () => {
-    if (!shareForm.targetEmail) return alert('Select target collaborator identity profile.');
+    if (!shareForm.targetEmail) return alert('Select a workspace user.');
     if (selectedPlaylist.sharedWithEmails?.includes(shareForm.targetEmail)) {
-      return alert('Identity constraint violation: Asset already paired to this link configuration.');
+      return alert('User already has access to this playlist.');
     }
 
     setSaving(true);
@@ -367,7 +394,34 @@ export default function MusicHubPage() {
     }
   };
 
-  /* ── PLAYLIST LIVE COMMENT FEEDS ── */
+  const handleModifyPermissionInline = async (playlist, targetEmail, newPermission) => {
+    try {
+      const updatedSharedWith = playlist.sharedWith.map(s => 
+        s.email === targetEmail ? { ...s, permission: newPermission } : s
+      );
+      await updateDoc(doc(db, 'playlists', playlist.id), { sharedWith: updatedSharedWith });
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRevokeUserAccessCompletely = async (playlist, targetEmail) => {
+    if (!confirm('Revoke access for this user completely?')) return;
+    try {
+      const updatedSharedWith = playlist.sharedWith.filter(s => s.email !== targetEmail);
+      const updatedEmails = playlist.sharedWithEmails.filter(e => e !== targetEmail);
+      await updateDoc(doc(db, 'playlists', playlist.id), { 
+        sharedWith: updatedSharedWith, 
+        sharedWithEmails: updatedEmails 
+      });
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  /* ── COMMENT BOX NODES ── */
   const handlePostCommentNode = async (playlistId) => {
     const cText = commentInputs[playlistId];
     if (!cText || !cText.trim()) return;
@@ -400,7 +454,7 @@ export default function MusicHubPage() {
     return [...playlists, ...sharedPlaylists];
   }, [playlists, sharedPlaylists]);
 
-  if (loading) return <div className={styles.loadingScreen}><div className={styles.spinnerInner} /><p>Initializing Studio Infrastructure...</p></div>;
+  if (loading) return <div className={styles.loadingScreen}><div className={styles.spinnerInner} /><p>Loading Music Studio...</p></div>;
 
   return (
     <div className={styles.page} data-theme={isDark ? 'dark' : ''}>
@@ -424,11 +478,11 @@ export default function MusicHubPage() {
         <button className={styles.themeBtn} onClick={() => setIsDark(!isDark)}>{isDark ? '☀️' : '🌙'}</button>
       </div>
 
-      {/* ── CONTENT GRID SYSTEM ── */}
+      {/* ── MAIN LAYOUT GRID ── */}
       <div className={styles.contentLayout}>
         <div className={styles.mainFeedSection}>
           
-          {/* TRACK INGESTION MODULE */}
+          {/* TRACK INGESTION HUB MODULE */}
           <div className={styles.ingestContainer}>
             <h3 className={styles.blockTitle}>🧬 Load Direct Audio Stream Target</h3>
             <div className={styles.formRow}>
@@ -466,7 +520,7 @@ export default function MusicHubPage() {
             <button className={`${styles.tabLink} ${activeTab === 'shared' ? styles.tabLinkActive : ''}`} onClick={() => setActiveTab('shared')}>🌐 Shared Ecosystem ({sharedPlaylists.length})</button>
           </div>
 
-          {/* VIEWPORTS */}
+          {/* VIEWPORTS CORE ENGINE */}
           {activeTab === 'hub' && (
             <div className={styles.viewPortContainer}>
               <h4 className={styles.sectionHeading}>⚡ Single Stream Engine (No Playlist Records)</h4>
@@ -493,6 +547,15 @@ export default function MusicHubPage() {
                         )}
                       </div>
                       <div className={styles.trackMutationInterfaceActionCluster}>
+                        {/* Dropdown to move an isolated track directly inside a playlist */}
+                        <select 
+                          className={styles.inlinePlaylistMoveSelector}
+                          defaultValue=""
+                          onChange={e => handleMoveQuickTrackToPlaylist(song, e.target.value)}
+                        >
+                          <option value="" disabled>📁 Move To...</option>
+                          {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
                         <button className={styles.mutationArrowBtn} onClick={() => setEditingQuickSongId(song.id)}>✏️</button>
                         <button className={styles.mutationDeleteBtn} onClick={() => handlePurgeQuickSong(song.id)}>✕</button>
                       </div>
@@ -503,7 +566,7 @@ export default function MusicHubPage() {
             </div>
           )}
 
-          {/* OWN STORAGE STORAGE HUB */}
+          {/* OWN STORAGE HUB */}
           {activeTab === 'playlists' && (
             <div className={styles.playlistsVerticalGrid}>
               {playlists.length === 0 ? <p className={styles.emptyText}>Vault is currently clean of containers.</p> : playlists.map(p => (
@@ -515,35 +578,46 @@ export default function MusicHubPage() {
                           className={styles.inlineRenameInputItem}
                           value={editingPlaylistName}
                           autoFocus
-                          onChange={e => setEditingPlaylistIdName(e.target.value)}
+                          onChange={e => setEditingPlaylistName(e.target.value)}
                           onBlur={() => handleUpdatePlaylistNameInline(p.id)}
                           onKeyDown={e => e.key === 'Enter' && handleUpdatePlaylistNameInline(p.id)}
                         />
                       ) : (
-                        <h4 className={styles.pNameDisplay} onClick={() => { setEditingPlaylistId(p.id); setEditingPlaylistIdName(p.name); }}>
-                          📁 {p.name} <span className={styles.pencilEditMiniTrigger}>✏️</span>
+                        <h4 className={styles.pNameDisplay} onClick={() => { setEditingPlaylistId(p.id); setEditingPlaylistName(p.name); }}>
+                          📁 {p.name} <span className={styles.pencilEditMiniTrigger}>✏️ Rename</span>
                         </h4>
                       )}
-                      <p className={styles.pDescDisplay}>{p.desc || 'No metadata description.'}</p>
+                      <p className={styles.pDescDisplay}>{p.desc || 'No description provided.'}</p>
                     </div>
                     <div className={styles.playlistHeaderControlsActionStackRow}>
                       <button className={styles.shareActionTrigger} onClick={() => { setSelectedPlaylist(p); setShowShareModal(true); }}>🌐 Share</button>
-                      <button className={styles.purgePlaylistTriggerBtn} onClick={() => handlePurgeWholePlaylistNode(p.id)}>🗑️ Purge</button>
+                      <button className={styles.purgePlaylistTriggerBtn} onClick={() => handlePurgeWholePlaylistNode(p.id)}>🗑️ Delete</button>
                     </div>
                   </div>
 
+                  {/* ACTIVE SHARE LABELS WITH LIVE CHANGE CONTROLS */}
                   {p.sharedWith && p.sharedWith.length > 0 && (
                     <div className={styles.sharedUsersTransparencyTrack}>
-                      <span className={styles.transparencyLabel}>Shared Workspace Nodes:</span>
+                      <span className={styles.transparencyLabel}>Shared Nodes:</span>
                       {p.sharedWith.map((user, idx) => (
-                        <span key={idx} className={styles.sharedUserChipBadge}>👤 {user.name} ({user.permission})</span>
+                        <div key={idx} className={styles.sharedUserChipBadgeRow}>
+                          <span className={styles.sharedUserChipBadge}>👤 {user.name}</span>
+                          <select 
+                            className={styles.inlinePermissionSelectMini}
+                            value={user.permission}
+                            onChange={e => handleModifyPermissionInline(p, user.email, e.target.value)}
+                          >
+                            <option value="view">View</option>
+                            <option value="edit">Edit</option>
+                          </select>
+                          <button className={styles.inlineRevokeUserBtn} onClick={() => handleRevokeUserAccessCompletely(p, user.email)}>✕</button>
+                        </div>
                       ))}
                     </div>
                   )}
 
-                  {/* INITIALIZE INTERNAL CONTAINER TRACKS LISTING MODULE */}
                   <div className={styles.playlistTracksInternalWrap}>
-                    {!p.tracks || p.tracks.length === 0 ? <p className={styles.emptyTextSub}>No streaming items linked to this array container.</p> : p.tracks.map((t, idx) => {
+                    {!p.tracks || p.tracks.length === 0 ? <p className={styles.emptyTextSub}>No active tracks inside this playlist.</p> : p.tracks.map((t, idx) => {
                       const isCurrentlyActiveStreamNode = activePlaylistQueue?.id === p.id && activeTrackIndex === idx;
                       const isCurrentlyEditingTrackIndex = editingTrackIndex === `${p.id}-${idx}`;
 
@@ -571,13 +645,14 @@ export default function MusicHubPage() {
                           </div>
                           
                           <div className={styles.trackMutationInterfaceActionCluster}>
+                            <button className={styles.mutationArrowBtn} title="Eject Track Out of Playlist" onClick={(e) => { e.stopPropagation(); handlePullTrackOutOfPlaylist(p.id, idx); }}>📤 Pull Out</button>
                             <button className={styles.mutationArrowBtn} onClick={(e) => { 
                               e.stopPropagation(); 
                               setEditingTrackIndex(`${p.id}-${idx}`); 
                               setEditingTrackForm({ title: t.title, url: t.url }); 
                             }}>✏️</button>
-                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>🗘▲</button>
-                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>🗘▼</button>
+                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>🎘 ▲</button>
+                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>🗘 ▼</button>
                             <button className={styles.mutationDeleteBtn} onClick={(e) => { e.stopPropagation(); handleEraseTrackFromContainer(p.id, idx); }}>✕</button>
                           </div>
                         </div>
@@ -585,7 +660,7 @@ export default function MusicHubPage() {
                     })}
                   </div>
 
-                  {/* COMMENT SUB-SYSTEM MODULE SYSTEM BLOCK */}
+                  {/* COMMENT TIMELINE FEED MODULE */}
                   <div className={styles.playlistCommentsMatrixModule}>
                     <h5 className={styles.commentWidgetLabelHead}>💬 Team Feed Streams</h5>
                     <div className={styles.commentTimelineScrollTrackContainer}>
@@ -613,10 +688,10 @@ export default function MusicHubPage() {
             </div>
           )}
 
-          {/* SHARED RECEPTIONS HUB TAB */}
+          {/* SHARED ECOSYSTEM VIEWPORT */}
           {activeTab === 'shared' && (
             <div className={styles.playlistsVerticalGrid}>
-              {sharedPlaylists.length === 0 ? <p className={styles.emptyText}>No cross-platform shared configurations found.</p> : sharedPlaylists.map(p => (
+              {sharedPlaylists.length === 0 ? <p className={styles.emptyText}>No shared configurations found.</p> : sharedPlaylists.map(p => (
                 <div key={p.id} className={styles.playlistMegaBlockShared}>
                   <div className={styles.playlistBlockHeader}>
                     <div>
@@ -625,7 +700,7 @@ export default function MusicHubPage() {
                     </div>
                     <div className={styles.playlistHeaderControlsActionStackRow}>
                       <span className={styles.privilegeRoleLabelBadge}>Role: {p.sharedWith?.find(s => s.email === currentUserData.email)?.permission?.toUpperCase()}</span>
-                      <button className={styles.purgePlaylistTriggerBtn} onClick={() => handleSelfRemoveFromSharedPlaylist(p)}>Disconnect Me</button>
+                      <button className={styles.purgePlaylistTriggerBtn} onClick={() => handleSelfRemoveFromSharedPlaylist(p)}>Leave Playlist</button>
                     </div>
                   </div>
 
@@ -660,13 +735,14 @@ export default function MusicHubPage() {
                           
                           {hasWritePrivileges && (
                             <div className={styles.trackMutationInterfaceActionCluster}>
+                              <button className={styles.mutationArrowBtn} title="Eject Track Out of Playlist" onClick={(e) => { e.stopPropagation(); handlePullTrackOutOfPlaylist(p.id, idx); }}>📤 Pull Out</button>
                               <button className={styles.mutationArrowBtn} onClick={(e) => { 
                                 e.stopPropagation(); 
                                 setEditingTrackIndex(`${p.id}-${idx}`); 
                                 setEditingTrackForm({ title: t.title, url: t.url }); 
                               }}>✏️</button>
-                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>🗘▲</button>
-                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>🗘▼</button>
+                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>🗘 ▲</button>
+                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>🗘 ▼</button>
                               <button className={styles.mutationDeleteBtn} onClick={(e) => { e.stopPropagation(); handleEraseTrackFromContainer(p.id, idx); }}>✕</button>
                             </div>
                           )}
@@ -675,7 +751,7 @@ export default function MusicHubPage() {
                     })}
                   </div>
 
-                  {/* COMMENTS WINDOW INSIDE SHARED ECOSYSTEM COMPONENT CONTAINER */}
+                  {/* COMMENTS LOG WINDOW */}
                   <div className={styles.playlistCommentsMatrixModule}>
                     <h5 className={styles.commentWidgetLabelHead}>💬 Team Feed Streams</h5>
                     <div className={styles.commentTimelineScrollTrackContainer}>
@@ -704,7 +780,7 @@ export default function MusicHubPage() {
           )}
         </div>
 
-        {/* COMPACTED CORE HARDWARE TERMINAL */}
+        {/* RECONFIGURED SLIM MEDIA PLAYER TERMINAL */}
         <div className={styles.sidePlaybackSection}>
           <div className={styles.stickyHardwarePlayer}>
             <h3 className={styles.blockTitle}>⚡ Core Hardware</h3>
@@ -717,15 +793,15 @@ export default function MusicHubPage() {
                     src={`https://www.youtube.com/embed/${activeVideoId}?enablejsapi=1&autoplay=1&modestbranding=1&rel=0`}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
-                    title="Hardware Frame Engine"
+                    title="Active Output Pipeline"
                   />
                 </div>
                 <div className={styles.activeTrackConsoleDisplayMetadata}>
-                  <p className={styles.livePulseHeading}>⚡ RECEIVING STREAM:</p>
+                  <p className={styles.livePulseHeading}>⚡ ACTIVE OUTPUT:</p>
                   <p className={styles.liveTrackTitleText}>{currentTrackTitle}</p>
                   {activePlaylistQueue && (
                     <span className={styles.queueMetadataContextIndexChip}>
-                      Index: {activeTrackIndex + 1} / {activePlaylistQueue.tracks?.length} inside &ldquo;{activePlaylistQueue.name}&rdquo;
+                      Track {activeTrackIndex + 1} of {activePlaylistQueue.tracks?.length} inside &ldquo;{activePlaylistQueue.name}&rdquo;
                     </span>
                   )}
                 </div>
@@ -733,55 +809,55 @@ export default function MusicHubPage() {
             ) : (
               <div className={styles.playerStandbyScreen}>
                 <div className={styles.standbyRadarPulse}>🎵</div>
-                <p>Terminal Idle.</p>
+                <p>Hardware Core Offline</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* MODAL CONFIG COMPILATION */}
+      {/* COMPILATION CREATION MODAL */}
       {showPlaylistModal && (
         <div className={styles.modalOverlay} onClick={() => setShowPlaylistModal(false)}>
           <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
-            <h3 className={styles.modalHeadline}>📁 Compile Storage Vault Node</h3>
+            <h3 className={styles.modalHeadline}>📁 New Playlist Entry Node</h3>
             <div className={styles.modalFormStack}>
               <input 
                 className={styles.formInput} 
-                placeholder="Playlist Unique Alias..." 
+                placeholder="Playlist Name..." 
                 value={playlistForm.name}
                 onChange={e => setPlaylistForm({...playlistForm, name: e.target.value})}
               />
               <textarea 
                 className={styles.formTextarea} 
-                placeholder="Meta Context Allocation Description..." 
+                placeholder="Description details..." 
                 value={playlistForm.desc}
                 onChange={e => setPlaylistForm({...playlistForm, desc: e.target.value})}
               />
               <div className={styles.modalActions}>
                 <button className={styles.cancelBtn} onClick={() => setShowPlaylistModal(false)}>Cancel</button>
-                <button className={styles.confirmBtn} onClick={handleCreatePlaylist}>Deploy</button>
+                <button className={styles.confirmBtn} onClick={handleCreatePlaylist}>Save</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL SHARE ACCESS ROUTER */}
+      {/* ACCESS PRIVILEGE DISTRIBUTION MODAL */}
       {showShareModal && (
         <div className={styles.modalOverlay} onClick={() => setShowShareModal(false)}>
           <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
-            <h3 className={styles.modalHeadline}>🌐 Target Distribution Router</h3>
+            <h3 className={styles.modalHeadline}>🌐 Permission Distribution Router</h3>
             <div className={styles.modalFormStack}>
               <select 
                 className={styles.formSelect}
                 value={shareForm.targetEmail}
                 onChange={e => setShareForm({...shareForm, targetEmail: e.target.value})}
               >
-                <option value="">-- Select Destination User Entity --</option>
+                <option value="">-- Choose Target Account Node --</option>
                 {allUsers.map(u => (
                   <option key={u.id} value={u.email}>
-                    {u.displayName || u.name || 'Workspace Account'} ({u.email})
+                    {u.displayName || u.name || 'Workspace Profile'} ({u.email})
                   </option>
                 ))}
               </select>
