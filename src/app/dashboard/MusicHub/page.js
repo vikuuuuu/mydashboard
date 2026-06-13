@@ -384,8 +384,8 @@ export default function MusicHubPage() {
       const updatedEmailsList = [...(selectedPlaylist.sharedWithEmails || []), shareForm.targetEmail];
 
       await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { 
-        sharedWith: updatedShareList,
-        sharedWithEmails: updatedEmailsList
+        sharedWith: updatedShareList, 
+        sharedWithEmails: updatedEmailsList 
       });
       
       await fetchCoreHubData();
@@ -416,7 +416,7 @@ export default function MusicHubPage() {
       const updatedSharedWith = playlist.sharedWith.filter(s => s.email !== targetEmail);
       const updatedEmails = playlist.sharedWithEmails.filter(e => e !== targetEmail);
       await updateDoc(doc(db, 'playlists', playlist.id), { 
-        sharedWith: updatedShareList, 
+        sharedWith: updatedSharedWith, 
         sharedWithEmails: updatedEmails 
       });
       await fetchCoreHubData();
