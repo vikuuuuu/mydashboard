@@ -37,11 +37,11 @@
   --text3: #5a6490;
 }
 
-/* TOP BAR SYSTEM */
 .topBar {
   display: flex; align-items: center; gap: 12px; padding: 12px 24px;
   background: var(--surface); border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-sm); position: sticky; top: 0; z-index: 100;
+  flex-wrap: wrap;
 }
 .backBtn {
   background: var(--surface2); border: 1px solid var(--border2);
@@ -57,7 +57,7 @@
   border-radius: 8px; display: flex; align-items: center; justify-content: center;
   color: #fff; box-shadow: 0 4px 12px rgba(67,97,238,0.3);
 }
-.searchWrap { flex: 1; max-width: 380px; margin-left: auto; }
+.searchWrap { flex: 1; max-width: 380px; margin-left: auto; min-width: 200px; }
 .searchInput {
   width: 100%; background: var(--surface2); border: 1.5px solid var(--border);
   color: var(--text); padding: 8px 16px; border-radius: 999px; outline: none; font-size: 13px;
@@ -72,13 +72,11 @@
   border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 
-/* SPLIT CORE GRID SYSTEM */
 .contentLayout {
   display: grid; grid-template-columns: 1fr 380px; gap: 24px;
   padding: 24px 32px; max-width: 1440px; margin: 0 auto; width: 100%; box-sizing: border-box;
 }
 
-/* TRACK INPUT HUB INGEST MODULE */
 .ingestContainer {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-sm); margin-bottom: 24px;
@@ -95,15 +93,14 @@
   padding: 10px 20px; border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.2s;
 }
 
-/* NAVIGATION INTERFACES */
-.tabRow { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.tabRow { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; scrollbar-width: none; }
+.tabRow::-webkit-scrollbar { display: none; }
 .tabLink {
   padding: 12px 20px; border: none; border-bottom: 2.5px solid transparent;
-  background: none; color: var(--text2); font-weight: 600; font-size: 13.5px; cursor: pointer;
+  background: none; color: var(--text2); font-weight: 600; font-size: 13.5px; cursor: pointer; white-space: nowrap;
 }
 .tabLinkActive { color: var(--accent); border-bottom-color: var(--accent); }
 
-/* TRACK LIST INTERFACE PATTERNS */
 .viewPortContainer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
 .sectionHeading { font-size: 13px; font-weight: 700; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; }
 .trackListList { display: flex; flex-direction: column; gap: 8px; }
@@ -116,42 +113,62 @@
 .rowPlayIndicator { color: var(--accent); font-size: 11px; }
 .rowDetails { flex: 1; min-width: 0; }
 .trackName { font-size: 13.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.trackSub { font-size: 11px; color: var(--text3); margin-top: 2px; }
 .trackIdx { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text3); }
 
-/* VERTICAL PLAYLIST MEGA BLOCK SHEETS */
 .playlistsVerticalGrid { display: flex; flex-direction: column; gap: 20px; }
 .playlistMegaBlock {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-sm);
 }
-.playlistBlockHeader { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px; }
+.playlistMegaBlockShared {
+  background: var(--surface); border: 1.5px dashed var(--border2);
+  border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-sm);
+}
+.playlistBlockHeader { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px; gap: 10px; }
 .pNameDisplay { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; }
 .pDescDisplay { font-size: 12px; color: var(--text2); margin-top: 2px; }
 .shareActionTrigger {
   background: var(--accent-soft); color: var(--accent); border: 1px solid transparent;
-  padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 .shareActionTrigger:hover { border-color: var(--accent); }
 .playlistTracksInternalWrap { display: flex; flex-direction: column; gap: 6px; }
 
-/* HARDWARE STICKY MONITOR SCREEN PLAYBACK */
+/* SHARED MATRIX NODE TRANSPARENCY DISPLAY */
+.sharedUsersTransparencyTrack {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  padding: 8px 12px; background: var(--surface2); border-radius: var(--radius-sm); margin-bottom: 12px;
+}
+.transparencyLabel { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; }
+.sharedUserChipBadge {
+  background: var(--surface); border: 1px solid var(--border2); font-size: 11.5px;
+  padding: 3px 10px; border-radius: 999px; color: var(--text2);
+}
+.privilegeRoleLabelBadge {
+  background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+  padding: 4px 10px; border-radius: 999px; text-transform: uppercase;
+}
+
 .stickyHardwarePlayer {
   position: sticky; top: 88px; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--radius);
   padding: 20px; box-shadow: var(--shadow-md);
 }
-.videoEmbedContainer { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-sm); overflow: hidden; background: #000; margin-top: 10px; }
+.playerWrapperContainer { display: flex; flex-direction: column; gap: 12px; }
+.videoEmbedContainer { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-sm); overflow: hidden; background: #000; }
 .youtubeIframeHardware { width: 100%; height: 100%; border: none; }
+.activeTrackConsoleDisplayMetadata { background: var(--surface2); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.livePulseHeading { font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; }
+.liveTrackTitleText { font-size: 13px; font-weight: 700; color: var(--text); margin-top: 4px; }
+
 .playerStandbyScreen {
   aspect-ratio: 16 / 10; display: flex; flex-direction: column;
   align-items: center; justify-content: center; text-align: center;
-  background: var(--surface2); border-radius: var(--radius-sm); padding: 20px; margin-top: 10px;
+  background: var(--surface2); border-radius: var(--radius-sm); padding: 20px;
 }
 .standbyRadarPulse { font-size: 2.5rem; margin-bottom: 12px; animation: bounce 2s infinite ease-in-out; }
 @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 
-/* DIALOG WINDOW MODAL ARCHITECTURES */
 .modalOverlay {
   position: fixed; inset: 0; background: rgba(15,17,26,0.6); z-index: 200;
   backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -164,10 +181,20 @@
 .cancelBtn, .confirmBtn { flex: 1; padding: 10px; border-radius: var(--radius-sm); font-weight: 700; cursor: pointer; font-size: 13px; font-family: 'Syne', sans-serif; }
 .cancelBtn { background: none; border: 1.5px solid var(--border2); color: var(--text2); }
 .confirmBtn { background: var(--accent); color: #fff; border: none; }
-.shareSubtitleSub { font-size: 12.5px; color: var(--text2); margin-bottom: 12px; }
 
-/* ERROR UTILITIES EXTRAS */
 .loadingScreen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: var(--bg); color: var(--text2); }
 .spinnerInner { width: 24px; height: 24px; border: 2.5px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .emptyText, .emptyTextSub { font-size: 12.5px; color: var(--text3); text-align: center; padding: 14px; }
+
+/* ── ADAPTIVE RESPONSIVE COMPATIBILITY MATRIX ── */
+@media (max-width: 1024px) {
+  .contentLayout { grid-template-columns: 1fr; gap: 20px; padding: 16px; }
+  .stickyHardwarePlayer { position: relative; top: 0; }
+}
+
+@media (max-width: 768px) {
+  .formRow { grid-template-columns: 1fr; gap: 8px; }
+  .topBar { padding: 10px 14px; gap: 8px; }
+  .searchWrap { order: 4; max-width: 100%; width: 100%; margin-left: 0; }
+}
