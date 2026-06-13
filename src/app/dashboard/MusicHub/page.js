@@ -465,7 +465,7 @@ export default function MusicHubPage() {
       
       {/* ── TOP BAR ENGINE ── */}
       <div className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>← Portal</button>
+        <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>← Back</button>
         <div className={styles.brand}><div className={styles.brandIcon}>🎵</div>Music Hub</div>
         <div className={styles.searchWrap}>
           <input 
