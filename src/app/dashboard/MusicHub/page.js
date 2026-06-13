@@ -51,10 +51,11 @@ export default function MusicHubPage() {
 
   // Inline Editing States
   const [editingPlaylistId, setEditingPlaylistId] = useState(null);
-  const [editingPlaylistName, setEditingPlaylistName] = useState('');
+  const [playlistEditForm, setPlaylistEditForm] = useState({ name: '', desc: '' });
   const [editingTrackIndex, setEditingTrackIndex] = useState(null);
   const [editingTrackForm, setEditingTrackForm] = useState({ title: '', url: '' });
   const [editingQuickSongId, setEditingQuickSongId] = useState(null);
+  const [editingQuickSongTitle, setEditingQuickSongTitle] = useState('');
 
   // Form Binding Structures
   const [playlistForm, setPlaylistForm] = useState({ name: '', desc: '' });
@@ -172,10 +173,13 @@ export default function MusicHubPage() {
     }
   };
 
-  const handleUpdatePlaylistNameInline = async (playlistId) => {
-    if (!editingPlaylistName.trim()) return;
+  const handleUpdatePlaylistInline = async (playlistId) => {
+    if (!playlistEditForm.name.trim()) return alert('Playlist name cannot be empty.');
     try {
-      await updateDoc(doc(db, 'playlists', playlistId), { name: editingPlaylistName.trim() });
+      await updateDoc(doc(db, 'playlists', playlistId), { 
+        name: playlistEditForm.name.trim(),
+        desc: playlistEditForm.desc.trim()
+      });
       setEditingPlaylistId(null);
       await fetchCoreHubData();
     } catch (err) {
@@ -208,7 +212,7 @@ export default function MusicHubPage() {
     }
   };
 
-  /* ── TRACK MATRIX OPERATIONS (MOVE INTO/OUT OF PLAYLIST) ── */
+  /* ── TRACK MATRIX OPERATIONS ── */
   const handleAddSong = async () => {
     if (!songForm.title.trim() || !songForm.url.trim()) return alert('Please fill in all inputs.');
     const targetVideoId = extractYoutubeId(songForm.url);
@@ -319,10 +323,10 @@ export default function MusicHubPage() {
     }
   };
 
-  const handleUpdateQuickSongInline = async (id, updatedTitle) => {
-    if (!updatedTitle.trim()) return;
+  const handleUpdateQuickSongInline = async (id) => {
+    if (!editingQuickSongTitle.trim()) return alert('Track title required.');
     try {
-      await updateDoc(doc(db, `users/${uid}/quicksongs`, id), { title: updatedTitle.trim() });
+      await updateDoc(doc(db, `users/${uid}/quicksongs`, id), { title: editingQuickSongTitle.trim() });
       setEditingQuickSongId(null);
       await fetchCoreHubData();
     } catch (err) {
@@ -360,7 +364,7 @@ export default function MusicHubPage() {
     }
   };
 
-  /* ── SHARING & PRIVILEGES MUTATIONS ── */
+  /* ── SHARING PRIVILEGES MUTATIONS ── */
   const handleApplySharePermission = async () => {
     if (!shareForm.targetEmail) return alert('Select a workspace user.');
     if (selectedPlaylist.sharedWithEmails?.includes(shareForm.targetEmail)) {
@@ -412,7 +416,7 @@ export default function MusicHubPage() {
       const updatedSharedWith = playlist.sharedWith.filter(s => s.email !== targetEmail);
       const updatedEmails = playlist.sharedWithEmails.filter(e => e !== targetEmail);
       await updateDoc(doc(db, 'playlists', playlist.id), { 
-        sharedWith: updatedSharedWith, 
+        sharedWith: updatedShareList, 
         sharedWithEmails: updatedEmails 
       });
       await fetchCoreHubData();
@@ -528,26 +532,23 @@ export default function MusicHubPage() {
                 <div className={styles.trackListList}>
                   {searchedQuickSongs.map(song => (
                     <div key={song.id} className={styles.trackRowItem}>
-                      <div className={styles.clickableAreaRow} onClick={() => handleInitializePlaybackNode(song.url, song.title)}>
-                        <div className={styles.rowPlayIndicator}>▶</div>
+                      <div className={styles.clickableAreaRow}>
+                        <div className={styles.rowPlayIndicator} onClick={() => handleInitializePlaybackNode(song.url, song.title)}>▶</div>
                         {editingQuickSongId === song.id ? (
-                          <input 
-                            className={styles.inlineRenameInputItem}
-                            value={song.title}
-                            autoFocus
-                            onChange={e => {
-                              const updatedTitle = e.target.value;
-                              setQuickSongs(prev => prev.map(s => s.id === song.id ? { ...s, title: updatedTitle } : s));
-                            }}
-                            onBlur={e => handleUpdateQuickSongInline(song.id, e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleUpdateQuickSongInline(song.id, e.target.value)}
-                          />
+                          <div className={styles.inlineEditingActionRowWrapper}>
+                            <input 
+                              className={styles.inlineEditFieldInput}
+                              value={editingQuickSongTitle}
+                              onChange={e => setEditingQuickSongTitle(e.target.value)}
+                            />
+                            <button className={styles.inlineActionCheckButton} onClick={() => handleUpdateQuickSongInline(song.id)}>✓</button>
+                            <button className={styles.inlineActionCloseButton} onClick={() => setEditingQuickSongId(null)}>✕</button>
+                          </div>
                         ) : (
-                          <p className={styles.trackName}>{song.title}</p>
+                          <p className={styles.trackName} onClick={() => handleInitializePlaybackNode(song.url, song.title)}>{song.title}</p>
                         )}
                       </div>
                       <div className={styles.trackMutationInterfaceActionCluster}>
-                        {/* Dropdown to move an isolated track directly inside a playlist */}
                         <select 
                           className={styles.inlinePlaylistMoveSelector}
                           defaultValue=""
@@ -556,7 +557,7 @@ export default function MusicHubPage() {
                           <option value="" disabled>📁 Move To...</option>
                           {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
-                        <button className={styles.mutationArrowBtn} onClick={() => setEditingQuickSongId(song.id)}>✏️</button>
+                        <button className={styles.mutationArrowBtn} onClick={() => { setEditingQuickSongId(song.id); setEditingQuickSongTitle(song.title); }}>✏️</button>
                         <button className={styles.mutationDeleteBtn} onClick={() => handlePurgeQuickSong(song.id)}>✕</button>
                       </div>
                     </div>
@@ -574,20 +575,36 @@ export default function MusicHubPage() {
                   <div className={styles.playlistBlockHeader}>
                     <div className={styles.titleContextBlockHeaderWrap}>
                       {editingPlaylistId === p.id ? (
-                        <input 
-                          className={styles.inlineRenameInputItem}
-                          value={editingPlaylistName}
-                          autoFocus
-                          onChange={e => setEditingPlaylistName(e.target.value)}
-                          onBlur={() => handleUpdatePlaylistNameInline(p.id)}
-                          onKeyDown={e => e.key === 'Enter' && handleUpdatePlaylistNameInline(p.id)}
-                        />
+                        <div className={styles.inlinePlaylistMetaEditingGrid}>
+                          <input 
+                            className={styles.formInputInlineGroup}
+                            value={playlistEditForm.name}
+                            placeholder="Name..."
+                            onChange={e => setPlaylistEditForm({ ...playlistEditForm, name: e.target.value })}
+                          />
+                          <input 
+                            className={styles.formInputInlineGroup}
+                            value={playlistEditForm.desc}
+                            placeholder="Description..."
+                            onChange={e => setPlaylistEditForm({ ...playlistEditForm, desc: e.target.value })}
+                          />
+                          <div className={styles.inlineMetaSaveActionRowControl}>
+                            <button className={styles.inlineSaveCheckTrackBtn} onClick={() => handleUpdatePlaylistInline(p.id)}>✓ Save</button>
+                            <button className={styles.inlineCloseTrackCancelBtn} onClick={() => setEditingPlaylistId(null)}>✕</button>
+                          </div>
+                        </div>
                       ) : (
-                        <h4 className={styles.pNameDisplay} onClick={() => { setEditingPlaylistId(p.id); setEditingPlaylistName(p.name); }}>
-                          📁 {p.name} <span className={styles.pencilEditMiniTrigger}>✏️ Rename</span>
-                        </h4>
+                        <div>
+                          <h4 className={styles.pNameDisplay}>
+                            📁 {p.name} 
+                            <button className={styles.inlineTitleEditActionTriggerPencil} onClick={() => {
+                              setEditingPlaylistId(p.id);
+                              setPlaylistEditForm({ name: p.name, desc: p.desc || '' });
+                            }}>✏️ Edit</button>
+                          </h4>
+                          <p className={styles.pDescDisplay}>{p.desc || 'No description provided.'}</p>
+                        </div>
                       )}
-                      <p className={styles.pDescDisplay}>{p.desc || 'No description provided.'}</p>
                     </div>
                     <div className={styles.playlistHeaderControlsActionStackRow}>
                       <button className={styles.shareActionTrigger} onClick={() => { setSelectedPlaylist(p); setShowShareModal(true); }}>🌐 Share</button>
@@ -638,6 +655,7 @@ export default function MusicHubPage() {
                                   onChange={e => setEditingTrackForm({ ...editingTrackForm, url: e.target.value })}
                                 />
                                 <button className={styles.inlineSaveCheckTrackBtn} onClick={() => handleInlineTrackEditSave(p.id, idx)}>✓</button>
+                                <button className={styles.inlineCloseTrackCancelBtn} onClick={() => setEditingTrackIndex(null)}>✕</button>
                               </div>
                             ) : (
                               <div className={styles.rowDetails}><p className={styles.trackName}>{t.title}</p></div>
@@ -651,8 +669,8 @@ export default function MusicHubPage() {
                               setEditingTrackIndex(`${p.id}-${idx}`); 
                               setEditingTrackForm({ title: t.title, url: t.url }); 
                             }}>✏️</button>
-                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>🎘 ▲</button>
-                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>🗘 ▼</button>
+                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>▲</button>
+                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>▼</button>
                             <button className={styles.mutationDeleteBtn} onClick={(e) => { e.stopPropagation(); handleEraseTrackFromContainer(p.id, idx); }}>✕</button>
                           </div>
                         </div>
@@ -727,6 +745,7 @@ export default function MusicHubPage() {
                                   onChange={e => setEditingTrackForm({ ...editingTrackForm, url: e.target.value })}
                                 />
                                 <button className={styles.inlineSaveCheckTrackBtn} onClick={() => handleInlineTrackEditSave(p.id, idx)}>✓</button>
+                                <button className={styles.inlineCloseTrackCancelBtn} onClick={() => setEditingTrackIndex(null)}>✕</button>
                               </div>
                             ) : (
                               <div className={styles.rowDetails}><p className={styles.trackName}>{t.title}</p></div>
@@ -741,8 +760,8 @@ export default function MusicHubPage() {
                                 setEditingTrackIndex(`${p.id}-${idx}`); 
                                 setEditingTrackForm({ title: t.title, url: t.url }); 
                               }}>✏️</button>
-                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>🗘 ▲</button>
-                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>🗘 ▼</button>
+                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>▲</button>
+                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>▼</button>
                               <button className={styles.mutationDeleteBtn} onClick={(e) => { e.stopPropagation(); handleEraseTrackFromContainer(p.id, idx); }}>✕</button>
                             </div>
                           )}
