@@ -110,7 +110,7 @@
 }
 .activeTrackHighlightPulseNode .trackName { color: var(--accent) !important; font-weight: 700; }
 
-.rowPlayIndicator { color: var(--accent); font-size: 11px; }
+.rowPlayIndicator { color: var(--accent); font-size: 11px; cursor: pointer; }
 .rowDetails { flex: 1; min-width: 0; }
 .trackName { font-size: 13.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trackIdx { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text3); }
@@ -133,20 +133,35 @@
   padding: 4px 8px; border-radius: 4px; outline: none; cursor: pointer;
 }
 
-/* Inline Inputs Structure */
-.inlineRenameInputItem {
-  background: var(--surface); border: 1.5px solid var(--accent);
-  color: var(--text); padding: 4px 10px; border-radius: 6px; outline: none; font-size: 14px; width: 100%;
+/* Inline Editing Structures */
+.inlineEditingActionRowWrapper { display: flex; align-items: center; gap: 6px; width: 100%; }
+.inlineEditFieldInput {
+  background: var(--surface); border: 1.5px solid var(--accent); color: var(--text);
+  padding: 4px 10px; border-radius: 6px; outline: none; font-size: 13.5px; width: 60%;
 }
+.inlineActionCheckButton { background: var(--green); color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+.inlineActionCloseButton { background: var(--border2); color: var(--text); border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+
+.inlinePlaylistMetaEditingGrid { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 10px 0; }
+.formInputInlineGroup {
+  background: var(--surface2); border: 1.5px solid var(--border); color: var(--text);
+  padding: 8px 12px; border-radius: var(--radius-sm); outline: none; font-size: 13px;
+}
+.inlineMetaSaveActionRowControl { display: flex; gap: 8px; margin-top: 4px; }
+
+.inlinePlaylistMetaEditingGrid .inlineSaveCheckTrackBtn { background: var(--accent) !important; color: #fff; }
+.inlinePlaylistMetaEditingGrid .inlineCloseTrackCancelBtn { background: var(--surface2); color: var(--text2); border: 1px solid var(--border2); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
 .inlineTrackEditingInputsWrapper { display: flex; align-items: center; gap: 6px; flex: 1; }
 .formInputSmall {
   background: var(--surface); border: 1.5px solid var(--border); color: var(--text);
-  padding: 4px 8px; font-size: 12px; border-radius: 4px; width: 45%; outline: none;
+  padding: 4px 8px; font-size: 12px; border-radius: 4px; width: 40%; outline: none;
 }
 .formInputSmall:focus { border-color: var(--accent); }
 .inlineSaveCheckTrackBtn {
   background: var(--green); color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
 }
+.inlineCloseTrackCancelBtn { background: var(--surface2); border: 1px solid var(--border2); color: var(--text2); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 
 .playlistsVerticalGrid { display: flex; flex-direction: column; gap: 20px; }
 .playlistMegaBlock {
@@ -159,8 +174,8 @@
 }
 .playlistBlockHeader { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px; gap: 10px; }
 .titleContextBlockHeaderWrap { flex: 1; min-width: 0; }
-.pNameDisplay { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
-.pencilEditMiniTrigger { font-size: 11px; opacity: 0.5; color: var(--accent); }
+.pNameDisplay { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; display: inline-flex; align-items: center; gap: 8px; }
+.inlineTitleEditActionTriggerPencil { background: var(--accent-soft); color: var(--accent); border: none; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; cursor: pointer; }
 .playlistHeaderControlsActionStackRow { display: flex; align-items: center; gap: 6px; }
 
 .shareActionTrigger {
@@ -175,7 +190,7 @@
 
 /* SHARED METADATA BADGES & PERMISSION STRIPS */
 .sharedUsersTransparencyTrack {
-  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
   padding: 8px 12px; background: var(--surface2); border-radius: var(--radius-sm); margin-bottom: 12px;
 }
 .transparencyLabel { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; }
@@ -256,7 +271,7 @@
   .searchWrap { order: 4; max-width: 100%; width: 100%; margin-left: 0; min-width: 100%; }
   .mobileHiddenLabel { display: none; }
   .mobileVisibleLabel { display: inline-block; font-size: 14px; font-weight: bold; }
-  .trackMutationInterfaceActionCluster { opacity: 1; flex-wrap: wrap; }
+  .trackMutationInterfaceActionCluster { opacity: 1; flex-wrap: wrap; gap: 6px; margin-top: 8px; width: 100%; justify-content: flex-start; }
   .playlistBlockHeader { flex-direction: column; align-items: flex-start; gap: 8px; }
   .inlineTrackEditingInputsWrapper { flex-direction: column; gap: 4px; width: 100%; }
   .formInputSmall { width: 100%; }
