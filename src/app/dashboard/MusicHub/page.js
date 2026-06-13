@@ -21,47 +21,54 @@ const extractYoutubeId = (url) => {
 export default function MusicHubPage() {
   const router = useRouter();
   
-  // States Core Vector Matrix
+  // Core Authentication & Profile States
   const [uid, setUid] = useState(null);
   const [currentUserData, setCurrentUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  // Collections State Nodes
+  // Real-Time Reactive Local Vectors
   const [playlists, setPlaylists] = useState([]);
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
   const [quickSongs, setQuickSongs] = useState([]);
   const [allUsers, setAllUsers] = useState([]); 
 
-  // Viewport Control States
+  // Viewport Player & Tab States
   const [activeTab, setActiveTab] = useState('hub');
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [currentTrackTitle, setCurrentTrackTitle] = useState('');
   const [searchQ, setSearchQ] = useState('');
   const [isDark, setIsDark] = useState(false);
 
-  // Structural Playlist Automation References
+  // Automated Queue Matrix Binders
   const [activePlaylistQueue, setActivePlaylistQueue] = useState(null);
   const [activeTrackIndex, setActiveTrackIndex] = useState(-1);
   
-  // Modals Framework
+  // Modals Framework Control
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
 
-  // Forms Binding Node Structure
+  // Inline Inline Mutation Nodes (Editing Tracks/Playlists)
+  const [editingPlaylistId, setEditingPlaylistId] = useState(null);
+  const [editingPlaylistName, setEditingPlaylistIdName] = useState('');
+  const [editingTrackIndex, setEditingTrackIndex] = useState(null);
+  const [editingTrackForm, setEditingTrackForm] = useState({ title: '', url: '' });
+  const [editingQuickSongId, setEditingQuickSongId] = useState(null);
+
+  // Form Binding Structures
   const [playlistForm, setPlaylistForm] = useState({ name: '', desc: '' });
   const [songForm, setFormSong] = useState({ title: '', url: '', targetPlaylist: 'quick' });
   const [shareForm, setShareForm] = useState({ targetEmail: '', permission: 'view' });
+  const [commentInputs, setCommentInputs] = useState({}); // Bound by playlist.id
 
-  // YouTube Component API Reference Node
   const iframeRef = useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUid(user.uid);
-        setCurrentUserData({ uid: user.uid, email: user.email, displayName: user.displayName || 'Viku User' });
+        setCurrentUserData({ uid: user.uid, email: user.email, displayName: user.displayName || 'User Node' });
         logToolUsage({ userId: user.uid, tool: 'MusicHub', action: 'PAGE_VISIT' });
       } else {
         router.push('/login');
@@ -91,7 +98,7 @@ export default function MusicHubPage() {
       setAllUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== uid));
 
     } catch (err) {
-      console.error('System synchronization pipeline anomaly:', err);
+      console.error('System synchronization error:', err);
     } finally {
       setLoading(false);
     }
@@ -103,7 +110,6 @@ export default function MusicHubPage() {
     }
   }, [uid, currentUserData, fetchCoreHubData]);
 
-  // Automated Sequential Continuous Tracking Module Logic Node
   const triggerNextSequentialTrack = useCallback(() => {
     if (!activePlaylistQueue || activeTrackIndex === -1) return;
     const nextIndex = activeTrackIndex + 1;
@@ -113,25 +119,20 @@ export default function MusicHubPage() {
       setActiveVideoId(nextTrack.videoId);
       setCurrentTrackTitle(nextTrack.title);
     } else {
-      // Loop ends or resetting pipeline indices
       setActiveTrackIndex(-1);
       setActivePlaylistQueue(null);
     }
   }, [activePlaylistQueue, activeTrackIndex]);
 
-  // Window Inter-Process Event Listener for Catching Iframe State Events
   useEffect(() => {
     const handleGlobalMessageInversion = (event) => {
       if (event.origin !== 'https://www.youtube.com' && event.origin !== 'https://www.youtube-nocookie.com') return;
       try {
         const data = JSON.parse(event.data);
         if (data.event === 'infoDelivery' && data.info && data.info.playerState === 0) {
-          // YT PlayerState 0 represents track has finished compilation playback cycle
           triggerNextSequentialTrack();
         }
-      } catch (e) {
-        // Safe check block configuration
-      }
+      } catch (e) {}
     };
     window.addEventListener('message', handleGlobalMessageInversion);
     return () => window.removeEventListener('message', handleGlobalMessageInversion);
@@ -139,15 +140,16 @@ export default function MusicHubPage() {
 
   const handleInitializePlaybackNode = (url, title, playlistContext = null, index = -1) => {
     const vId = extractYoutubeId(url);
-    if (!vId) return alert('Invalid Resource Location Matrix Node.');
+    if (!vId) return alert('Invalid stream asset location.');
     setActiveVideoId(vId);
     setCurrentTrackTitle(title);
     setActivePlaylistQueue(playlistContext);
     setActiveTrackIndex(index);
   };
 
+  /* ── PLAYLIST CORE MUTATIONS ── */
   const handleCreatePlaylist = async () => {
-    if (!playlistForm.name.trim()) return alert('Playlist name validation required.');
+    if (!playlistForm.name.trim()) return alert('Playlist name required.');
     setSaving(true);
     try {
       const payload = {
@@ -159,6 +161,7 @@ export default function MusicHubPage() {
         tracks: [],
         sharedWith: [], 
         sharedWithEmails: [],
+        comments: [],
         createdAt: serverTimestamp()
       };
       await addDoc(collection(db, 'playlists'), payload);
@@ -172,10 +175,47 @@ export default function MusicHubPage() {
     }
   };
 
+  const handleUpdatePlaylistNameInline = async (playlistId) => {
+    if (!editingPlaylistName.trim()) return;
+    try {
+      await updateDoc(doc(db, 'playlists', playlistId), { name: editingPlaylistName.trim() });
+      setEditingPlaylistId(null);
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handlePurgeWholePlaylistNode = async (playlistId) => {
+    if (!confirm('Permanently delete this playlist structure?')) return;
+    try {
+      await deleteDoc(doc(db, 'playlists', playlistId));
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSelfRemoveFromSharedPlaylist = async (playlist) => {
+    if (!confirm('Remove yourself from this shared ecosystem playlist?')) return;
+    try {
+      const updatedSharedWith = playlist.sharedWith.filter(u => u.email !== currentUserData.email);
+      const updatedEmails = playlist.sharedWithEmails.filter(e => e !== currentUserData.email);
+      await updateDoc(doc(db, 'playlists', playlist.id), {
+        sharedWith: updatedSharedWith,
+        sharedWithEmails: updatedEmails
+      });
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  /* ── TRACKS CONFIGURATION MUTATIONS ── */
   const handleAddSong = async () => {
-    if (!songForm.title.trim() || !songForm.url.trim()) return alert('Parameters insufficient.');
+    if (!songForm.title.trim() || !songForm.url.trim()) return alert('Fields cannot be blank.');
     const targetVideoId = extractYoutubeId(songForm.url);
-    if (!targetVideoId) return alert('Invalid stream token target URL layout.');
+    if (!targetVideoId) return alert('Invalid YouTube stream pattern URL.');
 
     setSaving(true);
     try {
@@ -188,19 +228,17 @@ export default function MusicHubPage() {
 
       if (songForm.targetPlaylist === 'quick') {
         await addDoc(collection(db, `users/${uid}/quicksongs`), { ...trackPayload, createdAt: serverTimestamp() });
+        setQuickSongs(prev => [trackPayload, ...prev]); // Optimistic instant render update
       } else {
         const playlistId = songForm.targetPlaylist;
-        const combined = [...playlists, ...sharedPlaylists];
-        const currentP = combined.find(p => p.id === playlistId);
+        const currentP = allAvailablePlaylists.find(p => p.id === playlistId);
         
-        if (currentP.ownerId !== uid) {
-          const collabToken = currentP.sharedWith?.find(s => s.email === currentUserData.email);
-          if (collabToken?.permission !== 'edit') {
-            alert('Access Privileges Restrained. Read-Only schema configuration applied by original administrator node.');
-            setSaving(false);
-            return;
-          }
+        if (currentP.ownerId !== uid && currentP.sharedWith?.find(s => s.email === currentUserData.email)?.permission !== 'edit') {
+          alert('Write privilege missing.');
+          setSaving(false);
+          return;
         }
+
         const updatedTracks = [...(currentP.tracks || []), trackPayload];
         await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
       }
@@ -214,22 +252,105 @@ export default function MusicHubPage() {
     }
   };
 
+  const handleInlineTrackEditSave = async (playlistId, index) => {
+    const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
+    if (!targetP || !editingTrackForm.title.trim()) return;
+
+    const vId = extractYoutubeId(editingTrackForm.url);
+    if (!vId) return alert('Invalid video location asset URL.');
+
+    const updatedTracks = [...targetP.tracks];
+    updatedTracks[index] = {
+      title: editingTrackForm.title.trim(),
+      url: editingTrackForm.url.trim(),
+      videoId: vId,
+      createdAt: updatedTracks[index].createdAt
+    };
+
+    try {
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
+      setEditingTrackIndex(null);
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleEraseTrackFromContainer = async (playlistId, index) => {
+    if (!confirm('Remove track from this playlist container?')) return;
+    const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
+    if (!targetP) return;
+
+    const modifiedTracks = (targetP.tracks || []).filter((_, idx) => idx !== index);
+    try {
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks: modifiedTracks });
+      setPlaylists(prev => prev.map(p => p.id === playlistId ? { ...p, tracks: modifiedTracks } : p)); // Instant rendering sync mutation
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  /* ── ISOLATED QUICK NOTE TRACKS EDIT/DELETE ── */
+  const handleUpdateQuickSongInline = async (id, updatedTitle) => {
+    if (!updatedTitle.trim()) return;
+    try {
+      await updateDoc(doc(db, `users/${uid}/quicksongs`, id), { title: updatedTitle.trim() });
+      setEditingQuickSongId(null);
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handlePurgeQuickSong = async (id) => {
+    if (!confirm('Delete this single quick asset?')) return;
+    try {
+      await deleteDoc(doc(db, `users/${uid}/quicksongs`, id));
+      setQuickSongs(prev => prev.filter(s => s.id !== id));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAlterTrackSortingIndices = async (playlistId, index, direction) => {
+    const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
+    if (!targetP || !targetP.tracks) return;
+    
+    const factoryTracks = [...targetP.tracks];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= factoryTracks.length) return;
+
+    const backupBufferElement = factoryTracks[index];
+    factoryTracks[index] = factoryTracks[targetIndex];
+    factoryTracks[targetIndex] = backupBufferElement;
+
+    try {
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks: factoryTracks });
+      await fetchCoreHubData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  /* ── ACCESS PRIVILEGE DISTRIBUTION ROUTING ── */
   const handleApplySharePermission = async () => {
-    if (!shareForm.targetEmail) return alert('Select routing profile logic destination.');
-    const isAlreadyShared = selectedPlaylist.sharedWithEmails?.includes(shareForm.targetEmail);
-    if (isAlreadyShared) return alert('Vector Constraint: Workspace profile already holds live permission mappings.');
+    if (!shareForm.targetEmail) return alert('Select target collaborator identity profile.');
+    if (selectedPlaylist.sharedWithEmails?.includes(shareForm.targetEmail)) {
+      return alert('Identity constraint violation: Asset already paired to this link configuration.');
+    }
 
     setSaving(true);
     try {
-      const targetUser = allUsers.find(u => u.email === shareForm.targetEmail || u.id === shareForm.targetEmail);
+      const targetUser = allUsers.find(u => u.email === shareForm.targetEmail);
       const shareObject = {
-        email: targetUser?.email || shareForm.targetEmail,
-        name: targetUser?.displayName || targetUser?.name || 'Workspace Account Asset',
+        email: shareForm.targetEmail,
+        name: targetUser?.displayName || targetUser?.name || 'Workspace Account',
         permission: shareForm.permission
       };
 
       const updatedShareList = [...(selectedPlaylist.sharedWith || []), shareObject];
-      const updatedEmailsList = [...(selectedPlaylist.sharedWithEmails || []), targetUser?.email || shareForm.targetEmail];
+      const updatedEmailsList = [...(selectedPlaylist.sharedWithEmails || []), shareForm.targetEmail];
 
       await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { 
         sharedWith: updatedShareList,
@@ -246,45 +367,25 @@ export default function MusicHubPage() {
     }
   };
 
-  const handleAlterTrackSortingIndices = async (playlistId, index, direction) => {
-    const targetP = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
-    if (!targetP || !targetP.tracks) return;
-    
-    const factoryTracks = [...targetP.tracks];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= factoryTracks.length) return;
+  /* ── PLAYLIST LIVE COMMENT FEEDS ── */
+  const handlePostCommentNode = async (playlistId) => {
+    const cText = commentInputs[playlistId];
+    if (!cText || !cText.trim()) return;
 
-    // Atomic element positioning inversion swap node array
-    const backupBufferElement = factoryTracks[index];
-    factoryTracks[index] = factoryTracks[targetIndex];
-    factoryTracks[targetIndex] = backupBufferElement;
-
-    try {
-      await updateDoc(doc(db, 'playlists', playlistId), { tracks: factoryTracks });
-      await fetchCoreHubData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleEraseTrackFromContainer = async (playlistId, index) => {
-    if (!confirm('Evict this track asset entry from current configuration container?')) return;
-    const targetP = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
+    const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
     if (!targetP) return;
 
-    const modifiedTracks = (targetP.tracks || []).filter((_, idx) => idx !== index);
-    try {
-      await updateDoc(doc(db, 'playlists', playlistId), { tracks: modifiedTracks });
-      await fetchCoreHubData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    const newCommentObject = {
+      authorName: currentUserData.displayName,
+      authorEmail: currentUserData.email,
+      text: cText.trim(),
+      timestamp: new Date().toISOString()
+    };
 
-  const handlePurgeWholePlaylistNode = async (playlistId) => {
-    if (!confirm('Wipe complete playlist system array node? Critical operation.')) return;
+    const updatedComments = [...(targetP.comments || []), newCommentObject];
     try {
-      await deleteDoc(doc(db, 'playlists', playlistId));
+      await updateDoc(doc(db, 'playlists', playlistId), { comments: updatedComments });
+      setCommentInputs(prev => ({ ...prev, [playlistId]: '' }));
       await fetchCoreHubData();
     } catch (err) {
       console.error(err);
@@ -299,7 +400,7 @@ export default function MusicHubPage() {
     return [...playlists, ...sharedPlaylists];
   }, [playlists, sharedPlaylists]);
 
-  if (loading) return <div className={styles.loadingScreen}><div className={styles.spinnerInner} /><p>Initializing Studio Core Routing...</p></div>;
+  if (loading) return <div className={styles.loadingScreen}><div className={styles.spinnerInner} /><p>Initializing Studio Infrastructure...</p></div>;
 
   return (
     <div className={styles.page} data-theme={isDark ? 'dark' : ''}>
@@ -311,7 +412,7 @@ export default function MusicHubPage() {
         <div className={styles.searchWrap}>
           <input 
             className={styles.searchInput} 
-            placeholder="Search your localized audio streams..." 
+            placeholder="Search audio tracks..." 
             value={searchQ} 
             onChange={e => setSearchQ(e.target.value)} 
           />
@@ -323,12 +424,11 @@ export default function MusicHubPage() {
         <button className={styles.themeBtn} onClick={() => setIsDark(!isDark)}>{isDark ? '☀️' : '🌙'}</button>
       </div>
 
-      {/* ── MAIN CONTENT DUAL SPLIT SYSTEM ── */}
+      {/* ── CONTENT GRID SYSTEM ── */}
       <div className={styles.contentLayout}>
-        
         <div className={styles.mainFeedSection}>
           
-          {/* TRACK INGESTION HUB MODULE */}
+          {/* TRACK INGESTION MODULE */}
           <div className={styles.ingestContainer}>
             <h3 className={styles.blockTitle}>🧬 Load Direct Audio Stream Target</h3>
             <div className={styles.formRow}>
@@ -360,24 +460,41 @@ export default function MusicHubPage() {
             </div>
           </div>
 
-          {/* TABS CONTROLLER BAR */}
           <div className={styles.tabRow}>
             <button className={`${styles.tabLink} ${activeTab === 'hub' ? styles.tabLinkActive : ''}`} onClick={() => setActiveTab('hub')}>🎛️ Streams Base</button>
             <button className={`${styles.tabLink} ${activeTab === 'playlists' ? styles.tabLinkActive : ''}`} onClick={() => setActiveTab('playlists')}>📁 Vault Storage ({playlists.length})</button>
             <button className={`${styles.tabLink} ${activeTab === 'shared' ? styles.tabLinkActive : ''}`} onClick={() => setActiveTab('shared')}>🌐 Shared Ecosystem ({sharedPlaylists.length})</button>
           </div>
 
-          {/* VIEWPORTS CORE ENGINE */}
+          {/* VIEWPORTS */}
           {activeTab === 'hub' && (
             <div className={styles.viewPortContainer}>
               <h4 className={styles.sectionHeading}>⚡ Single Stream Engine (No Playlist Records)</h4>
               {searchedQuickSongs.length === 0 ? <p className={styles.emptyText}>No single track matrix vectors loaded.</p> : (
                 <div className={styles.trackListList}>
                   {searchedQuickSongs.map(song => (
-                    <div key={song.id} className={styles.trackRowItem} onClick={() => handleInitializePlaybackNode(song.url, song.title)}>
-                      <div className={styles.rowPlayIndicator}>▶</div>
-                      <div className={styles.rowDetails}>
-                        <p className={styles.trackName}>{song.title}</p>
+                    <div key={song.id} className={styles.trackRowItem}>
+                      <div className={styles.clickableAreaRow} onClick={() => handleInitializePlaybackNode(song.url, song.title)}>
+                        <div className={styles.rowPlayIndicator}>▶</div>
+                        {editingQuickSongId === song.id ? (
+                          <input 
+                            className={styles.inlineRenameInputItem}
+                            value={song.title}
+                            autoFocus
+                            onChange={e => {
+                              const updatedTitle = e.target.value;
+                              setQuickSongs(prev => prev.map(s => s.id === song.id ? { ...s, title: updatedTitle } : s));
+                            }}
+                            onBlur={e => handleUpdateQuickSongInline(song.id, e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleUpdateQuickSongInline(song.id, e.target.value)}
+                          />
+                        ) : (
+                          <p className={styles.trackName}>{song.title}</p>
+                        )}
+                      </div>
+                      <div className={styles.trackMutationInterfaceActionCluster}>
+                        <button className={styles.mutationArrowBtn} onClick={() => setEditingQuickSongId(song.id)}>✏️</button>
+                        <button className={styles.mutationDeleteBtn} onClick={() => handlePurgeQuickSong(song.id)}>✕</button>
                       </div>
                     </div>
                   ))}
@@ -386,110 +503,211 @@ export default function MusicHubPage() {
             </div>
           )}
 
-          {/* OWN PLAYLISTS VIEWPORT */}
+          {/* OWN STORAGE STORAGE HUB */}
           {activeTab === 'playlists' && (
             <div className={styles.playlistsVerticalGrid}>
               {playlists.length === 0 ? <p className={styles.emptyText}>Vault is currently clean of containers.</p> : playlists.map(p => (
                 <div key={p.id} className={styles.playlistMegaBlock}>
                   <div className={styles.playlistBlockHeader}>
-                    <div>
-                      <h4 className={styles.pNameDisplay}>📁 {p.name}</h4>
-                      <p className={styles.pDescDisplay}>{p.desc || 'No descriptor metadata assigned.'}</p>
+                    <div className={styles.titleContextBlockHeaderWrap}>
+                      {editingPlaylistId === p.id ? (
+                        <input 
+                          className={styles.inlineRenameInputItem}
+                          value={editingPlaylistName}
+                          autoFocus
+                          onChange={e => setEditingPlaylistIdName(e.target.value)}
+                          onBlur={() => handleUpdatePlaylistNameInline(p.id)}
+                          onKeyDown={e => e.key === 'Enter' && handleUpdatePlaylistNameInline(p.id)}
+                        />
+                      ) : (
+                        <h4 className={styles.pNameDisplay} onClick={() => { setEditingPlaylistId(p.id); setEditingPlaylistIdName(p.name); }}>
+                          📁 {p.name} <span className={styles.pencilEditMiniTrigger}>✏️</span>
+                        </h4>
+                      )}
+                      <p className={styles.pDescDisplay}>{p.desc || 'No metadata description.'}</p>
                     </div>
                     <div className={styles.playlistHeaderControlsActionStackRow}>
-                      <button className={styles.shareActionTrigger} onClick={() => { setSelectedPlaylist(p); setShowShareModal(true); }}>🌐 Route</button>
+                      <button className={styles.shareActionTrigger} onClick={() => { setSelectedPlaylist(p); setShowShareModal(true); }}>🌐 Share</button>
                       <button className={styles.purgePlaylistTriggerBtn} onClick={() => handlePurgeWholePlaylistNode(p.id)}>🗑️ Purge</button>
                     </div>
                   </div>
 
-                  {/* SHARED SUBSCRIBERS TRANSPARENCY TRACK CHIPS */}
                   {p.sharedWith && p.sharedWith.length > 0 && (
                     <div className={styles.sharedUsersTransparencyTrack}>
-                      <span className={styles.transparencyLabel}>Nodes Connected:</span>
+                      <span className={styles.transparencyLabel}>Shared Workspace Nodes:</span>
                       {p.sharedWith.map((user, idx) => (
-                        <span key={idx} className={styles.sharedUserChipBadge} title={user.email}>
-                          👤 {user.name} <strong>({user.permission})</strong>
-                        </span>
+                        <span key={idx} className={styles.sharedUserChipBadge}>👤 {user.name} ({user.permission})</span>
                       ))}
                     </div>
                   )}
 
+                  {/* INITIALIZE INTERNAL CONTAINER TRACKS LISTING MODULE */}
                   <div className={styles.playlistTracksInternalWrap}>
-                    {!p.tracks || p.tracks.length === 0 ? <p className={styles.emptyTextSub}>No active streaming items linked to this array container node.</p> : p.tracks.map((t, idx) => {
+                    {!p.tracks || p.tracks.length === 0 ? <p className={styles.emptyTextSub}>No streaming items linked to this array container.</p> : p.tracks.map((t, idx) => {
                       const isCurrentlyActiveStreamNode = activePlaylistQueue?.id === p.id && activeTrackIndex === idx;
+                      const isCurrentlyEditingTrackIndex = editingTrackIndex === `${p.id}-${idx}`;
+
                       return (
-                        <div 
-                          key={idx} 
-                          className={`${styles.trackRowItem} ${isCurrentlyActiveStreamNode ? styles.activeTrackHighlightPulseNode : ''}`} 
-                          onClick={() => handleInitializePlaybackNode(t.url, t.title, p, idx)}
-                        >
-                          <span className={styles.trackIdx}>{(idx + 1).toString().padStart(2, '0')}</span>
-                          <div className={styles.rowDetails}><p className={styles.trackName}>{t.title}</p></div>
+                        <div key={idx} className={`${styles.trackRowItem} ${isCurrentlyActiveStreamNode ? styles.activeTrackHighlightPulseNode : ''}`}>
+                          <div className={styles.clickableAreaRow} onClick={() => handleInitializePlaybackNode(t.url, t.title, p, idx)}>
+                            <span className={styles.trackIdx}>{(idx + 1).toString().padStart(2, '0')}</span>
+                            {isCurrentlyEditingTrackIndex ? (
+                              <div className={styles.inlineTrackEditingInputsWrapper} onClick={e => e.stopPropagation()}>
+                                <input 
+                                  className={styles.formInputSmall} 
+                                  value={editingTrackForm.title} 
+                                  onChange={e => setEditingTrackForm({ ...editingTrackForm, title: e.target.value })}
+                                />
+                                <input 
+                                  className={styles.formInputSmall} 
+                                  value={editingTrackForm.url} 
+                                  onChange={e => setEditingTrackForm({ ...editingTrackForm, url: e.target.value })}
+                                />
+                                <button className={styles.inlineSaveCheckTrackBtn} onClick={() => handleInlineTrackEditSave(p.id, idx)}>✓</button>
+                              </div>
+                            ) : (
+                              <div className={styles.rowDetails}><p className={styles.trackName}>{t.title}</p></div>
+                            )}
+                          </div>
                           
-                          {/* DYNAMIC REARRANGEMENT AND EDITING INTERFACES CONTROLS */}
-                          <div className={styles.trackMutationInterfaceActionCluster} onClick={e => e.stopPropagation()}>
-                            <button className={styles.mutationArrowBtn} onClick={() => handleAlterTrackSortingIndices(p.id, idx, 'up')} disabled={idx === 0}>▲</button>
-                            <button className={styles.mutationArrowBtn} onClick={() => handleAlterTrackSortingIndices(p.id, idx, 'down')} disabled={idx === p.tracks.length - 1}>▼</button>
-                            <button className={styles.mutationDeleteBtn} onClick={() => handleEraseTrackFromContainer(p.id, idx)}>✕</button>
+                          <div className={styles.trackMutationInterfaceActionCluster}>
+                            <button className={styles.mutationArrowBtn} onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setEditingTrackIndex(`${p.id}-${idx}`); 
+                              setEditingTrackForm({ title: t.title, url: t.url }); 
+                            }}>✏️</button>
+                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>🗘▲</button>
+                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>🗘▼</button>
+                            <button className={styles.mutationDeleteBtn} onClick={(e) => { e.stopPropagation(); handleEraseTrackFromContainer(p.id, idx); }}>✕</button>
                           </div>
                         </div>
                       );
                     })}
                   </div>
+
+                  {/* COMMENT SUB-SYSTEM MODULE SYSTEM BLOCK */}
+                  <div className={styles.playlistCommentsMatrixModule}>
+                    <h5 className={styles.commentWidgetLabelHead}>💬 Team Feed Streams</h5>
+                    <div className={styles.commentTimelineScrollTrackContainer}>
+                      {p.comments && p.comments.map((c, cIdx) => (
+                        <div key={cIdx} className={styles.commentBubbleNodeItem}>
+                          <span className={styles.commentAuthorStamp}><strong>{c.authorName}</strong>:</span>
+                          <span className={styles.commentTextBodyOutput}>{c.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={styles.commentIngestionRowSubmitField}>
+                      <input 
+                        className={styles.formInput}
+                        placeholder="Write inside project feed..."
+                        value={commentInputs[p.id] || ''}
+                        onChange={e => setCommentInputs({ ...commentInputs, [p.id]: e.target.value })}
+                        onKeyDown={e => e.key === 'Enter' && handlePostCommentNode(p.id)}
+                      />
+                      <button className={styles.sendCommentArrowTriggerBtn} onClick={() => handlePostCommentNode(p.id)}>Send</button>
+                    </div>
+                  </div>
+
                 </div>
               ))}
             </div>
           )}
 
-          {/* SHARED VIEWPORT HUB MODULE */}
+          {/* SHARED RECEPTIONS HUB TAB */}
           {activeTab === 'shared' && (
             <div className={styles.playlistsVerticalGrid}>
-              {sharedPlaylists.length === 0 ? <p className={styles.emptyText}>No cross-platform shared streams targeting your configuration yet.</p> : sharedPlaylists.map(p => (
+              {sharedPlaylists.length === 0 ? <p className={styles.emptyText}>No cross-platform shared configurations found.</p> : sharedPlaylists.map(p => (
                 <div key={p.id} className={styles.playlistMegaBlockShared}>
                   <div className={styles.playlistBlockHeader}>
                     <div>
                       <h4 className={styles.pNameDisplay}>🌐 {p.name}</h4>
                       <p className={styles.pDescDisplay}>Author Node: <strong>{p.ownerName}</strong> ({p.ownerEmail})</p>
                     </div>
-                    <span className={styles.privilegeRoleLabelBadge}>
-                      Role: {p.sharedWith?.find(s => s.email === currentUserData.email)?.permission?.toUpperCase() || 'VIEW'}
-                    </span>
+                    <div className={styles.playlistHeaderControlsActionStackRow}>
+                      <span className={styles.privilegeRoleLabelBadge}>Role: {p.sharedWith?.find(s => s.email === currentUserData.email)?.permission?.toUpperCase()}</span>
+                      <button className={styles.purgePlaylistTriggerBtn} onClick={() => handleSelfRemoveFromSharedPlaylist(p)}>Disconnect Me</button>
+                    </div>
                   </div>
 
                   <div className={styles.playlistTracksInternalWrap}>
                     {!p.tracks || p.tracks.length === 0 ? <p className={styles.emptyTextSub}>Shared pipeline buffer empty.</p> : p.tracks.map((t, idx) => {
                       const isCurrentlyActiveStreamNode = activePlaylistQueue?.id === p.id && activeTrackIndex === idx;
+                      const hasWritePrivileges = p.sharedWith?.find(s => s.email === currentUserData.email)?.permission === 'edit';
+                      const isCurrentlyEditingTrackIndex = editingTrackIndex === `${p.id}-${idx}`;
+
                       return (
-                        <div 
-                          key={idx} 
-                          className={`${styles.trackRowItem} ${isCurrentlyActiveStreamNode ? styles.activeTrackHighlightPulseNode : ''}`} 
-                          onClick={() => handleInitializePlaybackNode(t.url, t.title, p, idx)}
-                        >
-                          <span className={styles.trackIdx}>{(idx + 1).toString().padStart(2, '0')}</span>
-                          <div className={styles.rowDetails}><p className={styles.trackName}>{t.title}</p></div>
+                        <div key={idx} className={`${styles.trackRowItem} ${isCurrentlyActiveStreamNode ? styles.activeTrackHighlightPulseNode : ''}`}>
+                          <div className={styles.clickableAreaRow} onClick={() => handleInitializePlaybackNode(t.url, t.title, p, idx)}>
+                            <span className={styles.trackIdx}>{(idx + 1).toString().padStart(2, '0')}</span>
+                            {isCurrentlyEditingTrackIndex ? (
+                              <div className={styles.inlineTrackEditingInputsWrapper} onClick={e => e.stopPropagation()}>
+                                <input 
+                                  className={styles.formInputSmall} 
+                                  value={editingTrackForm.title} 
+                                  onChange={e => setEditingTrackForm({ ...editingTrackForm, title: e.target.value })}
+                                />
+                                <input 
+                                  className={styles.formInputSmall} 
+                                  value={editingTrackForm.url} 
+                                  onChange={e => setEditingTrackForm({ ...editingTrackForm, url: e.target.value })}
+                                />
+                                <button className={styles.inlineSaveCheckTrackBtn} onClick={() => handleInlineTrackEditSave(p.id, idx)}>✓</button>
+                              </div>
+                            ) : (
+                              <div className={styles.rowDetails}><p className={styles.trackName}>{t.title}</p></div>
+                            )}
+                          </div>
                           
-                          {/* COLLABORATIVE WRITER ACCESS CONDITION NODE */}
-                          {p.sharedWith?.find(s => s.email === currentUserData.email)?.permission === 'edit' && (
-                            <div className={styles.trackMutationInterfaceActionCluster} onClick={e => e.stopPropagation()}>
-                              <button className={styles.mutationArrowBtn} onClick={() => handleAlterTrackSortingIndices(p.id, idx, 'up')} disabled={idx === 0}>▲</button>
-                              <button className={styles.mutationArrowBtn} onClick={() => handleAlterTrackSortingIndices(p.id, idx, 'down')} disabled={idx === p.tracks.length - 1}>▼</button>
-                              <button className={styles.mutationDeleteBtn} onClick={() => handleEraseTrackFromContainer(p.id, idx)}>✕</button>
+                          {hasWritePrivileges && (
+                            <div className={styles.trackMutationInterfaceActionCluster}>
+                              <button className={styles.mutationArrowBtn} onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setEditingTrackIndex(`${p.id}-${idx}`); 
+                                setEditingTrackForm({ title: t.title, url: t.url }); 
+                              }}>✏️</button>
+                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>🗘▲</button>
+                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>🗘▼</button>
+                              <button className={styles.mutationDeleteBtn} onClick={(e) => { e.stopPropagation(); handleEraseTrackFromContainer(p.id, idx); }}>✕</button>
                             </div>
                           )}
                         </div>
                       );
                     })}
                   </div>
+
+                  {/* COMMENTS WINDOW INSIDE SHARED ECOSYSTEM COMPONENT CONTAINER */}
+                  <div className={styles.playlistCommentsMatrixModule}>
+                    <h5 className={styles.commentWidgetLabelHead}>💬 Team Feed Streams</h5>
+                    <div className={styles.commentTimelineScrollTrackContainer}>
+                      {p.comments && p.comments.map((c, cIdx) => (
+                        <div key={cIdx} className={styles.commentBubbleNodeItem}>
+                          <span className={styles.commentAuthorStamp}><strong>{c.authorName}</strong>:</span>
+                          <span className={styles.commentTextBodyOutput}>{c.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={styles.commentIngestionRowSubmitField}>
+                      <input 
+                        className={styles.formInput}
+                        placeholder="Write inside project feed..."
+                        value={commentInputs[p.id] || ''}
+                        onChange={e => setCommentInputs({ ...commentInputs, [p.id]: e.target.value })}
+                        onKeyDown={e => e.key === 'Enter' && handlePostCommentNode(p.id)}
+                      />
+                      <button className={styles.sendCommentArrowTriggerBtn} onClick={() => handlePostCommentNode(p.id)}>Send</button>
+                    </div>
+                  </div>
+
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* RIGHT HARDWARE BACKBONE RECEPTOR EMBED PLAYER */}
+        {/* COMPACTED CORE HARDWARE TERMINAL */}
         <div className={styles.sidePlaybackSection}>
           <div className={styles.stickyHardwarePlayer}>
-            <h3 className={styles.blockTitle}>⚡ Core Hardware Terminal</h3>
+            <h3 className={styles.blockTitle}>⚡ Core Hardware</h3>
             {activeVideoId ? (
               <div className={styles.playerWrapperContainer}>
                 <div className={styles.videoEmbedContainer}>
@@ -499,15 +717,15 @@ export default function MusicHubPage() {
                     src={`https://www.youtube.com/embed/${activeVideoId}?enablejsapi=1&autoplay=1&modestbranding=1&rel=0`}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
-                    title="Active Stream Frame Node"
+                    title="Hardware Frame Engine"
                   />
                 </div>
                 <div className={styles.activeTrackConsoleDisplayMetadata}>
-                  <p className={styles.livePulseHeading}>⚡ ACTIVE RECEIVING PULSE:</p>
+                  <p className={styles.livePulseHeading}>⚡ RECEIVING STREAM:</p>
                   <p className={styles.liveTrackTitleText}>{currentTrackTitle}</p>
                   {activePlaylistQueue && (
                     <span className={styles.queueMetadataContextIndexChip}>
-                      Queue Index: Asset {activeTrackIndex + 1} of {activePlaylistQueue.tracks?.length} inside &ldquo;{activePlaylistQueue.name}&rdquo;
+                      Index: {activeTrackIndex + 1} / {activePlaylistQueue.tracks?.length} inside &ldquo;{activePlaylistQueue.name}&rdquo;
                     </span>
                   )}
                 </div>
@@ -515,8 +733,7 @@ export default function MusicHubPage() {
             ) : (
               <div className={styles.playerStandbyScreen}>
                 <div className={styles.standbyRadarPulse}>🎵</div>
-                <p>Hardware Stack Unmounted.</p>
-                <span>Select any cross-platform media element node target.</span>
+                <p>Terminal Idle.</p>
               </div>
             )}
           </div>
@@ -542,7 +759,7 @@ export default function MusicHubPage() {
                 onChange={e => setPlaylistForm({...playlistForm, desc: e.target.value})}
               />
               <div className={styles.modalActions}>
-                <button className={styles.cancelBtn} onClick={() => setShowPlaylistModal(false)}>Terminate</button>
+                <button className={styles.cancelBtn} onClick={() => setShowPlaylistModal(false)}>Cancel</button>
                 <button className={styles.confirmBtn} onClick={handleCreatePlaylist}>Deploy</button>
               </div>
             </div>
@@ -550,7 +767,7 @@ export default function MusicHubPage() {
         </div>
       )}
 
-      {/* MODAL ROUTING CONTROLLER MAP */}
+      {/* MODAL SHARE ACCESS ROUTER */}
       {showShareModal && (
         <div className={styles.modalOverlay} onClick={() => setShowShareModal(false)}>
           <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
@@ -564,7 +781,7 @@ export default function MusicHubPage() {
                 <option value="">-- Select Destination User Entity --</option>
                 {allUsers.map(u => (
                   <option key={u.id} value={u.email}>
-                     {u.displayName || u.name || 'Workspace Account'} ({u.email})
+                    {u.displayName || u.name || 'Workspace Account'} ({u.email})
                   </option>
                 ))}
               </select>
@@ -579,8 +796,8 @@ export default function MusicHubPage() {
               </select>
 
               <div className={styles.modalActions}>
-                <button className={styles.cancelBtn} onClick={() => setShowShareModal(false)}>Wipe</button>
-                <button className={styles.confirmBtn} onClick={handleApplySharePermission}>Bind Connection</button>
+                <button className={styles.cancelBtn} onClick={() => setShowShareModal(false)}>Cancel</button>
+                <button className={styles.confirmBtn} onClick={handleApplySharePermission}>Bind</button>
               </div>
             </div>
           </div>
