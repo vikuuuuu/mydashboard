@@ -44,7 +44,7 @@ const DEFAULT_TOOLS = [
   { id: "studytool",        title: "Study Tool",          desc: "Manage timetable & study materials",        icon: "📚", color: "#4361ee", pinned: false },
   { id: "watchtracker",     title: "Watch Tracker Tool", desc: "Manage watched movies and web series",     icon: "📺", color: "#4361ee", pinned: false },
   { id: "panorama",         title: "Panorama 360 Degree",desc: "Panorama 360 degree capture",               icon: "🌐", color: "#4361ee", pinned: false },
-  { id: "musichub",         title: "Viku Music Hub",     desc: "Stream YouTube tracks & share playlists",  icon: "🎵", color: "#7209b7", pinned: false },
+  { id: "MusicHub",         title: "My Music Hub",     desc: "Stream YouTube tracks & share playlists",  icon: "🎵", color: "#7209b7", pinned: false },
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
