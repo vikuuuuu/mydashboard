@@ -122,9 +122,16 @@
   background: var(--surface); border: 1px solid var(--border2);
   color: var(--text2); border-radius: 4px; cursor: pointer;
   padding: 4px 8px; font-size: 11px; display: flex; align-items: center; justify-content: center;
+  white-space: nowrap;
 }
 .mutationArrowBtn:disabled { opacity: 0.25; cursor: not-allowed; }
 .mutationDeleteBtn:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+
+.inlinePlaylistMoveSelector {
+  background: var(--surface); border: 1px solid var(--border2);
+  color: var(--text2); font-size: 11px; font-weight: 600;
+  padding: 4px 8px; border-radius: 4px; outline: none; cursor: pointer;
+}
 
 /* Inline Inputs Structure */
 .inlineRenameInputItem {
@@ -153,7 +160,7 @@
 .playlistBlockHeader { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px; gap: 10px; }
 .titleContextBlockHeaderWrap { flex: 1; min-width: 0; }
 .pNameDisplay { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
-.pencilEditMiniTrigger { font-size: 11px; opacity: 0.5; }
+.pencilEditMiniTrigger { font-size: 11px; opacity: 0.5; color: var(--accent); }
 .playlistHeaderControlsActionStackRow { display: flex; align-items: center; gap: 6px; }
 
 .shareActionTrigger {
@@ -166,16 +173,17 @@
 }
 .playlistTracksInternalWrap { display: flex; flex-direction: column; gap: 6px; }
 
-/* SHARED METADATA BADGES */
+/* SHARED METADATA BADGES & PERMISSION STRIPS */
 .sharedUsersTransparencyTrack {
-  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
   padding: 8px 12px; background: var(--surface2); border-radius: var(--radius-sm); margin-bottom: 12px;
 }
 .transparencyLabel { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; }
-.sharedUserChipBadge {
-  background: var(--surface); border: 1px solid var(--border2); font-size: 11px;
-  padding: 3px 10px; border-radius: 999px; color: var(--text2);
-}
+.sharedUserChipBadgeRow { display: flex; align-items: center; gap: 4px; background: var(--surface); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border2); }
+.sharedUserChipBadge { font-size: 11px; color: var(--text); }
+.inlinePermissionSelectMini { background: none; border: none; font-size: 11px; color: var(--accent); font-weight: 700; cursor: pointer; outline: none; }
+.inlineRevokeUserBtn { background: none; border: none; color: var(--danger); font-size: 11px; cursor: pointer; padding: 0 2px; }
+
 .privilegeRoleLabelBadge {
   background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
   padding: 4px 10px; border-radius: 999px; text-transform: uppercase;
@@ -190,7 +198,7 @@
   max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; padding-right: 4px;
 }
 .commentBubbleNodeItem {
-  background: var(--surface2); padding: 6px 12px; border-radius: 6px; font-size: 12.5px; line-height: 1.4;
+  background: var(--surface2); padding: 6px 12px; border-radius: 6px; font-size: 12.5px; line-height: 1.4; text-align: left;
 }
 .commentAuthorStamp { color: var(--accent); margin-right: 6px; }
 .commentTextBodyOutput { color: var(--text); }
@@ -205,10 +213,10 @@
   border: 1px solid var(--border); border-radius: var(--radius);
   padding: 14px; box-shadow: var(--shadow-md);
 }
-.playerWrapperContainer { display: flex; flex-direction: column; gap: 10px; }
-.videoEmbedContainer { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-sm); overflow: hidden; background: #000; }
+.playerWrapperContainer { display: flex; flex-direction: column; gap: 12px; }
+.videoEmbedContainer { width: 100%;  aspect-ratio: 16 / 9; border-radius: var(--radius-sm); overflow: hidden; background: #000; }
 .youtubeIframeHardware { width: 100%; height: 100%; border: none; }
-.activeTrackConsoleDisplayMetadata { background: var(--surface2); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.activeTrackConsoleDisplayMetadata { background: var(--surface2); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); text-align: left; }
 .livePulseHeading { font-size: 9px; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; }
 .liveTrackTitleText { font-size: 12.5px; font-weight: 700; color: var(--text); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .queueMetadataContextIndexChip { display: inline-block; font-size: 10.5px; color: var(--text2); margin-top: 4px; font-style: italic; }
@@ -237,7 +245,7 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 .emptyText, .emptyTextSub { font-size: 12.5px; color: var(--text3); text-align: center; padding: 14px; }
 
-/* RESPONSIVE LAYOUT MATRIX GRAPH */
+/* RESPONSIVE LAYOUT BREAKPOINTS */
 @media (max-width: 1024px) {
   .contentLayout { grid-template-columns: 1fr; gap: 24px; padding: 16px; }
   .stickyHardwarePlayer { position: relative; top: 0; }
@@ -248,7 +256,7 @@
   .searchWrap { order: 4; max-width: 100%; width: 100%; margin-left: 0; min-width: 100%; }
   .mobileHiddenLabel { display: none; }
   .mobileVisibleLabel { display: inline-block; font-size: 14px; font-weight: bold; }
-  .trackMutationInterfaceActionCluster { opacity: 1; }
+  .trackMutationInterfaceActionCluster { opacity: 1; flex-wrap: wrap; }
   .playlistBlockHeader { flex-direction: column; align-items: flex-start; gap: 8px; }
   .inlineTrackEditingInputsWrapper { flex-direction: column; gap: 4px; width: 100%; }
   .formInputSmall { width: 100%; }
