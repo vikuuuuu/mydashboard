@@ -31,19 +31,20 @@ import styles from "./page.module.css";
 
 /* ─── Default Tools (Updated with Media Downloader) ─────────────────────────────────────── */
 const DEFAULT_TOOLS = [
-  { id: "Notes",            title: "Notes",              desc: "Create & export notes",                    icon: "📝", color: "#4361ee", pinned: false },
-  { id: "myfinancials",     title: "My Financials",      desc: "Track investments & profit",               icon: "💰", color: "#0f9d6e", pinned: false },
-  { id: "media-downloader", title: "Media Downloader",   desc: "Download high quality videos & images",    icon: "📥", color: "#3a86ff", pinned: false },
-  { id: "img-to-pdf",       title: "Image → PDF Tool",        desc: "Convert images to PDF",                    icon: "🖼️", color: "#f77f00", pinned: false },
-  { id: "all-in-one-img",   title: "All-in-One Image",   desc: "Convert, resize, crop, compress & more",  icon: "🎨", color: "#9b5de5", pinned: false },
-  { id: "pdftool",          title: "PDF Tool",           desc: "Resize, convert & edit PDFs",              icon: "📄", color: "#e63946", pinned: false },
-  { id: "video-to-img",     title: "Video → Image",      desc: "Capture video frames as images",           icon: "🎬", color: "#3a86ff", pinned: false },
-  { id: "webchat",          title: "Web Chat",           desc: "Real-time messaging",                      icon: "💬", color: "#f15bb5", pinned: false, isWebchat: true },
-  { id: "myvideoeditor",    title: "My Video Editor",    desc: "Edit short-form videos",                   icon: "🎞️", color: "#06d6a0", pinned: false },
-  { id: "file-studio",      title: "All File Studio",    desc: "Preview & convert any file format",        icon: "📂", color: "#4361ee", pinned: false },
-  { id: "studytool",        title: "Study Tool",         desc: "Manage timetable & study materials",       icon: "📚", color: "#4361ee", pinned: false },
+  { id: "Notes",            title: "Notes",               desc: "Create & export notes",                icon: "📝", color: "#4361ee", pinned: false },
+  { id: "myfinancials",     title: "My Financials",       desc: "Track investments & profit",           icon: "💰", color: "#0f9d6e", pinned: false },
+  { id: "media-downloader", title: "Media Downloader",    desc: "Download high quality videos & images", icon: "📥", color: "#3a86ff", pinned: false },
+  { id: "img-to-pdf",       title: "Image → PDF Tool",         desc: "Convert images to PDF",                     icon: "🖼️", color: "#f77f00", pinned: false },
+  { id: "all-in-one-img",   title: "All-in-One Image",    desc: "Convert, resize, crop, compress & more",  icon: "🎨", color: "#9b5de5", pinned: false },
+  { id: "pdftool",          title: "PDF Tool",            desc: "Resize, convert & edit PDFs",               icon: "📄", color: "#e63946", pinned: false },
+  { id: "video-to-img",     title: "Video → Image",       desc: "Capture video frames as images",           icon: "🎬", color: "#3a86ff", pinned: false },
+  { id: "webchat",          title: "Web Chat",            desc: "Real-time messaging",                       icon: "💬", color: "#f15bb5", pinned: false, isWebchat: true },
+  { id: "myvideoeditor",    title: "My Video Editor",     desc: "Edit short-form videos",                    icon: "🎞️", color: "#06d6a0", pinned: false },
+  { id: "file-studio",      title: "All File Studio",     desc: "Preview & convert any file format",         icon: "📂", color: "#4361ee", pinned: false },
+  { id: "studytool",        title: "Study Tool",          desc: "Manage timetable & study materials",        icon: "📚", color: "#4361ee", pinned: false },
   { id: "watchtracker",     title: "Watch Tracker Tool", desc: "Manage watched movies and web series",     icon: "📺", color: "#4361ee", pinned: false },
-  { id: "panorama",         title: "Panorama 360 Degree",desc: "Panorama 360 degree capture",              icon: "🌐", color: "#4361ee", pinned: false },
+  { id: "panorama",         title: "Panorama 360 Degree",desc: "Panorama 360 degree capture",               icon: "🌐", color: "#4361ee", pinned: false },
+  { id: "musichub",         title: "Viku Music Hub",     desc: "Stream YouTube tracks & share playlists",  icon: "🎵", color: "#7209b7", pinned: false },
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
