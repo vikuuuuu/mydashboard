@@ -9,7 +9,7 @@ import {
   query,
   where,
   onSnapshot,
-  doc
+  doc,
 } from "firebase/firestore";
 import { auth, signOutUser } from "@/lib/firebaseAuth";
 import { getSessionId, pingSession, clearSession } from "@/lib/sessionManager";
@@ -29,28 +29,28 @@ import {
 } from "lucide-react";
 import styles from "./page.module.css";
 
-/* ─── Default Tools (Updated with Media Downloader) ─────────────────────────────────────── */
+/* ─── Default Tools ─────────────────────────────────────────────────────── */
 const DEFAULT_TOOLS = [
-  { id: "Notes",            title: "Notes",               desc: "Create & export notes",                icon: "📝", color: "#4361ee", pinned: false },
-  { id: "myfinancials",     title: "My Financials",       desc: "Track investments & profit",           icon: "💰", color: "#0f9d6e", pinned: false },
+  { id: "Notes",            title: "Notes",               desc: "Create & export notes",                 icon: "📝", color: "#4361ee", pinned: false },
+  { id: "myfinancials",     title: "My Financials",       desc: "Track investments & profit",            icon: "💰", color: "#0f9d6e", pinned: false },
   { id: "media-downloader", title: "Media Downloader",    desc: "Download high quality videos & images", icon: "📥", color: "#3a86ff", pinned: false },
-  { id: "img-to-pdf",       title: "Image → PDF Tool",         desc: "Convert images to PDF",                     icon: "🖼️", color: "#f77f00", pinned: false },
-  { id: "all-in-one-img",   title: "All-in-One Image",    desc: "Convert, resize, crop, compress & more",  icon: "🎨", color: "#9b5de5", pinned: false },
-  { id: "pdftool",          title: "PDF Tool",            desc: "Resize, convert & edit PDFs",               icon: "📄", color: "#e63946", pinned: false },
-  { id: "video-to-img",     title: "Video → Image",       desc: "Capture video frames as images",           icon: "🎬", color: "#3a86ff", pinned: false },
-  { id: "webchat",          title: "Web Chat",            desc: "Real-time messaging",                       icon: "💬", color: "#f15bb5", pinned: false, isWebchat: true },
-  { id: "myvideoeditor",    title: "My Video Editor",     desc: "Edit short-form videos",                    icon: "🎞️", color: "#06d6a0", pinned: false },
-  { id: "file-studio",      title: "All File Studio",     desc: "Preview & convert any file format",         icon: "📂", color: "#4361ee", pinned: false },
-  { id: "studytool",        title: "Study Tool",          desc: "Manage timetable & study materials",        icon: "📚", color: "#4361ee", pinned: false },
-  { id: "watchtracker",     title: "Watch Tracker Tool", desc: "Manage watched movies and web series",     icon: "📺", color: "#4361ee", pinned: false },
-  { id: "panorama",         title: "Panorama 360 Degree",desc: "Panorama 360 degree capture",               icon: "🌐", color: "#4361ee", pinned: false },
-  { id: "MusicHub",         title: "My Music Hub",     desc: "Stream YouTube tracks & share playlists",  icon: "🎵", color: "#7209b7", pinned: false },
+  { id: "img-to-pdf",       title: "Image → PDF Tool",    desc: "Convert images to PDF",                 icon: "🖼️", color: "#f77f00", pinned: false },
+  { id: "all-in-one-img",   title: "All-in-One Image",    desc: "Convert, resize, crop, compress & more",icon: "🎨", color: "#9b5de5", pinned: false },
+  { id: "pdftool",          title: "PDF Tool",            desc: "Resize, convert & edit PDFs",           icon: "📄", color: "#e63946", pinned: false },
+  { id: "video-to-img",     title: "Video → Image",       desc: "Capture video frames as images",        icon: "🎬", color: "#3a86ff", pinned: false },
+  { id: "webchat",          title: "Web Chat",            desc: "Real-time messaging",                   icon: "💬", color: "#f15bb5", pinned: false, isWebchat: true },
+  { id: "myvideoeditor",    title: "My Video Editor",     desc: "Edit short-form videos",                icon: "🎞️", color: "#06d6a0", pinned: false },
+  { id: "file-studio",      title: "All File Studio",     desc: "Preview & convert any file format",     icon: "📂", color: "#4361ee", pinned: false },
+  { id: "studytool",        title: "Study Tool",          desc: "Manage timetable & study materials",    icon: "📚", color: "#4361ee", pinned: false },
+  { id: "watchtracker",     title: "Watch Tracker",       desc: "Track movies and web series",           icon: "📺", color: "#4361ee", pinned: false },
+  { id: "panorama",         title: "Panorama 360°",       desc: "360 degree panorama capture & view",    icon: "🌐", color: "#4361ee", pinned: false },
+  { id: "MusicHub",         title: "My Music Hub",        desc: "Stream YouTube tracks & share playlists",icon: "🎵", color: "#7209b7", pinned: false },
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
 const VIEW_ICONS = {
-  grid:     <LayoutGrid size={15} />,
-  list:     <List size={15} />,
+  grid:    <LayoutGrid size={15} />,
+  list:    <List size={15} />,
   compact: <Columns size={15} />,
 };
 const STORAGE_KEY = "dash_tool_order_v2";
@@ -62,6 +62,7 @@ const getInitials = (name, email) => {
   }
   return email?.[0]?.toUpperCase() || "U";
 };
+
 const avatarPalette = ["#4361ee","#0f9d6e","#f77f00","#e63946","#9b5de5","#3a86ff","#f15bb5"];
 const getAvatarColor = (str = "") => {
   let h = 0;
@@ -70,7 +71,7 @@ const getAvatarColor = (str = "") => {
 };
 
 const TYPE_META = {
-  major: { label: "Major",  color: "#4361ee", bg: "rgba(67,97,238,0.09)" },
+  major: { label: "Major",  color: "#4361ee", bg: "rgba(67,97,238,0.09)"  },
   minor: { label: "Minor",  color: "#0f9d6e", bg: "rgba(15,157,110,0.09)" },
   patch: { label: "Patch",  color: "#f77f00", bg: "rgba(247,127,0,0.09)"  },
   fix:   { label: "Bugfix", color: "#e63946", bg: "rgba(230,57,70,0.09)"  },
@@ -79,24 +80,29 @@ const TYPE_META = {
 export default function DashboardPage() {
   const router = useRouter();
 
-  const [user, setUser]           = useState(null);
-  const [avatarErr, setAvatarErr] = useState(false);
-  const [dropOpen, setDropOpen]   = useState(false);
-  const [view, setView]           = useState("grid");
-  const [search, setSearch]       = useState("");
-  const [tools, setTools]         = useState(DEFAULT_TOOLS);
-  const [unread, setUnread]       = useState(0);
+  const [user,        setUser]        = useState(null);
+  const [avatarErr,   setAvatarErr]   = useState(false);
+  const [dropOpen,    setDropOpen]    = useState(false);
+  const [view,        setView]        = useState("grid");
+  const [search,      setSearch]      = useState("");
+  const [tools,       setTools]       = useState(DEFAULT_TOOLS);
+  const [unread,      setUnread]      = useState(0);
   const [missedVoice, setMissedVoice] = useState(0);
   const [missedVideo, setMissedVideo] = useState(0);
-  const [kicked, setKicked]       = useState(false);
 
+  // FIXED: kicked state only set when a DIFFERENT active session is detected
+  // NOT triggered by our own session or by stale/cleared sessions
+  const [kicked,       setKicked]       = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [activeVersion, setActiveVersion] = useState(null); 
+  const [activeVersion, setActiveVersion] = useState(null);
 
   const dragIdx  = useRef(null);
   const dragOver = useRef(null);
   const dropRef  = useRef(null);
   const pingRef  = useRef(null);
+  // Track if we've already set up the session watcher
+  // Prevents re-triggering kicked state on initial mount
+  const sessionWatcherReady = useRef(false);
 
   /* ── Load saved tool order ── */
   useEffect(() => {
@@ -110,7 +116,7 @@ export default function DashboardPage() {
     } catch (_) {}
   }, []);
 
-  /* ── Auth + session tracking + Webchat Subscription Fix ── */
+  /* ── Auth + session + Webchat subscriptions ── */
   useEffect(() => {
     let sessionUnsub = () => {};
     let u1 = () => {};
@@ -123,17 +129,48 @@ export default function DashboardPage() {
 
       const db  = getFirestore();
       const uid = u.uid;
+      const mySessionId = getSessionId();
 
-      // Realtime session watcher
-      sessionUnsub = onSnapshot(doc(db, "user_sessions", uid), (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data();
-        if (data?.sessionId && data.sessionId !== getSessionId()) setKicked(true);
-      });
+      /* ── Session conflict watcher ──
+         KEY FIX: We wait a short delay before starting the watcher.
+         This prevents detecting our own freshly-registered session
+         as a "conflict" right after login.
+         
+         Also: we only fire 'kicked' if the incoming sessionId is
+         different from ours AND is not null (null = logged out).
+      */
+      sessionWatcherReady.current = false;
 
+      // Give Firestore time to settle before we start watching
+      const watcherDelay = setTimeout(() => {
+        sessionWatcherReady.current = true;
+
+        sessionUnsub = onSnapshot(doc(db, "user_sessions", uid), (snap) => {
+          if (!snap.exists()) return;
+          if (!sessionWatcherReady.current) return; // extra guard
+
+          const data = snap.data();
+          const incomingSessionId = data?.sessionId;
+
+          // Only kick if:
+          // 1. There's a sessionId in Firestore
+          // 2. It's different from ours
+          // 3. It's not null (null means someone logged out cleanly)
+          if (
+            incomingSessionId &&
+            incomingSessionId !== mySessionId &&
+            incomingSessionId !== "null"
+          ) {
+            setKicked(true);
+          }
+        });
+      }, 2500); // 2.5 second delay after login before watching
+
+      /* ── Ping session every 60s ── */
+      if (pingRef.current) clearInterval(pingRef.current);
       pingRef.current = setInterval(() => pingSession(uid), 60_000);
 
-      // Firestore webchat live subscriptions
+      /* ── Webchat unread counts ── */
       const ref     = collection(db, "messages");
       const unreadQ = query(ref, where("participants","array-contains",uid), where("read","==",false));
       const voiceQ  = query(ref, where("participants","array-contains",uid), where("type","==","call"), where("callStatus","==","missed"), where("callType","==","audio"), where("read","==",false));
@@ -142,15 +179,15 @@ export default function DashboardPage() {
       u1 = onSnapshot(unreadQ, (s) => setUnread(s.docs.filter((d) => d.data().senderId !== uid && d.data().type !== "call").length));
       u2 = onSnapshot(voiceQ,  (s) => setMissedVoice(s.docs.filter((d) => d.data().senderId !== uid).length));
       u3 = onSnapshot(videoQ,  (s) => setMissedVideo(s.docs.filter((d) => d.data().senderId !== uid).length));
+
+      return () => clearTimeout(watcherDelay);
     });
 
-    return () => { 
-      unsub(); 
-      sessionUnsub(); 
-      u1(); 
-      u2(); 
-      u3(); 
-      if (pingRef.current) clearInterval(pingRef.current); 
+    return () => {
+      unsub();
+      sessionUnsub();
+      u1(); u2(); u3();
+      if (pingRef.current) clearInterval(pingRef.current);
     };
   }, [router]);
 
@@ -161,23 +198,54 @@ export default function DashboardPage() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  /* ── Close changelog on Escape ── */
+  /* ── Escape to close changelog ── */
   useEffect(() => {
     const h = (e) => { if (e.key === "Escape") setShowChangelog(false); };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, []);
 
+  /* ── Logout handler ──
+     FIXED: clearSession() is called BEFORE signOutUser()
+     so Firestore gets updated with sessionId: null
+     before the auth state changes.
+  */
+  const handleLogout = useCallback(async () => {
+    try {
+      if (pingRef.current) clearInterval(pingRef.current);
+      // Stop watcher BEFORE clearing session to avoid self-triggering kicked
+      sessionWatcherReady.current = false;
+      // Clear session first (sets sessionId: null in Firestore)
+      if (user) await clearSession(user.uid);
+      sessionStorage.clear();
+      localStorage.removeItem("user_session");
+      // Then sign out
+      await signOutUser();
+      router.replace("/login");
+    } catch (err) {
+      console.error("Logout error:", err);
+      router.replace("/login");
+    }
+  }, [router, user]);
+
+  /* ── Kicked logout (forced out by another device) ── */
   const handleKickedLogout = useCallback(async () => {
-    if (pingRef.current) clearInterval(pingRef.current);
-    if (user) await clearSession(user.uid);
-    sessionStorage.clear();
-    localStorage.removeItem("user_session");
-    await signOutUser();
+    try {
+      if (pingRef.current) clearInterval(pingRef.current);
+      sessionWatcherReady.current = false;
+      if (user) await clearSession(user.uid);
+      sessionStorage.clear();
+      localStorage.removeItem("user_session");
+      await signOutUser();
+    } catch (_) { /* silent */ }
     router.replace("/login");
   }, [router, user]);
 
-  const saveTools = (t) => { setTools(t); localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); };
+  /* ── Tool helpers ── */
+  const saveTools = (t) => {
+    setTools(t);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
+  };
 
   const togglePin = (id, e) => {
     e.stopPropagation();
@@ -193,7 +261,9 @@ export default function DashboardPage() {
     const arr  = [...tools];
     const from = dragIdx.current;
     const to   = dragOver.current;
-    if (from === null || to === null || from === to) { dragIdx.current = null; dragOver.current = null; return; }
+    if (from === null || to === null || from === to) {
+      dragIdx.current = null; dragOver.current = null; return;
+    }
     const [moved] = arr.splice(from, 1);
     arr.splice(to, 0, moved);
     dragIdx.current = null; dragOver.current = null;
@@ -204,17 +274,6 @@ export default function DashboardPage() {
     t.title.toLowerCase().includes(search.toLowerCase()) ||
     t.desc.toLowerCase().includes(search.toLowerCase())
   );
-
-  const handleLogout = async () => {
-    try {
-      if (pingRef.current) clearInterval(pingRef.current);
-      if (user) await clearSession(user.uid);
-      sessionStorage.clear();
-      localStorage.removeItem("user_session");
-      await signOutUser();
-      router.replace("/login");
-    } catch (err) { console.error("Logout error:", err); }
-  };
 
   if (!user) {
     return (
@@ -236,11 +295,23 @@ export default function DashboardPage() {
       {/* ════ KICKED MODAL ════ */}
       {kicked && (
         <div className={styles.clOverlay}>
-          <div className={styles.clModal} style={{ padding: '24px', textAlign: 'center' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🔒</div>
-            <h2 className={styles.clTitle} style={{ marginBottom: '8px' }}>Session Ended</h2>
-            <p className={styles.toolDesc} style={{ marginBottom: '16px' }}>You were logged out because your account was signed in on another device.</p>
-            <button className={styles.emptySearch + " button"} style={{ margin: '0 auto', display: 'block' }} onClick={handleKickedLogout}>OK, Go to Login</button>
+          <div className={styles.clModal} style={{ padding: "24px", textAlign: "center" }}>
+            <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>🔒</div>
+            <h2 className={styles.clTitle} style={{ marginBottom: "8px" }}>Session Ended</h2>
+            <p className={styles.toolDesc} style={{ marginBottom: "16px" }}>
+              Your account was signed in on another device. You have been logged out here.
+            </p>
+            <button
+              style={{
+                background: "#4361ee", color: "#fff", border: "none",
+                borderRadius: "10px", padding: "10px 24px",
+                fontFamily: "Syne, sans-serif", fontWeight: 700,
+                fontSize: "14px", cursor: "pointer",
+              }}
+              onClick={handleKickedLogout}
+            >
+              OK, Go to Login
+            </button>
           </div>
         </div>
       )}
@@ -253,7 +324,7 @@ export default function DashboardPage() {
               <div className={styles.clHeaderLeft}>
                 <div className={styles.clAppIcon}>🚀</div>
                 <div>
-                  <h2 className={styles.clTitle}>What's New</h2>
+                  <h2 className={styles.clTitle}>What&apos;s New</h2>
                   <p className={styles.clSubtitle}>MyDashboard · Release Notes</p>
                 </div>
               </div>
@@ -268,27 +339,37 @@ export default function DashboardPage() {
 
             <div className={styles.clList}>
               {CHANGELOG.map((entry, i) => {
-                const meta      = TYPE_META[entry.type] || TYPE_META.minor;
+                const meta       = TYPE_META[entry.type] || TYPE_META.minor;
                 const isExpanded = activeVersion === entry.version || i === 0;
                 const isLatest   = i === 0;
 
                 return (
                   <div key={entry.version} className={styles.clEntry}>
                     <div className={styles.clTimeline}>
-                      <div className={`${styles.clDot} ${isLatest ? styles.clDotLatest : ""}`} style={{ borderColor: isLatest ? meta.color : undefined }} />
+                      <div
+                        className={`${styles.clDot} ${isLatest ? styles.clDotLatest : ""}`}
+                        style={{ borderColor: isLatest ? meta.color : undefined }}
+                      />
                       {i < CHANGELOG.length - 1 && <div className={styles.clLine} />}
                     </div>
 
                     <div className={styles.clEntryBody}>
-                      <div className={styles.clEntryHeader} onClick={() => setActiveVersion(isExpanded && !isLatest ? null : entry.version)}>
+                      <div
+                        className={styles.clEntryHeader}
+                        onClick={() => setActiveVersion(isExpanded && !isLatest ? null : entry.version)}
+                      >
                         <div className={styles.clEntryLeft}>
                           <span className={styles.clVersion}>{entry.version}</span>
-                          <span className={styles.clTypeBadge} style={{ color: meta.color, background: meta.bg }}>{meta.label}</span>
+                          <span className={styles.clTypeBadge} style={{ color: meta.color, background: meta.bg }}>
+                            {meta.label}
+                          </span>
                           {entry.label && <span className={styles.clSpecialBadge}>{entry.label}</span>}
                         </div>
                         <div className={styles.clEntryRight}>
                           <span className={styles.clDate}>{entry.date}</span>
-                          {!isLatest && <span className={styles.clChevron}>{isExpanded ? "▲" : "▼"}</span>}
+                          {!isLatest && (
+                            <span className={styles.clChevron}>{isExpanded ? "▲" : "▼"}</span>
+                          )}
                         </div>
                       </div>
 
@@ -315,17 +396,26 @@ export default function DashboardPage() {
       {/* ── HEADER ── */}
       <header className={styles.header}>
         <div className={styles.headerLeft}>
-          <div className={styles.brandMark}><LayoutDashboardIcon size={20} strokeWidth={2.5} /></div>
+          <div className={styles.brandMark}>
+            <LayoutDashboardIcon size={20} strokeWidth={2.5} />
+          </div>
           <div>
             <h1 className={styles.headerTitle}>Dashboard</h1>
-            <p className={styles.headerSub}>Hey, <strong>{user.displayName?.split(" ")[0] || "User"}</strong> 👋</p>
+            <p className={styles.headerSub}>
+              Hey, <strong>{user.displayName?.split(" ")[0] || "User"}</strong> 👋
+            </p>
           </div>
         </div>
 
         <div className={styles.headerRight}>
           <div className={styles.viewToggle}>
             {VIEWS.map((v) => (
-              <button key={v} className={`${styles.viewBtn} ${view === v ? styles.viewBtnActive : ""}`} onClick={() => setView(v)} title={v}>
+              <button
+                key={v}
+                className={`${styles.viewBtn} ${view === v ? styles.viewBtnActive : ""}`}
+                onClick={() => setView(v)}
+                title={v}
+              >
                 {VIEW_ICONS[v]}
               </button>
             ))}
@@ -333,16 +423,28 @@ export default function DashboardPage() {
 
           <div className={styles.searchWrap}>
             <Search size={13} className={styles.searchIcon} />
-            <input className={styles.searchInput} placeholder="Search tools…" value={search} onChange={(e) => setSearch(e.target.value)} />
-            {search && <button className={styles.searchClear} onClick={() => setSearch("")}><X size={12} /></button>}
+            <input
+              className={styles.searchInput}
+              placeholder="Search tools…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button className={styles.searchClear} onClick={() => setSearch("")}>
+                <X size={12} />
+              </button>
+            )}
           </div>
 
           <div className={styles.avatarZone} ref={dropRef}>
             <button className={styles.avatarBtn} onClick={() => setDropOpen((p) => !p)}>
               {showPhoto
                 ? <img src={user.photoURL} className={styles.avatarImg} alt="avatar" onError={() => setAvatarErr(true)} />
-                : <div className={styles.avatarInitials} style={{ background: avatarColor }}>{initials}</div>}
-              {totalBadge > 0 && <span className={styles.avatarBadge}>{totalBadge > 99 ? "99+" : totalBadge}</span>}
+                : <div className={styles.avatarInitials} style={{ background: avatarColor }}>{initials}</div>
+              }
+              {totalBadge > 0 && (
+                <span className={styles.avatarBadge}>{totalBadge > 99 ? "99+" : totalBadge}</span>
+              )}
               <div className={styles.avatarOnline} />
             </button>
 
@@ -351,7 +453,8 @@ export default function DashboardPage() {
                 <div className={styles.dropUser}>
                   {showPhoto
                     ? <img src={user.photoURL} className={styles.dropAvatar} alt="av" onError={() => setAvatarErr(true)} />
-                    : <div className={styles.dropAvatarInitials} style={{ background: avatarColor }}>{initials}</div>}
+                    : <div className={styles.dropAvatarInitials} style={{ background: avatarColor }}>{initials}</div>
+                  }
                   <div>
                     <div className={styles.dropName}>{user.displayName || "User"}</div>
                     <div className={styles.dropEmail}>{user.email}</div>
@@ -377,8 +480,8 @@ export default function DashboardPage() {
       {/* ── TOOLBAR ── */}
       <div className={styles.toolbar}>
         <span className={styles.toolbarLabel}>
-          {filtered.length} tools
-          {search && <span className={styles.toolbarSearch}> for "{search}"</span>}
+          {filtered.length} tool{filtered.length !== 1 ? "s" : ""}
+          {search && <span className={styles.toolbarSearch}> for &quot;{search}&quot;</span>}
         </span>
         <span className={styles.toolbarHint}>
           <GripVertical size={13} /> Drag to rearrange · Click 📌 to pin
@@ -390,7 +493,7 @@ export default function DashboardPage() {
         {filtered.length === 0 && (
           <div className={styles.emptySearch}>
             <span>🔍</span>
-            <p>No tools match "<strong>{search}</strong>"</p>
+            <p>No tools match &quot;<strong>{search}</strong>&quot;</p>
             <button onClick={() => setSearch("")}>Clear search</button>
           </div>
         )}
@@ -407,19 +510,27 @@ export default function DashboardPage() {
             onDragOver={(e) => e.preventDefault()}
             onClick={() => router.push(`/dashboard/${tool.id}`)}
           >
-            <div className={styles.dragHandle} onClick={(e) => e.stopPropagation()}><GripVertical size={14} /></div>
-            <button className={`${styles.pinBtn} ${tool.pinned ? styles.pinBtnActive : ""}`} onClick={(e) => togglePin(tool.id, e)} title={tool.pinned ? "Unpin" : "Pin"}>
+            <div className={styles.dragHandle} onClick={(e) => e.stopPropagation()}>
+              <GripVertical size={14} />
+            </div>
+            <button
+              className={`${styles.pinBtn} ${tool.pinned ? styles.pinBtnActive : ""}`}
+              onClick={(e) => togglePin(tool.id, e)}
+              title={tool.pinned ? "Unpin" : "Pin"}
+            >
               {tool.pinned ? <PinOff size={13} /> : <Pin size={13} />}
             </button>
-            <div className={styles.toolIcon} style={{ background: `${tool.color}18`, color: tool.color }}>{tool.icon}</div>
+            <div className={styles.toolIcon} style={{ background: `${tool.color}18`, color: tool.color }}>
+              {tool.icon}
+            </div>
             <div className={styles.toolInfo}>
               <h3 className={styles.toolTitle}>{tool.title}</h3>
               <p className={styles.toolDesc}>{tool.desc}</p>
               {tool.isWebchat && (
                 <div className={styles.badgeRow}>
                   {unread > 0       && <span className={styles.badge} style={{ background:"#eef2ff",color:"#4361ee",border:"1px solid #c7d2fe" }}>💬 {unread > 99 ? "99+" : unread}</span>}
-                  {missedVoice > 0 && <span className={styles.badge} style={{ background:"#f0fdf4",color:"#0f9d6e",border:"1px solid #bbf7d0" }}>📞 {missedVoice > 99 ? "99+" : missedVoice}</span>}
-                  {missedVideo > 0 && <span className={styles.badge} style={{ background:"#fef3c7",color:"#d97706",border:"1px solid #fde68a" }}>📹 {missedVideo > 99 ? "99+" : missedVideo}</span>}
+                  {missedVoice > 0  && <span className={styles.badge} style={{ background:"#f0fdf4",color:"#0f9d6e",border:"1px solid #bbf7d0" }}>📞 {missedVoice > 99 ? "99+" : missedVoice}</span>}
+                  {missedVideo > 0  && <span className={styles.badge} style={{ background:"#fef3c7",color:"#d97706",border:"1px solid #fde68a" }}>📹 {missedVideo > 99 ? "99+" : missedVideo}</span>}
                 </div>
               )}
             </div>
@@ -430,7 +541,11 @@ export default function DashboardPage() {
 
       {/* ── FOOTER ── */}
       <footer className={styles.footer}>
-        <button className={styles.versionBtn} onClick={() => { setShowChangelog(true); setActiveVersion(null); }} title="View release notes">
+        <button
+          className={styles.versionBtn}
+          onClick={() => { setShowChangelog(true); setActiveVersion(null); }}
+          title="View release notes"
+        >
           <span className={styles.versionDot} />
           MyDashboard {APP_VERSION}
         </button>
