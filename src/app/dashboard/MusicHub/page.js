@@ -4,72 +4,210 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc,
-  doc, serverTimestamp, query, where, orderBy
+  doc, serverTimestamp, query, where, orderBy,
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '@/lib/firebase';
 import { logToolUsage } from '@/lib/firestore';
 import styles from './musichub.module.css';
 
-const extractYoutubeId = (url) => {
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+function extractVideoId(url) {
   if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : null;
-};
+  const match = url.match(/^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/);
+  return match?.[2]?.length === 11 ? match[2] : null;
+}
 
+function makeTrackPayload(title, url, videoId) {
+  return { title, url, videoId, addedAt: new Date().toISOString() };
+}
+
+/* ─────────────────────────────────────────────
+   Sub-components
+───────────────────────────────────────────── */
+
+/** Single track row — handles own edit mode inline */
+function TrackRow({
+  track,
+  index,
+  playlistId,
+  isActive,
+  canEdit,
+  isOwner,
+  onPlay,
+  onMoveUp,
+  onMoveDown,
+  onEjectToQuick,
+  onEdit,
+  onDelete,
+  totalTracks,
+  // quick-song-only props
+  isQuickSong,
+  quickSongId,
+  playlists,
+  onMoveQuickToPlaylist,
+}) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ title: track.title, url: track.url || '' });
+
+  function handleSave() {
+    const vid = extractVideoId(form.url);
+    if (!form.title.trim()) return alert('Track title is required.');
+    if (!isQuickSong && !vid) return alert('Invalid YouTube URL.');
+    onEdit({ title: form.title.trim(), url: form.url.trim(), videoId: vid });
+    setEditing(false);
+  }
+
+  return (
+    <div className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ''}`}>
+      <div className={styles.trackLeft}>
+        {!isQuickSong && <span className={styles.trackNum}>{String(index + 1).padStart(2, '0')}</span>}
+        <button className={styles.playBtn} onClick={onPlay} title="Play">▶</button>
+
+        {editing ? (
+          <div className={styles.inlineEditRow} onClick={e => e.stopPropagation()}>
+            <input
+              className={styles.inlineInput}
+              value={form.title}
+              placeholder="Track title"
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            />
+            {!isQuickSong && (
+              <input
+                className={styles.inlineInput}
+                value={form.url}
+                placeholder="YouTube URL"
+                onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+              />
+            )}
+            <button className={styles.inlineSaveBtn} onClick={handleSave}>✓</button>
+            <button className={styles.inlineCancelBtn} onClick={() => setEditing(false)}>✕</button>
+          </div>
+        ) : (
+          <div className={styles.trackMeta}>
+            <p className={styles.trackTitle} onClick={onPlay}>{track.title}</p>
+          </div>
+        )}
+      </div>
+
+      {!editing && (
+        <div className={styles.trackActions}>
+          {isQuickSong && playlists?.length > 0 && (
+            <select
+              className={styles.moveSelect}
+              defaultValue=""
+              onChange={e => { onMoveQuickToPlaylist(e.target.value); e.target.value = ''; }}
+            >
+              <option value="" disabled>Move to…</option>
+              {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+          {canEdit && !isQuickSong && (
+            <button className={styles.iconBtn} title="Eject to Quick Songs" onClick={onEjectToQuick}>📤</button>
+          )}
+          {(canEdit || isQuickSong) && (
+            <button className={styles.iconBtn} onClick={() => { setEditing(true); setForm({ title: track.title, url: track.url || '' }); }}>✏️</button>
+          )}
+          {canEdit && !isQuickSong && (
+            <>
+              <button className={styles.iconBtn} onClick={onMoveUp}  disabled={index === 0}>▲</button>
+              <button className={styles.iconBtn} onClick={onMoveDown} disabled={index === totalTracks - 1}>▼</button>
+            </>
+          )}
+          <button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={onDelete}>✕</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Comment feed + input for a playlist */
+function CommentFeed({ playlist, currentUser, onPost }) {
+  const [text, setText] = useState('');
+
+  function handlePost() {
+    if (!text.trim()) return;
+    onPost(playlist.id, text.trim());
+    setText('');
+  }
+
+  return (
+    <div className={styles.comments}>
+      <p className={styles.commentsTitle}>💬 Team comments</p>
+      <div className={styles.commentsFeed}>
+        {(playlist.comments || []).map((c, i) => (
+          <div key={i} className={styles.commentBubble}>
+            <span className={styles.commentAuthor}>{c.authorName}</span>
+            <span className={styles.commentText}>{c.text}</span>
+          </div>
+        ))}
+      </div>
+      <div className={styles.commentInputRow}>
+        <input
+          className={styles.input}
+          placeholder="Add a comment…"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handlePost()}
+        />
+        <button className={styles.commentSendBtn} onClick={handlePost}>Send</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Main Page
+───────────────────────────────────────────── */
 export default function MusicHubPage() {
   const router = useRouter();
-  
-  // Auth & Profile States
+
+  // Auth
   const [uid, setUid] = useState(null);
-  const [currentUserData, setCurrentUserData] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
-  // Real-Time Local Vectors
+
+  // Data
   const [playlists, setPlaylists] = useState([]);
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
   const [quickSongs, setQuickSongs] = useState([]);
-  const [allUsers, setAllUsers] = useState([]); 
+  const [allUsers, setAllUsers] = useState([]);
 
-  // Player & UI Control States
-  const [activeTab, setActiveTab] = useState('hub');
+  // Player
   const [activeVideoId, setActiveVideoId] = useState(null);
-  const [currentTrackTitle, setCurrentTrackTitle] = useState('');
+  const [nowPlayingTitle, setNowPlayingTitle] = useState('');
+  const [queuePlaylist, setQueuePlaylist] = useState(null);
+  const [queueIndex, setQueueIndex] = useState(-1);
+  const iframeRef = useRef(null);
+
+  // UI
+  const [activeTab, setActiveTab] = useState('quick');
   const [searchQ, setSearchQ] = useState('');
   const [isDark, setIsDark] = useState(false);
 
-  // Queue Binders
-  const [activePlaylistQueue, setActivePlaylistQueue] = useState(null);
-  const [activeTrackIndex, setActiveTrackIndex] = useState(-1);
-  
-  // Modals Framework
-  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
+  // Add-track form
+  const [trackForm, setTrackForm] = useState({ title: '', url: '', targetPlaylist: 'quick' });
 
-  // Inline Editing States
+  // Playlist inline-edit
   const [editingPlaylistId, setEditingPlaylistId] = useState(null);
   const [playlistEditForm, setPlaylistEditForm] = useState({ name: '', desc: '' });
-  const [editingTrackIndex, setEditingTrackIndex] = useState(null);
-  const [editingTrackForm, setEditingTrackForm] = useState({ title: '', url: '' });
-  const [editingQuickSongId, setEditingQuickSongId] = useState(null);
-  const [editingQuickSongTitle, setEditingQuickSongTitle] = useState('');
 
-  // Form Binding Structures
-  const [playlistForm, setPlaylistForm] = useState({ name: '', desc: '' });
-  const [songForm, setFormSong] = useState({ title: '', url: '', targetPlaylist: 'quick' });
-  const [shareForm, setShareForm] = useState({ targetEmail: '', permission: 'view' });
-  const [commentInputs, setCommentInputs] = useState({}); 
+  // Modals
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', desc: '' });
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareTarget, setShareTarget] = useState(null);
+  const [shareForm, setShareForm] = useState({ email: '', permission: 'view' });
 
-  const iframeRef = useRef(null);
-
+  /* ── Auth ── */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    const unsub = onAuthStateChanged(auth, user => {
       if (user) {
         setUid(user.uid);
-        setCurrentUserData({ uid: user.uid, email: user.email, displayName: user.displayName || 'User' });
+        setCurrentUser({ uid: user.uid, email: user.email, displayName: user.displayName || 'User' });
         logToolUsage({ userId: user.uid, tool: 'MusicHub', action: 'PAGE_VISIT' });
       } else {
         router.push('/login');
@@ -78,821 +216,693 @@ export default function MusicHubPage() {
     return unsub;
   }, [router]);
 
-  const fetchCoreHubData = useCallback(async () => {
-    if (!uid || !currentUserData?.email) return;
+  /* ── Data fetch ── */
+  const fetchData = useCallback(async () => {
+    if (!uid || !currentUser?.email) return;
     try {
-      const playlistsRef = collection(db, 'playlists');
-      
-      const pOwned = await getDocs(query(playlistsRef, where('ownerId', '==', uid)));
-      setPlaylists(pOwned.docs.map(d => ({ id: d.id, ...d.data() })));
-
-      const pShared = await getDocs(query(playlistsRef, where('sharedWithEmails', 'array-contains', currentUserData.email)));
-      setSharedPlaylists(pShared.docs.map(d => ({ id: d.id, ...d.data() })));
-
-      const qSnap = await getDocs(query(collection(db, `users/${uid}/quicksongs`), orderBy('createdAt', 'desc')));
-      setQuickSongs(qSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-      const usersSnap = await getDocs(collection(db, 'users'));
+      const [ownedSnap, sharedSnap, quickSnap, usersSnap] = await Promise.all([
+        getDocs(query(collection(db, 'playlists'), where('ownerId', '==', uid))),
+        getDocs(query(collection(db, 'playlists'), where('sharedWithEmails', 'array-contains', currentUser.email))),
+        getDocs(query(collection(db, `users/${uid}/quicksongs`), orderBy('createdAt', 'desc'))),
+        getDocs(collection(db, 'users')),
+      ]);
+      setPlaylists(ownedSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSharedPlaylists(sharedSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setQuickSongs(quickSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== uid));
-
     } catch (err) {
-      console.error('Data Sync Anomaly:', err);
+      console.error('[MusicHub] fetch error:', err);
     } finally {
       setLoading(false);
     }
-  }, [uid, currentUserData]);
+  }, [uid, currentUser]);
 
   useEffect(() => {
-    if (uid && currentUserData?.email) {
-      fetchCoreHubData();
-    }
-  }, [uid, currentUserData, fetchCoreHubData]);
+    if (uid && currentUser?.email) fetchData();
+  }, [uid, currentUser, fetchData]);
 
-  const triggerNextSequentialTrack = useCallback(() => {
-    if (!activePlaylistQueue || activeTrackIndex === -1) return;
-    const nextIndex = activeTrackIndex + 1;
-    if (activePlaylistQueue.tracks && nextIndex < activePlaylistQueue.tracks.length) {
-      const nextTrack = activePlaylistQueue.tracks[nextIndex];
-      setActiveTrackIndex(nextIndex);
-      setActiveVideoId(nextTrack.videoId);
-      setCurrentTrackTitle(nextTrack.title);
+  /* ── Auto-advance queue ── */
+  const playNext = useCallback(() => {
+    if (!queuePlaylist || queueIndex < 0) return;
+    const next = queueIndex + 1;
+    if (queuePlaylist.tracks?.[next]) {
+      const t = queuePlaylist.tracks[next];
+      setQueueIndex(next);
+      setActiveVideoId(t.videoId);
+      setNowPlayingTitle(t.title);
     } else {
-      setActiveTrackIndex(-1);
-      setActivePlaylistQueue(null);
+      setQueuePlaylist(null);
+      setQueueIndex(-1);
     }
-  }, [activePlaylistQueue, activeTrackIndex]);
+  }, [queuePlaylist, queueIndex]);
 
   useEffect(() => {
-    const handleGlobalMessageInversion = (event) => {
-      if (event.origin !== 'https://www.youtube.com' && event.origin !== 'https://www.youtube-nocookie.com') return;
+    const handler = e => {
+      if (e.origin !== 'https://www.youtube.com' && e.origin !== 'https://www.youtube-nocookie.com') return;
       try {
-        const data = JSON.parse(event.data);
-        if (data.event === 'infoDelivery' && data.info && data.info.playerState === 0) {
-          triggerNextSequentialTrack();
-        }
-      } catch (e) {}
+        const data = JSON.parse(e.data);
+        if (data.event === 'infoDelivery' && data.info?.playerState === 0) playNext();
+      } catch (_) {}
     };
-    window.addEventListener('message', handleGlobalMessageInversion);
-    return () => window.removeEventListener('message', handleGlobalMessageInversion);
-  }, [triggerNextSequentialTrack]);
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [playNext]);
 
-  const handleInitializePlaybackNode = (url, title, playlistContext = null, index = -1) => {
-    const vId = extractYoutubeId(url);
-    if (!vId) return alert('Invalid Link Asset.');
-    setActiveVideoId(vId);
-    setCurrentTrackTitle(title);
-    setActivePlaylistQueue(playlistContext);
-    setActiveTrackIndex(index);
-  };
+  /* ── Play ── */
+  function play(url, title, playlist = null, index = -1) {
+    const vid = extractVideoId(url);
+    if (!vid) return alert('Could not parse a YouTube video ID from that URL.');
+    setActiveVideoId(vid);
+    setNowPlayingTitle(title);
+    setQueuePlaylist(playlist);
+    setQueueIndex(index);
+  }
 
-  /* ── PLAYLIST ACTIONS ── */
-  const handleCreatePlaylist = async () => {
-    if (!playlistForm.name.trim()) return alert('Playlist name required.');
+  /* ── Computed ── */
+  const allPlaylists = useMemo(() => [...playlists, ...sharedPlaylists], [playlists, sharedPlaylists]);
+
+  const filteredQuickSongs = useMemo(
+    () => quickSongs.filter(s => s.title.toLowerCase().includes(searchQ.toLowerCase())),
+    [quickSongs, searchQ]
+  );
+
+  /* ── Playlist CRUD ── */
+  async function createPlaylist() {
+    if (!createForm.name.trim()) return alert('Playlist name is required.');
     setSaving(true);
     try {
-      const payload = {
-        name: playlistForm.name.trim(),
-        desc: playlistForm.desc.trim(),
+      await addDoc(collection(db, 'playlists'), {
+        name: createForm.name.trim(),
+        desc: createForm.desc.trim(),
         ownerId: uid,
-        ownerName: currentUserData.displayName,
-        ownerEmail: currentUserData.email,
+        ownerName: currentUser.displayName,
+        ownerEmail: currentUser.email,
         tracks: [],
-        sharedWith: [], 
+        sharedWith: [],
         sharedWithEmails: [],
         comments: [],
-        createdAt: serverTimestamp()
-      };
-      await addDoc(collection(db, 'playlists'), payload);
-      await fetchCoreHubData();
-      setShowPlaylistModal(false);
-      setPlaylistForm({ name: '', desc: '' });
-    } catch (e) {
-      console.error(e);
+        createdAt: serverTimestamp(),
+      });
+      await fetchData();
+      setShowCreateModal(false);
+      setCreateForm({ name: '', desc: '' });
+    } catch (err) {
+      console.error(err);
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const handleUpdatePlaylistInline = async (playlistId) => {
+  async function savePlaylistMeta(id) {
     if (!playlistEditForm.name.trim()) return alert('Playlist name cannot be empty.');
     try {
-      await updateDoc(doc(db, 'playlists', playlistId), { 
+      await updateDoc(doc(db, 'playlists', id), {
         name: playlistEditForm.name.trim(),
-        desc: playlistEditForm.desc.trim()
+        desc: playlistEditForm.desc.trim(),
       });
       setEditingPlaylistId(null);
-      await fetchCoreHubData();
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const handlePurgeWholePlaylistNode = async (playlistId) => {
-    if (!confirm('Are you sure you want to delete this playlist?')) return;
+  async function deletePlaylist(id) {
+    if (!confirm('Delete this playlist permanently?')) return;
     try {
-      await deleteDoc(doc(db, 'playlists', playlistId));
-      await fetchCoreHubData();
+      await deleteDoc(doc(db, 'playlists', id));
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const handleSelfRemoveFromSharedPlaylist = async (playlist) => {
+  async function leaveSharedPlaylist(playlist) {
     if (!confirm('Remove yourself from this shared playlist?')) return;
     try {
-      const updatedSharedWith = playlist.sharedWith.filter(u => u.email !== currentUserData.email);
-      const updatedEmails = playlist.sharedWithEmails.filter(e => e !== currentUserData.email);
       await updateDoc(doc(db, 'playlists', playlist.id), {
-        sharedWith: updatedSharedWith,
-        sharedWithEmails: updatedEmails
+        sharedWith: (playlist.sharedWith || []).filter(u => u.email !== currentUser.email),
+        sharedWithEmails: (playlist.sharedWithEmails || []).filter(e => e !== currentUser.email),
       });
-      await fetchCoreHubData();
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  /* ── TRACK MATRIX OPERATIONS ── */
-  const handleAddSong = async () => {
-    if (!songForm.title.trim() || !songForm.url.trim()) return alert('Please fill in all inputs.');
-    const targetVideoId = extractYoutubeId(songForm.url);
-    if (!targetVideoId) return alert('Invalid video URL structure.');
-
+  /* ── Track CRUD ── */
+  async function addTrack() {
+    if (!trackForm.title.trim() || !trackForm.url.trim()) return alert('Title and URL are both required.');
+    const videoId = extractVideoId(trackForm.url);
+    if (!videoId) return alert('Invalid YouTube URL — no video ID found.');
     setSaving(true);
     try {
-      const trackPayload = {
-        title: songForm.title.trim(),
-        url: songForm.url.trim(),
-        videoId: targetVideoId,
-        createdAt: new Date().toISOString()
-      };
-
-      if (songForm.targetPlaylist === 'quick') {
-        await addDoc(collection(db, `users/${uid}/quicksongs`), { ...trackPayload, createdAt: serverTimestamp() });
+      if (trackForm.targetPlaylist === 'quick') {
+        await addDoc(collection(db, `users/${uid}/quicksongs`), {
+          ...makeTrackPayload(trackForm.title.trim(), trackForm.url.trim(), videoId),
+          createdAt: serverTimestamp(),
+        });
       } else {
-        const playlistId = songForm.targetPlaylist;
-        const currentP = allAvailablePlaylists.find(p => p.id === playlistId);
-        
-        if (currentP.ownerId !== uid && currentP.sharedWith?.find(s => s.email === currentUserData.email)?.permission !== 'edit') {
-          alert('Write privilege missing.');
-          setSaving(false);
-          return;
-        }
-        const updatedTracks = [...(currentP.tracks || []), trackPayload];
-        await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
+        const target = allPlaylists.find(p => p.id === trackForm.targetPlaylist);
+        if (!target) { alert('Playlist not found.'); return; }
+        const isOwner = target.ownerId === uid;
+        const canEdit = isOwner || target.sharedWith?.find(s => s.email === currentUser.email)?.permission === 'edit';
+        if (!canEdit) { alert('You don\'t have permission to add tracks to this playlist.'); return; }
+        await updateDoc(doc(db, 'playlists', target.id), {
+          tracks: [...(target.tracks || []), makeTrackPayload(trackForm.title.trim(), trackForm.url.trim(), videoId)],
+        });
       }
-
-      await fetchCoreHubData();
-      setFormSong({ title: '', url: '', targetPlaylist: 'quick' });
+      await fetchData();
+      setTrackForm({ title: '', url: '', targetPlaylist: 'quick' });
     } catch (err) {
       console.error(err);
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const handleMoveQuickTrackToPlaylist = async (song, playlistId) => {
+  async function moveQuickSongToPlaylist(song, playlistId) {
     if (!playlistId) return;
+    const target = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
+    if (!target) return;
     try {
-      const targetP = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
-      if (!targetP) return;
-
-      const trackPayload = { title: song.title, url: song.url, videoId: song.videoId, createdAt: new Date().toISOString() };
-      const updatedTracks = [...(targetP.tracks || []), trackPayload];
-      
-      await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
-      await deleteDoc(doc(db, `users/${uid}/quicksongs`, song.id));
-      await fetchCoreHubData();
+      await Promise.all([
+        updateDoc(doc(db, 'playlists', playlistId), {
+          tracks: [...(target.tracks || []), makeTrackPayload(song.title, song.url, song.videoId)],
+        }),
+        deleteDoc(doc(db, `users/${uid}/quicksongs`, song.id)),
+      ]);
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const handlePullTrackOutOfPlaylist = async (playlistId, index) => {
-    const targetP = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
-    if (!targetP) return;
-
-    const track = targetP.tracks[index];
+  async function ejectTrackToQuick(playlistId, index) {
+    const target = allPlaylists.find(p => p.id === playlistId);
+    if (!target) return;
+    const track = target.tracks[index];
     try {
-      await addDoc(collection(db, `users/${uid}/quicksongs`), {
-        title: track.title, url: track.url, videoId: track.videoId, createdAt: serverTimestamp()
+      await Promise.all([
+        addDoc(collection(db, `users/${uid}/quicksongs`), {
+          ...makeTrackPayload(track.title, track.url, track.videoId),
+          createdAt: serverTimestamp(),
+        }),
+        updateDoc(doc(db, 'playlists', playlistId), {
+          tracks: target.tracks.filter((_, i) => i !== index),
+        }),
+      ]);
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function editPlaylistTrack(playlistId, index, updated) {
+    const target = allPlaylists.find(p => p.id === playlistId);
+    if (!target) return;
+    const tracks = [...target.tracks];
+    tracks[index] = { ...tracks[index], ...updated };
+    try {
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks });
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function deletePlaylistTrack(playlistId, index) {
+    if (!confirm('Remove this track from the playlist?')) return;
+    const target = allPlaylists.find(p => p.id === playlistId);
+    if (!target) return;
+    try {
+      await updateDoc(doc(db, 'playlists', playlistId), {
+        tracks: target.tracks.filter((_, i) => i !== index),
       });
-      const updatedTracks = targetP.tracks.filter((_, idx) => idx !== index);
-      await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
-      await fetchCoreHubData();
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const handleInlineTrackEditSave = async (playlistId, index) => {
-    const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
-    if (!targetP || !editingTrackForm.title.trim()) return;
-
-    const vId = extractYoutubeId(editingTrackForm.url);
-    if (!vId) return alert('Invalid video link.');
-
-    const updatedTracks = [...targetP.tracks];
-    updatedTracks[index] = {
-      title: editingTrackForm.title.trim(),
-      url: editingTrackForm.url.trim(),
-      videoId: vId,
-      createdAt: updatedTracks[index].createdAt
-    };
-
+  async function editQuickSong(id, title) {
+    if (!title.trim()) return;
     try {
-      await updateDoc(doc(db, 'playlists', playlistId), { tracks: updatedTracks });
-      setEditingTrackIndex(null);
-      await fetchCoreHubData();
+      await updateDoc(doc(db, `users/${uid}/quicksongs`, id), { title: title.trim() });
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const handleEraseTrackFromContainer = async (playlistId, index) => {
-    if (!confirm('Remove track from this playlist?')) return;
-    const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
-    if (!targetP) return;
-
-    const modifiedTracks = (targetP.tracks || []).filter((_, idx) => idx !== index);
-    try {
-      await updateDoc(doc(db, 'playlists', playlistId), { tracks: modifiedTracks });
-      await fetchCoreHubData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleUpdateQuickSongInline = async (id) => {
-    if (!editingQuickSongTitle.trim()) return alert('Track title required.');
-    try {
-      await updateDoc(doc(db, `users/${uid}/quicksongs`, id), { title: editingQuickSongTitle.trim() });
-      setEditingQuickSongId(null);
-      await fetchCoreHubData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handlePurgeQuickSong = async (id) => {
+  async function deleteQuickSong(id) {
     if (!confirm('Delete this track?')) return;
     try {
       await deleteDoc(doc(db, `users/${uid}/quicksongs`, id));
-      await fetchCoreHubData();
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const handleAlterTrackSortingIndices = async (playlistId, index, direction) => {
-    const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
-    if (!targetP || !targetP.tracks) return;
-    
-    const factoryTracks = [...targetP.tracks];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= factoryTracks.length) return;
-
-    const backupBufferElement = factoryTracks[index];
-    factoryTracks[index] = factoryTracks[targetIndex];
-    factoryTracks[targetIndex] = backupBufferElement;
-
+  async function reorderTrack(playlistId, index, direction) {
+    const target = allPlaylists.find(p => p.id === playlistId);
+    if (!target?.tracks) return;
+    const tracks = [...target.tracks];
+    const swapIdx = direction === 'up' ? index - 1 : index + 1;
+    if (swapIdx < 0 || swapIdx >= tracks.length) return;
+    [tracks[index], tracks[swapIdx]] = [tracks[swapIdx], tracks[index]];
     try {
-      await updateDoc(doc(db, 'playlists', playlistId), { tracks: factoryTracks });
-      await fetchCoreHubData();
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks });
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  /* ── SHARING PRIVILEGES MUTATIONS ── */
-  const handleApplySharePermission = async () => {
-    if (!shareForm.targetEmail) return alert('Select a workspace user.');
-    if (selectedPlaylist.sharedWithEmails?.includes(shareForm.targetEmail)) {
-      return alert('User already has access to this playlist.');
-    }
-
+  /* ── Sharing ── */
+  async function sharePlaylist() {
+    if (!shareForm.email) return alert('Select a user to share with.');
+    if (shareTarget.sharedWithEmails?.includes(shareForm.email)) return alert('This user already has access.');
     setSaving(true);
     try {
-      const targetUser = allUsers.find(u => u.email === shareForm.targetEmail);
-      const shareObject = {
-        email: shareForm.targetEmail,
-        name: targetUser?.displayName || targetUser?.name || 'Workspace Account',
-        permission: shareForm.permission
+      const targetUser = allUsers.find(u => u.email === shareForm.email);
+      const entry = {
+        email: shareForm.email,
+        name: targetUser?.displayName || targetUser?.name || 'Workspace member',
+        permission: shareForm.permission,
       };
-
-      const updatedShareList = [...(selectedPlaylist.sharedWith || []), shareObject];
-      const updatedEmailsList = [...(selectedPlaylist.sharedWithEmails || []), shareForm.targetEmail];
-
-      await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { 
-        sharedWith: updatedShareList, 
-        sharedWithEmails: updatedEmailsList 
+      await updateDoc(doc(db, 'playlists', shareTarget.id), {
+        sharedWith: [...(shareTarget.sharedWith || []), entry],
+        sharedWithEmails: [...(shareTarget.sharedWithEmails || []), shareForm.email],
       });
-      
-      await fetchCoreHubData();
+      await fetchData();
       setShowShareModal(false);
-      setShareForm({ targetEmail: '', permission: 'view' });
-    } catch (e) {
-      console.error(e);
+      setShareForm({ email: '', permission: 'view' });
+    } catch (err) {
+      console.error(err);
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const handleModifyPermissionInline = async (playlist, targetEmail, newPermission) => {
+  async function changePermission(playlist, email, permission) {
     try {
-      const updatedSharedWith = playlist.sharedWith.map(s => 
-        s.email === targetEmail ? { ...s, permission: newPermission } : s
-      );
-      await updateDoc(doc(db, 'playlists', playlist.id), { sharedWith: updatedSharedWith });
-      await fetchCoreHubData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleRevokeUserAccessCompletely = async (playlist, targetEmail) => {
-    if (!confirm('Revoke access for this user completely?')) return;
-    try {
-      const updatedSharedWith = playlist.sharedWith.filter(s => s.email !== targetEmail);
-      const updatedEmails = playlist.sharedWithEmails.filter(e => e !== targetEmail);
-      await updateDoc(doc(db, 'playlists', playlist.id), { 
-        sharedWith: updatedSharedWith, 
-        sharedWithEmails: updatedEmails 
+      await updateDoc(doc(db, 'playlists', playlist.id), {
+        sharedWith: playlist.sharedWith.map(s => s.email === email ? { ...s, permission } : s),
       });
-      await fetchCoreHubData();
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  /* ── COMMENT BOX NODES ── */
-  const handlePostCommentNode = async (playlistId) => {
-    const cText = commentInputs[playlistId];
-    if (!cText || !cText.trim()) return;
-
-    const targetP = allAvailablePlaylists.find(p => p.id === playlistId);
-    if (!targetP) return;
-
-    const newCommentObject = {
-      authorName: currentUserData.displayName,
-      authorEmail: currentUserData.email,
-      text: cText.trim(),
-      timestamp: new Date().toISOString()
-    };
-
-    const updatedComments = [...(targetP.comments || []), newCommentObject];
+  async function revokeAccess(playlist, email) {
+    if (!confirm('Revoke access for this user?')) return;
     try {
-      await updateDoc(doc(db, 'playlists', playlistId), { comments: updatedComments });
-      setCommentInputs(prev => ({ ...prev, [playlistId]: '' }));
-      await fetchCoreHubData();
+      await updateDoc(doc(db, 'playlists', playlist.id), {
+        sharedWith: playlist.sharedWith.filter(s => s.email !== email),
+        sharedWithEmails: playlist.sharedWithEmails.filter(e => e !== email),
+      });
+      await fetchData();
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const searchedQuickSongs = useMemo(() => {
-    return quickSongs.filter(s => s.title.toLowerCase().includes(searchQ.toLowerCase()));
-  }, [quickSongs, searchQ]);
+  /* ── Comments ── */
+  async function postComment(playlistId, text) {
+    const target = allPlaylists.find(p => p.id === playlistId);
+    if (!target) return;
+    try {
+      await updateDoc(doc(db, 'playlists', playlistId), {
+        comments: [...(target.comments || []), {
+          authorName: currentUser.displayName,
+          authorEmail: currentUser.email,
+          text,
+          timestamp: new Date().toISOString(),
+        }],
+      });
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
-  const allAvailablePlaylists = useMemo(() => {
-    return [...playlists, ...sharedPlaylists];
-  }, [playlists, sharedPlaylists]);
+  /* ── Render helpers ── */
+  function renderPlaylistTracks(playlist, canEdit, isOwner) {
+    if (!playlist.tracks?.length) return <p className={styles.empty}>No tracks yet — add one above.</p>;
+    return (
+      <div className={styles.trackList}>
+        {playlist.tracks.map((t, idx) => (
+          <TrackRow
+            key={idx}
+            track={t}
+            index={idx}
+            playlistId={playlist.id}
+            isActive={queuePlaylist?.id === playlist.id && queueIndex === idx}
+            canEdit={canEdit}
+            isOwner={isOwner}
+            totalTracks={playlist.tracks.length}
+            onPlay={() => play(t.url, t.title, playlist, idx)}
+            onMoveUp={() => reorderTrack(playlist.id, idx, 'up')}
+            onMoveDown={() => reorderTrack(playlist.id, idx, 'down')}
+            onEjectToQuick={() => ejectTrackToQuick(playlist.id, idx)}
+            onEdit={updated => editPlaylistTrack(playlist.id, idx, updated)}
+            onDelete={() => deletePlaylistTrack(playlist.id, idx)}
+          />
+        ))}
+      </div>
+    );
+  }
 
-  if (loading) return <div className={styles.loadingScreen}><div className={styles.spinnerInner} /><p>Loading Music Studio...</p></div>;
+  /* ─────────── RENDER ─────────── */
+  if (loading) {
+    return (
+      <div className={styles.loadingScreen}>
+        <div className={styles.spinner} />
+        <p>Loading Music Hub…</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page} data-theme={isDark ? 'dark' : ''}>
-      
-      {/* ── TOP BAR ENGINE ── */}
+
+      {/* TOP BAR */}
       <div className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>← Back</button>
-        <div className={styles.brand}><div className={styles.brandIcon}>🎵</div>Music Hub</div>
+        <button className={styles.backBtn} onClick={() => router.push('/dashboard')}>← Dashboard</button>
+        <div className={styles.brand}>
+          <div className={styles.brandIcon}>🎵</div>
+          <span>Music Hub</span>
+        </div>
         <div className={styles.searchWrap}>
-          <input 
-            className={styles.searchInput} 
-            placeholder="Search audio tracks..." 
-            value={searchQ} 
-            onChange={e => setSearchQ(e.target.value)} 
+          <input
+            className={styles.searchInput}
+            placeholder="Search tracks…"
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
           />
         </div>
-        <button className={styles.addNewBtn} onClick={() => setShowPlaylistModal(true)}>
-          <span className={styles.mobileHiddenLabel}>+ Create Playlist</span>
-          <span className={styles.mobileVisibleLabel}>📁+</span>
+        <button className={styles.createBtn} onClick={() => setShowCreateModal(true)}>
+          <span className={styles.desktopOnly}>+ New Playlist</span>
+          <span className={styles.mobileOnly}>📁+</span>
         </button>
-        <button className={styles.themeBtn} onClick={() => setIsDark(!isDark)}>{isDark ? '☀️' : '🌙'}</button>
+        <button className={styles.themeBtn} onClick={() => setIsDark(d => !d)}>
+          {isDark ? '☀️' : '🌙'}
+        </button>
       </div>
 
-      {/* ── MAIN LAYOUT GRID ── */}
-      <div className={styles.contentLayout}>
-        <div className={styles.mainFeedSection}>
-          
-          {/* TRACK INGESTION HUB MODULE */}
-          <div className={styles.ingestContainer}>
-            <h3 className={styles.blockTitle}>🧬 Load Direct Audio Stream Target</h3>
-            <div className={styles.formRow}>
-              <input 
-                className={styles.formInput} 
-                placeholder="Track Title Reference..." 
-                value={songForm.title} 
-                onChange={e => setFormSong({...songForm, title: e.target.value})}
+      {/* LAYOUT */}
+      <div className={styles.layout}>
+
+        {/* MAIN FEED */}
+        <div className={styles.feed}>
+
+          {/* ADD TRACK */}
+          <div className={styles.addTrackCard}>
+            <h3 className={styles.cardTitle}>Add a track</h3>
+            <div className={styles.addTrackRow}>
+              <input
+                className={styles.input}
+                placeholder="Title"
+                value={trackForm.title}
+                onChange={e => setTrackForm(f => ({ ...f, title: e.target.value }))}
               />
-              <input 
-                className={styles.formInput} 
-                placeholder="YouTube / YouTube Music URL..." 
-                value={songForm.url} 
-                onChange={e => setFormSong({...songForm, url: e.target.value})}
+              <input
+                className={styles.input}
+                placeholder="YouTube URL"
+                value={trackForm.url}
+                onChange={e => setTrackForm(f => ({ ...f, url: e.target.value }))}
               />
-              <select 
-                className={styles.formSelect}
-                value={songForm.targetPlaylist}
-                onChange={e => setFormSong({...songForm, targetPlaylist: e.target.value})}
+              <select
+                className={styles.select}
+                value={trackForm.targetPlaylist}
+                onChange={e => setTrackForm(f => ({ ...f, targetPlaylist: e.target.value }))}
               >
-                <option value="quick">⚡ No Playlist (Isolated Track)</option>
-                {allAvailablePlaylists.map(p => (
+                <option value="quick">⚡ Quick Songs (no playlist)</option>
+                {allPlaylists.map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.ownerId === uid ? '📁 Owned: ' : '🌐 Shared: '} {p.name}
+                    {p.ownerId === uid ? '📁 ' : '🌐 '}{p.name}
                   </option>
                 ))}
               </select>
-              <button className={styles.mountButton} onClick={handleAddSong} disabled={saving}>Mount</button>
+              <button className={styles.mountBtn} onClick={addTrack} disabled={saving}>
+                {saving ? '…' : 'Add'}
+              </button>
             </div>
           </div>
 
-          <div className={styles.tabRow}>
-            <button className={`${styles.tabLink} ${activeTab === 'hub' ? styles.tabLinkActive : ''}`} onClick={() => setActiveTab('hub')}>🎛️ Streams Base</button>
-            <button className={`${styles.tabLink} ${activeTab === 'playlists' ? styles.tabLinkActive : ''}`} onClick={() => setActiveTab('playlists')}>📁 Vault Storage ({playlists.length})</button>
-            <button className={`${styles.tabLink} ${activeTab === 'shared' ? styles.tabLinkActive : ''}`} onClick={() => setActiveTab('shared')}>🌐 Shared Ecosystem ({sharedPlaylists.length})</button>
+          {/* TABS */}
+          <div className={styles.tabs}>
+            <button
+              className={`${styles.tab} ${activeTab === 'quick' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('quick')}
+            >⚡ Quick Songs ({quickSongs.length})</button>
+            <button
+              className={`${styles.tab} ${activeTab === 'playlists' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('playlists')}
+            >📁 My Playlists ({playlists.length})</button>
+            <button
+              className={`${styles.tab} ${activeTab === 'shared' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('shared')}
+            >🌐 Shared With Me ({sharedPlaylists.length})</button>
           </div>
 
-          {/* VIEWPORTS CORE ENGINE */}
-          {activeTab === 'hub' && (
-            <div className={styles.viewPortContainer}>
-              <h4 className={styles.sectionHeading}>⚡ Single Stream Engine (No Playlist Records)</h4>
-              {searchedQuickSongs.length === 0 ? <p className={styles.emptyText}>No single track matrix vectors loaded.</p> : (
-                <div className={styles.trackListList}>
-                  {searchedQuickSongs.map(song => (
-                    <div key={song.id} className={styles.trackRowItem}>
-                      <div className={styles.clickableAreaRow}>
-                        <div className={styles.rowPlayIndicator} onClick={() => handleInitializePlaybackNode(song.url, song.title)}>▶</div>
-                        {editingQuickSongId === song.id ? (
-                          <div className={styles.inlineEditingActionRowWrapper}>
-                            <input 
-                              className={styles.inlineEditFieldInput}
-                              value={editingQuickSongTitle}
-                              onChange={e => setEditingQuickSongTitle(e.target.value)}
+          {/* QUICK SONGS */}
+          {activeTab === 'quick' && (
+            <div className={styles.viewCard}>
+              <p className={styles.sectionLabel}>Quick Songs — no playlist</p>
+              {filteredQuickSongs.length === 0
+                ? <p className={styles.empty}>No quick songs yet. Add one above.</p>
+                : (
+                  <div className={styles.trackList}>
+                    {filteredQuickSongs.map(s => (
+                      <TrackRow
+                        key={s.id}
+                        track={s}
+                        index={0}
+                        isActive={activeVideoId && extractVideoId(s.url) === activeVideoId && !queuePlaylist}
+                        canEdit
+                        isOwner
+                        isQuickSong
+                        quickSongId={s.id}
+                        playlists={playlists}
+                        totalTracks={1}
+                        onPlay={() => play(s.url, s.title)}
+                        onEdit={({ title }) => editQuickSong(s.id, title)}
+                        onDelete={() => deleteQuickSong(s.id)}
+                        onMoveQuickToPlaylist={playlistId => moveQuickSongToPlaylist(s, playlistId)}
+                      />
+                    ))}
+                  </div>
+                )
+              }
+            </div>
+          )}
+
+          {/* MY PLAYLISTS */}
+          {activeTab === 'playlists' && (
+            <div className={styles.playlistGrid}>
+              {playlists.length === 0
+                ? <p className={styles.empty}>You haven't created any playlists yet.</p>
+                : playlists.map(p => (
+                  <div key={p.id} className={styles.playlistCard}>
+                    <div className={styles.playlistHeader}>
+                      <div className={styles.playlistHeaderLeft}>
+                        {editingPlaylistId === p.id ? (
+                          <div className={styles.metaEditStack}>
+                            <input
+                              className={styles.input}
+                              value={playlistEditForm.name}
+                              placeholder="Playlist name"
+                              onChange={e => setPlaylistEditForm(f => ({ ...f, name: e.target.value }))}
                             />
-                            <button className={styles.inlineActionCheckButton} onClick={() => handleUpdateQuickSongInline(song.id)}>✓</button>
-                            <button className={styles.inlineActionCloseButton} onClick={() => setEditingQuickSongId(null)}>✕</button>
+                            <input
+                              className={styles.input}
+                              value={playlistEditForm.desc}
+                              placeholder="Description (optional)"
+                              onChange={e => setPlaylistEditForm(f => ({ ...f, desc: e.target.value }))}
+                            />
+                            <div className={styles.metaEditActions}>
+                              <button className={styles.metaSaveBtn} onClick={() => savePlaylistMeta(p.id)}>Save</button>
+                              <button className={styles.metaCancelBtn} onClick={() => setEditingPlaylistId(null)}>Cancel</button>
+                            </div>
                           </div>
                         ) : (
-                          <p className={styles.trackName} onClick={() => handleInitializePlaybackNode(song.url, song.title)}>{song.title}</p>
+                          <>
+                            <h4 className={styles.playlistName}>
+                              📁 {p.name}
+                              <button
+                                className={styles.editNameBtn}
+                                onClick={() => { setEditingPlaylistId(p.id); setPlaylistEditForm({ name: p.name, desc: p.desc || '' }); }}
+                              >✏️ Edit</button>
+                            </h4>
+                            <p className={styles.playlistDesc}>{p.desc || 'No description.'}</p>
+                          </>
                         )}
                       </div>
-                      <div className={styles.trackMutationInterfaceActionCluster}>
-                        <select 
-                          className={styles.inlinePlaylistMoveSelector}
-                          defaultValue=""
-                          onChange={e => handleMoveQuickTrackToPlaylist(song, e.target.value)}
-                        >
-                          <option value="" disabled>📁 Move To...</option>
-                          {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <button className={styles.mutationArrowBtn} onClick={() => { setEditingQuickSongId(song.id); setEditingQuickSongTitle(song.title); }}>✏️</button>
-                        <button className={styles.mutationDeleteBtn} onClick={() => handlePurgeQuickSong(song.id)}>✕</button>
+                      <div className={styles.playlistHeaderRight}>
+                        <button className={styles.shareBtn} onClick={() => { setShareTarget(p); setShowShareModal(true); }}>🌐 Share</button>
+                        <button className={styles.deleteBtn} onClick={() => deletePlaylist(p.id)}>🗑️ Delete</button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {/* shared users */}
+                    {p.sharedWith?.length > 0 && (
+                      <div className={styles.sharedUsersRow}>
+                        <span className={styles.sharedLabel}>Shared with</span>
+                        {p.sharedWith.map((u, i) => (
+                          <div key={i} className={styles.userChip}>
+                            <span className={styles.userName}>👤 {u.name}</span>
+                            <select
+                              className={styles.permSelect}
+                              value={u.permission}
+                              onChange={e => changePermission(p, u.email, e.target.value)}
+                            >
+                              <option value="view">View</option>
+                              <option value="edit">Edit</option>
+                            </select>
+                            <button className={styles.revokeBtn} onClick={() => revokeAccess(p, u.email)}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {renderPlaylistTracks(p, true, true)}
+                    <CommentFeed playlist={p} currentUser={currentUser} onPost={postComment} />
+                  </div>
+                ))
+              }
             </div>
           )}
 
-          {/* OWN STORAGE HUB */}
-          {activeTab === 'playlists' && (
-            <div className={styles.playlistsVerticalGrid}>
-              {playlists.length === 0 ? <p className={styles.emptyText}>Vault is currently clean of containers.</p> : playlists.map(p => (
-                <div key={p.id} className={styles.playlistMegaBlock}>
-                  <div className={styles.playlistBlockHeader}>
-                    <div className={styles.titleContextBlockHeaderWrap}>
-                      {editingPlaylistId === p.id ? (
-                        <div className={styles.inlinePlaylistMetaEditingGrid}>
-                          <input 
-                            className={styles.formInputInlineGroup}
-                            value={playlistEditForm.name}
-                            placeholder="Name..."
-                            onChange={e => setPlaylistEditForm({ ...playlistEditForm, name: e.target.value })}
-                          />
-                          <input 
-                            className={styles.formInputInlineGroup}
-                            value={playlistEditForm.desc}
-                            placeholder="Description..."
-                            onChange={e => setPlaylistEditForm({ ...playlistEditForm, desc: e.target.value })}
-                          />
-                          <div className={styles.inlineMetaSaveActionRowControl}>
-                            <button className={styles.inlineSaveCheckTrackBtn} onClick={() => handleUpdatePlaylistInline(p.id)}>✓ Save</button>
-                            <button className={styles.inlineCloseTrackCancelBtn} onClick={() => setEditingPlaylistId(null)}>✕</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <h4 className={styles.pNameDisplay}>
-                            📁 {p.name} 
-                            <button className={styles.inlineTitleEditActionTriggerPencil} onClick={() => {
-                              setEditingPlaylistId(p.id);
-                              setPlaylistEditForm({ name: p.name, desc: p.desc || '' });
-                            }}>✏️ Edit</button>
-                          </h4>
-                          <p className={styles.pDescDisplay}>{p.desc || 'No description provided.'}</p>
-                        </div>
-                      )}
-                    </div>
-                    <div className={styles.playlistHeaderControlsActionStackRow}>
-                      <button className={styles.shareActionTrigger} onClick={() => { setSelectedPlaylist(p); setShowShareModal(true); }}>🌐 Share</button>
-                      <button className={styles.purgePlaylistTriggerBtn} onClick={() => handlePurgeWholePlaylistNode(p.id)}>🗑️ Delete</button>
-                    </div>
-                  </div>
-
-                  {/* ACTIVE SHARE LABELS WITH LIVE CHANGE CONTROLS */}
-                  {p.sharedWith && p.sharedWith.length > 0 && (
-                    <div className={styles.sharedUsersTransparencyTrack}>
-                      <span className={styles.transparencyLabel}>Shared Nodes:</span>
-                      {p.sharedWith.map((user, idx) => (
-                        <div key={idx} className={styles.sharedUserChipBadgeRow}>
-                          <span className={styles.sharedUserChipBadge}>👤 {user.name}</span>
-                          <select 
-                            className={styles.inlinePermissionSelectMini}
-                            value={user.permission}
-                            onChange={e => handleModifyPermissionInline(p, user.email, e.target.value)}
-                          >
-                            <option value="view">View</option>
-                            <option value="edit">Edit</option>
-                          </select>
-                          <button className={styles.inlineRevokeUserBtn} onClick={() => handleRevokeUserAccessCompletely(p, user.email)}>✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className={styles.playlistTracksInternalWrap}>
-                    {!p.tracks || p.tracks.length === 0 ? <p className={styles.emptyTextSub}>No active tracks inside this playlist.</p> : p.tracks.map((t, idx) => {
-                      const isCurrentlyActiveStreamNode = activePlaylistQueue?.id === p.id && activeTrackIndex === idx;
-                      const isCurrentlyEditingTrackIndex = editingTrackIndex === `${p.id}-${idx}`;
-
-                      return (
-                        <div key={idx} className={`${styles.trackRowItem} ${isCurrentlyActiveStreamNode ? styles.activeTrackHighlightPulseNode : ''}`}>
-                          <div className={styles.clickableAreaRow} onClick={() => handleInitializePlaybackNode(t.url, t.title, p, idx)}>
-                            <span className={styles.trackIdx}>{(idx + 1).toString().padStart(2, '0')}</span>
-                            {isCurrentlyEditingTrackIndex ? (
-                              <div className={styles.inlineTrackEditingInputsWrapper} onClick={e => e.stopPropagation()}>
-                                <input 
-                                  className={styles.formInputSmall} 
-                                  value={editingTrackForm.title} 
-                                  onChange={e => setEditingTrackForm({ ...editingTrackForm, title: e.target.value })}
-                                />
-                                <input 
-                                  className={styles.formInputSmall} 
-                                  value={editingTrackForm.url} 
-                                  onChange={e => setEditingTrackForm({ ...editingTrackForm, url: e.target.value })}
-                                />
-                                <button className={styles.inlineSaveCheckTrackBtn} onClick={() => handleInlineTrackEditSave(p.id, idx)}>✓</button>
-                                <button className={styles.inlineCloseTrackCancelBtn} onClick={() => setEditingTrackIndex(null)}>✕</button>
-                              </div>
-                            ) : (
-                              <div className={styles.rowDetails}><p className={styles.trackName}>{t.title}</p></div>
-                            )}
-                          </div>
-                          
-                          <div className={styles.trackMutationInterfaceActionCluster}>
-                            <button className={styles.mutationArrowBtn} title="Eject Track Out of Playlist" onClick={(e) => { e.stopPropagation(); handlePullTrackOutOfPlaylist(p.id, idx); }}>📤 Pull Out</button>
-                            <button className={styles.mutationArrowBtn} onClick={(e) => { 
-                              e.stopPropagation(); 
-                              setEditingTrackIndex(`${p.id}-${idx}`); 
-                              setEditingTrackForm({ title: t.title, url: t.url }); 
-                            }}>✏️</button>
-                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>▲</button>
-                            <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>▼</button>
-                            <button className={styles.mutationDeleteBtn} onClick={(e) => { e.stopPropagation(); handleEraseTrackFromContainer(p.id, idx); }}>✕</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* COMMENT TIMELINE FEED MODULE */}
-                  <div className={styles.playlistCommentsMatrixModule}>
-                    <h5 className={styles.commentWidgetLabelHead}>💬 Team Feed Streams</h5>
-                    <div className={styles.commentTimelineScrollTrackContainer}>
-                      {p.comments && p.comments.map((c, cIdx) => (
-                        <div key={cIdx} className={styles.commentBubbleNodeItem}>
-                          <span className={styles.commentAuthorStamp}><strong>{c.authorName}</strong>:</span>
-                          <span className={styles.commentTextBodyOutput}>{c.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className={styles.commentIngestionRowSubmitField}>
-                      <input 
-                        className={styles.formInput}
-                        placeholder="Write inside project feed..."
-                        value={commentInputs[p.id] || ''}
-                        onChange={e => setCommentInputs({ ...commentInputs, [p.id]: e.target.value })}
-                        onKeyDown={e => e.key === 'Enter' && handlePostCommentNode(p.id)}
-                      />
-                      <button className={styles.sendCommentArrowTriggerBtn} onClick={() => handlePostCommentNode(p.id)}>Send</button>
-                    </div>
-                  </div>
-
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* SHARED ECOSYSTEM VIEWPORT */}
+          {/* SHARED WITH ME */}
           {activeTab === 'shared' && (
-            <div className={styles.playlistsVerticalGrid}>
-              {sharedPlaylists.length === 0 ? <p className={styles.emptyText}>No shared configurations found.</p> : sharedPlaylists.map(p => (
-                <div key={p.id} className={styles.playlistMegaBlockShared}>
-                  <div className={styles.playlistBlockHeader}>
-                    <div>
-                      <h4 className={styles.pNameDisplay}>🌐 {p.name}</h4>
-                      <p className={styles.pDescDisplay}>Author Node: <strong>{p.ownerName}</strong> ({p.ownerEmail})</p>
-                    </div>
-                    <div className={styles.playlistHeaderControlsActionStackRow}>
-                      <span className={styles.privilegeRoleLabelBadge}>Role: {p.sharedWith?.find(s => s.email === currentUserData.email)?.permission?.toUpperCase()}</span>
-                      <button className={styles.purgePlaylistTriggerBtn} onClick={() => handleSelfRemoveFromSharedPlaylist(p)}>Leave Playlist</button>
-                    </div>
-                  </div>
-
-                  <div className={styles.playlistTracksInternalWrap}>
-                    {!p.tracks || p.tracks.length === 0 ? <p className={styles.emptyTextSub}>Shared pipeline buffer empty.</p> : p.tracks.map((t, idx) => {
-                      const isCurrentlyActiveStreamNode = activePlaylistQueue?.id === p.id && activeTrackIndex === idx;
-                      const hasWritePrivileges = p.sharedWith?.find(s => s.email === currentUserData.email)?.permission === 'edit';
-                      const isCurrentlyEditingTrackIndex = editingTrackIndex === `${p.id}-${idx}`;
-
-                      return (
-                        <div key={idx} className={`${styles.trackRowItem} ${isCurrentlyActiveStreamNode ? styles.activeTrackHighlightPulseNode : ''}`}>
-                          <div className={styles.clickableAreaRow} onClick={() => handleInitializePlaybackNode(t.url, t.title, p, idx)}>
-                            <span className={styles.trackIdx}>{(idx + 1).toString().padStart(2, '0')}</span>
-                            {isCurrentlyEditingTrackIndex ? (
-                              <div className={styles.inlineTrackEditingInputsWrapper} onClick={e => e.stopPropagation()}>
-                                <input 
-                                  className={styles.formInputSmall} 
-                                  value={editingTrackForm.title} 
-                                  onChange={e => setEditingTrackForm({ ...editingTrackForm, title: e.target.value })}
-                                />
-                                <input 
-                                  className={styles.formInputSmall} 
-                                  value={editingTrackForm.url} 
-                                  onChange={e => setEditingTrackForm({ ...editingTrackForm, url: e.target.value })}
-                                />
-                                <button className={styles.inlineSaveCheckTrackBtn} onClick={() => handleInlineTrackEditSave(p.id, idx)}>✓</button>
-                                <button className={styles.inlineCloseTrackCancelBtn} onClick={() => setEditingTrackIndex(null)}>✕</button>
-                              </div>
-                            ) : (
-                              <div className={styles.rowDetails}><p className={styles.trackName}>{t.title}</p></div>
-                            )}
-                          </div>
-                          
-                          {hasWritePrivileges && (
-                            <div className={styles.trackMutationInterfaceActionCluster}>
-                              <button className={styles.mutationArrowBtn} title="Eject Track Out of Playlist" onClick={(e) => { e.stopPropagation(); handlePullTrackOutOfPlaylist(p.id, idx); }}>📤 Pull Out</button>
-                              <button className={styles.mutationArrowBtn} onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setEditingTrackIndex(`${p.id}-${idx}`); 
-                                setEditingTrackForm({ title: t.title, url: t.url }); 
-                              }}>✏️</button>
-                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'up'); }} disabled={idx === 0}>▲</button>
-                              <button className={styles.mutationArrowBtn} onClick={(e) => { e.stopPropagation(); handleAlterTrackSortingIndices(p.id, idx, 'down'); }} disabled={idx === p.tracks.length - 1}>▼</button>
-                              <button className={styles.mutationDeleteBtn} onClick={(e) => { e.stopPropagation(); handleEraseTrackFromContainer(p.id, idx); }}>✕</button>
-                            </div>
-                          )}
+            <div className={styles.playlistGrid}>
+              {sharedPlaylists.length === 0
+                ? <p className={styles.empty}>No playlists have been shared with you yet.</p>
+                : sharedPlaylists.map(p => {
+                  const myRole = p.sharedWith?.find(s => s.email === currentUser.email);
+                  const canEdit = myRole?.permission === 'edit';
+                  return (
+                    <div key={p.id} className={styles.playlistCardShared}>
+                      <div className={styles.playlistHeader}>
+                        <div>
+                          <h4 className={styles.playlistName}>🌐 {p.name}</h4>
+                          <p className={styles.playlistDesc}>by {p.ownerName} ({p.ownerEmail})</p>
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* COMMENTS LOG WINDOW */}
-                  <div className={styles.playlistCommentsMatrixModule}>
-                    <h5 className={styles.commentWidgetLabelHead}>💬 Team Feed Streams</h5>
-                    <div className={styles.commentTimelineScrollTrackContainer}>
-                      {p.comments && p.comments.map((c, cIdx) => (
-                        <div key={cIdx} className={styles.commentBubbleNodeItem}>
-                          <span className={styles.commentAuthorStamp}><strong>{c.authorName}</strong>:</span>
-                          <span className={styles.commentTextBodyOutput}>{c.text}</span>
+                        <div className={styles.playlistHeaderRight}>
+                          <span className={styles.roleBadge}>{myRole?.permission?.toUpperCase()}</span>
+                          <button className={styles.deleteBtn} onClick={() => leaveSharedPlaylist(p)}>Leave</button>
                         </div>
-                      ))}
+                      </div>
+                      {renderPlaylistTracks(p, canEdit, false)}
+                      <CommentFeed playlist={p} currentUser={currentUser} onPost={postComment} />
                     </div>
-                    <div className={styles.commentIngestionRowSubmitField}>
-                      <input 
-                        className={styles.formInput}
-                        placeholder="Write inside project feed..."
-                        value={commentInputs[p.id] || ''}
-                        onChange={e => setCommentInputs({ ...commentInputs, [p.id]: e.target.value })}
-                        onKeyDown={e => e.key === 'Enter' && handlePostCommentNode(p.id)}
-                      />
-                      <button className={styles.sendCommentArrowTriggerBtn} onClick={() => handlePostCommentNode(p.id)}>Send</button>
-                    </div>
-                  </div>
-
-                </div>
-              ))}
+                  );
+                })
+              }
             </div>
           )}
         </div>
 
-        {/* RECONFIGURED SLIM MEDIA PLAYER TERMINAL */}
-        <div className={styles.sidePlaybackSection}>
-          <div className={styles.stickyHardwarePlayer}>
-            <h3 className={styles.blockTitle}>⚡ Core Hardware</h3>
+        {/* SIDEBAR PLAYER */}
+        <div className={styles.sidebar}>
+          <div className={styles.player}>
+            <h3 className={styles.cardTitle}>Now Playing</h3>
             {activeVideoId ? (
-              <div className={styles.playerWrapperContainer}>
-                <div className={styles.videoEmbedContainer}>
+              <div className={styles.playerInner}>
+                <div className={styles.videoWrap}>
                   <iframe
                     ref={iframeRef}
-                    className={styles.youtubeIframeHardware}
+                    className={styles.iframe}
                     src={`https://www.youtube.com/embed/${activeVideoId}?enablejsapi=1&autoplay=1&modestbranding=1&rel=0`}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
-                    title="Active Output Pipeline"
+                    title={nowPlayingTitle}
                   />
                 </div>
-                <div className={styles.activeTrackConsoleDisplayMetadata}>
-                  <p className={styles.livePulseHeading}>⚡ ACTIVE OUTPUT:</p>
-                  <p className={styles.liveTrackTitleText}>{currentTrackTitle}</p>
-                  {activePlaylistQueue && (
-                    <span className={styles.queueMetadataContextIndexChip}>
-                      Track {activeTrackIndex + 1} of {activePlaylistQueue.tracks?.length} inside &ldquo;{activePlaylistQueue.name}&rdquo;
+                <div className={styles.nowPlaying}>
+                  <p className={styles.nowPlayingLabel}>▶ Now playing</p>
+                  <p className={styles.nowPlayingTitle}>{nowPlayingTitle}</p>
+                  {queuePlaylist && (
+                    <span className={styles.queueInfo}>
+                      Track {queueIndex + 1} of {queuePlaylist.tracks?.length} · {queuePlaylist.name}
                     </span>
                   )}
                 </div>
               </div>
             ) : (
-              <div className={styles.playerStandbyScreen}>
-                <div className={styles.standbyRadarPulse}>🎵</div>
-                <p>Hardware Core Offline</p>
+              <div className={styles.playerIdle}>
+                <div className={styles.playerIdleIcon}>🎵</div>
+                <p>Select a track to play</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* COMPILATION CREATION MODAL */}
-      {showPlaylistModal && (
-        <div className={styles.modalOverlay} onClick={() => setShowPlaylistModal(false)}>
-          <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
-            <h3 className={styles.modalHeadline}>📁 New Playlist Entry Node</h3>
-            <div className={styles.modalFormStack}>
-              <input 
-                className={styles.formInput} 
-                placeholder="Playlist Name..." 
-                value={playlistForm.name}
-                onChange={e => setPlaylistForm({...playlistForm, name: e.target.value})}
+      {/* CREATE PLAYLIST MODAL */}
+      {showCreateModal && (
+        <div className={styles.overlay} onClick={() => setShowCreateModal(false)}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <h3 className={styles.modalTitle}>New Playlist</h3>
+            <div className={styles.modalForm}>
+              <input
+                className={styles.input}
+                placeholder="Playlist name"
+                value={createForm.name}
+                onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
               />
-              <textarea 
-                className={styles.formTextarea} 
-                placeholder="Description details..." 
-                value={playlistForm.desc}
-                onChange={e => setPlaylistForm({...playlistForm, desc: e.target.value})}
+              <textarea
+                className={styles.textarea}
+                placeholder="Description (optional)"
+                value={createForm.desc}
+                onChange={e => setCreateForm(f => ({ ...f, desc: e.target.value }))}
               />
               <div className={styles.modalActions}>
-                <button className={styles.cancelBtn} onClick={() => setShowPlaylistModal(false)}>Cancel</button>
-                <button className={styles.confirmBtn} onClick={handleCreatePlaylist}>Save</button>
+                <button className={styles.cancelBtn} onClick={() => setShowCreateModal(false)}>Cancel</button>
+                <button className={styles.confirmBtn} onClick={createPlaylist} disabled={saving}>
+                  {saving ? 'Creating…' : 'Create'}
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ACCESS PRIVILEGE DISTRIBUTION MODAL */}
-      {showShareModal && (
-        <div className={styles.modalOverlay} onClick={() => setShowShareModal(false)}>
-          <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
-            <h3 className={styles.modalHeadline}>🌐 Permission Distribution Router</h3>
-            <div className={styles.modalFormStack}>
-              <select 
-                className={styles.formSelect}
-                value={shareForm.targetEmail}
-                onChange={e => setShareForm({...shareForm, targetEmail: e.target.value})}
+      {/* SHARE MODAL */}
+      {showShareModal && shareTarget && (
+        <div className={styles.overlay} onClick={() => setShowShareModal(false)}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <h3 className={styles.modalTitle}>Share "{shareTarget.name}"</h3>
+            <div className={styles.modalForm}>
+              <select
+                className={styles.select}
+                value={shareForm.email}
+                onChange={e => setShareForm(f => ({ ...f, email: e.target.value }))}
               >
-                <option value="">-- Choose Target Account Node --</option>
+                <option value="">Select a person…</option>
                 {allUsers.map(u => (
                   <option key={u.id} value={u.email}>
-                    {u.displayName || u.name || 'Workspace Profile'} ({u.email})
+                    {u.displayName || u.name || 'Workspace member'} ({u.email})
                   </option>
                 ))}
               </select>
-
-              <select 
-                className={styles.formSelect}
+              <select
+                className={styles.select}
                 value={shareForm.permission}
-                onChange={e => setShareForm({...shareForm, permission: e.target.value})}
+                onChange={e => setShareForm(f => ({ ...f, permission: e.target.value }))}
               >
-                <option value="view">👀 View Privilege Node Only</option>
-                <option value="edit">⚡ Full Read/Write Collaborator Link</option>
+                <option value="view">👀 Can view</option>
+                <option value="edit">✏️ Can edit</option>
               </select>
-
               <div className={styles.modalActions}>
                 <button className={styles.cancelBtn} onClick={() => setShowShareModal(false)}>Cancel</button>
-                <button className={styles.confirmBtn} onClick={handleApplySharePermission}>Bind</button>
+                <button className={styles.confirmBtn} onClick={sharePlaylist} disabled={saving}>
+                  {saving ? 'Sharing…' : 'Share'}
+                </button>
               </div>
             </div>
           </div>
