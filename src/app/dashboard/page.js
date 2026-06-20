@@ -45,6 +45,7 @@ const DEFAULT_TOOLS = [
   { id: "watchtracker",     title: "Watch Tracker",       desc: "Track movies and web series",           icon: "📺", color: "#4361ee", pinned: false },
   { id: "panorama",         title: "Panorama 360°",       desc: "360 degree panorama capture & view",    icon: "🌐", color: "#4361ee", pinned: false },
   { id: "MusicHub",         title: "My Music Hub",        desc: "Stream YouTube tracks & share playlists",icon: "🎵", color: "#7209b7", pinned: false },
+  { id: "link-checker",    title: "Link Checker",         desc: "Check URLs, scan for viruses, domains, vWHOIS, DNS, IP details.",    icon: "🔗",    color: "#7209b7",  pinned: false },
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
