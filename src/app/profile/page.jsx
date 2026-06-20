@@ -21,9 +21,11 @@ import {
   doc,
   getDoc,
   updateDoc,
+  deleteDoc,
+  writeBatch,
   serverTimestamp,
 } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { auth } from "@/lib/firebaseAuth";
 import { app } from "@/lib/firebase";
 import styles from "./profile.module.css";
@@ -65,6 +67,89 @@ const getAvatarColor = (str) => {
   let hash = 0;
   for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
   return colors[Math.abs(hash) % colors.length];
+};
+
+/* ─────────────────────────────────────────────
+   ACCOUNT DATA WIPE
+   Saare collections jaha userId field hai (top-level)
+   ya jo users/{uid}/ ke neeche subcollections hain.
+   Note: 'rooms' (video calls) aur 'chats/messages' jaan-boojh kar
+   skip kiye hain kyunki wo shared/group data hain — kisi aur user
+   ka conversation ya call record nahi hatana.
+───────────────────────────────────────────── */
+
+// users/{uid}/<sub> ke andar wali subcollections
+const USER_SUBCOLLECTIONS = ["watchtracker", "quicksongs", "link_checks"];
+
+// top-level collections jinme "userId" field se ownership pata chalta hai
+const USER_KEYED_COLLECTIONS = [
+  "transactions",
+  "khataEntries",
+  "notes",
+  "folders",
+  "tool_usage",
+  "login_logs",
+  "study_tasks",
+  "study_exams",
+  "study_sessions",
+  "study_flashcards",
+  "study_todos",
+  "study_notes",
+  "study_achievements",
+  "custom_subjects",
+  "study_habits",
+];
+
+const BATCH_LIMIT = 450; // Firestore hard limit 500, safety margin rakha
+
+// Docs ki list ko chunks me batch-delete karta hai
+const batchDeleteDocs = async (docRefs) => {
+  for (let i = 0; i < docRefs.length; i += BATCH_LIMIT) {
+    const chunk = docRefs.slice(i, i + BATCH_LIMIT);
+    const batch = writeBatch(db);
+    chunk.forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
+};
+
+// Saara account data delete karta hai. deleteUser() se PEHLE call hona zaroori hai,
+// warna auth.currentUser null ho jayega aur security rules sab reject kar dengi.
+const wipeAllUserData = async (uid) => {
+  // 1. users/{uid}/<subcollection> wala data
+  for (const sub of USER_SUBCOLLECTIONS) {
+    const snap = await getDocs(collection(db, "users", uid, sub));
+    if (!snap.empty) await batchDeleteDocs(snap.docs.map((d) => d.ref));
+  }
+
+  // 2. top-level collections jaha userId field match karta hai
+  for (const colName of USER_KEYED_COLLECTIONS) {
+    const q = query(collection(db, colName), where("userId", "==", uid));
+    const snap = await getDocs(q);
+    if (!snap.empty) await batchDeleteDocs(snap.docs.map((d) => d.ref));
+  }
+
+  // 3. subscriptions/{uid} — single doc, userId hi doc id hai
+  try {
+    await deleteDoc(doc(db, "subscriptions", uid));
+  } catch (e) {
+    console.warn("Subscription doc delete skipped:", e.message);
+  }
+
+  // 4. playlists jinka ye user owner hai
+  const playlistQ = query(collection(db, "playlists"), where("ownerId", "==", uid));
+  const playlistSnap = await getDocs(playlistQ);
+  if (!playlistSnap.empty) await batchDeleteDocs(playlistSnap.docs.map((d) => d.ref));
+
+  // 5. Storage avatar (agar upload kiya tha)
+  try {
+    await deleteObject(ref(storage, `avatars/${uid}`));
+  } catch (e) {
+    // Avatar nahi tha ya already deleted — ignore karo
+    if (e.code !== "storage/object-not-found") console.warn("Avatar delete skipped:", e.message);
+  }
+
+  // 6. Sabse last me users/{uid} doc khud
+  await deleteDoc(doc(db, "users", uid));
 };
 
 /* ─────────────────────────────────────────────
@@ -111,6 +196,7 @@ export default function ProfilePage() {
   const [deletePassword,    setDeletePassword]    = useState("");
   const [deleting,          setDeleting]          = useState(false);
   const [deleteError,       setDeleteError]       = useState("");
+  const [deleteStage,       setDeleteStage]       = useState(""); // progress text
 
   // 6. Export data
   const [exporting, setExporting] = useState(false);
@@ -270,23 +356,45 @@ export default function ProfilePage() {
     setExporting(false);
   };
 
-  /* ── DELETE ACCOUNT ── */
+  /* ── DELETE ACCOUNT ──
+     Order zaroori hai: pehle Firestore + Storage data wipe,
+     SABSE LAST me deleteUser() — kyunki deleteUser() ke baad
+     auth.currentUser null ho jata hai aur security rules sab
+     reject kar dengi agar humne pehle ye call kar diya. */
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== "DELETE") { setDeleteError("Type DELETE to confirm."); return; }
     setDeleting(true);
     setDeleteError("");
     try {
       const isEmail = user.providerData?.[0]?.providerId === "password";
+
+      // Step 1: Re-authenticate (Firebase recent-login requirement ke liye zaroori,
+      // especially deleteUser() jaisa sensitive operation karne se pehle)
       if (isEmail) {
+        setDeleteStage("Verifying password…");
         const cred = EmailAuthProvider.credential(user.email, deletePassword);
         await reauthenticateWithCredential(auth.currentUser, cred);
       }
+
+      // Step 2: Saara Firestore + Storage data wipe (auth abhi valid hai)
+      setDeleteStage("Deleting your data…");
+      await wipeAllUserData(user.uid);
+
+      // Step 3: Sabse last — Auth account delete (auto sign-out bhi ho jayega)
+      setDeleteStage("Removing account…");
       await deleteUser(auth.currentUser);
+
       router.replace("/login");
     } catch (e) {
-      setDeleteError(e.code === "auth/wrong-password" ? "Wrong password." : "Failed: " + e.message);
+      console.error(e);
+      setDeleteError(
+        e.code === "auth/wrong-password" ? "Wrong password." :
+        e.code === "auth/requires-recent-login" ? "Session expired — please log out and log in again, then retry." :
+        "Failed: " + e.message
+      );
     }
     setDeleting(false);
+    setDeleteStage("");
   };
 
   /* ── RENDER GUARDS ── */
@@ -793,7 +901,11 @@ export default function ProfilePage() {
               <span className={styles.cardTitle} style={{ color: "var(--danger)" }}>Delete Account</span>
             </div>
             <div className={styles.cardBody}>
-              <p className={styles.dangerDesc}>Permanently delete your account. This action <strong>cannot be undone</strong>.</p>
+              <p className={styles.dangerDesc}>
+                Permanently delete your account <strong>and all associated data</strong> — tool history,
+                login logs, notes, financial records, study data, playlists you own, and your avatar.
+                This action <strong>cannot be undone</strong>.
+              </p>
               <button className={styles.dangerBtn} onClick={() => setShowDeleteModal(true)}>
                 Delete My Account
               </button>
@@ -804,12 +916,13 @@ export default function ProfilePage() {
 
       {/* ── DELETE CONFIRM MODAL ── */}
       {showDeleteModal && (
-        <div className={styles.modalOverlay} onClick={e => e.target === e.currentTarget && setShowDeleteModal(false)}>
+        <div className={styles.modalOverlay} onClick={e => !deleting && e.target === e.currentTarget && setShowDeleteModal(false)}>
           <div className={styles.modal}>
             <div className={styles.modalIcon}>🗑️</div>
             <h3 className={styles.modalTitle}>Delete Account</h3>
             <p className={styles.modalDesc}>
-              This will permanently delete your account and all data. Type <strong>DELETE</strong> to confirm.
+              This will permanently delete your account and <strong>all your data</strong> across every
+              feature (notes, financials, study tools, history, playlists, avatar). Type <strong>DELETE</strong> to confirm.
             </p>
 
             <label className={styles.label}>Type DELETE to confirm</label>
@@ -818,6 +931,7 @@ export default function ProfilePage() {
               value={deleteConfirmText}
               onChange={e => setDeleteConfirmText(e.target.value)}
               placeholder="DELETE"
+              disabled={deleting}
             />
 
             {user.providerData?.[0]?.providerId === "password" && (
@@ -829,14 +943,25 @@ export default function ProfilePage() {
                   value={deletePassword}
                   onChange={e => setDeletePassword(e.target.value)}
                   placeholder="Current password"
+                  disabled={deleting}
                 />
               </>
+            )}
+
+            {deleting && deleteStage && (
+              <div className={styles.completionHint} style={{ marginTop: 10, textAlign: "center" }}>
+                ⏳ {deleteStage}
+              </div>
             )}
 
             {deleteError && <div className={styles.errorMsg}>{deleteError}</div>}
 
             <div className={styles.modalActions}>
-              <button className={styles.outlineBtn} onClick={() => { setShowDeleteModal(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteError(""); }}>
+              <button
+                className={styles.outlineBtn}
+                onClick={() => { setShowDeleteModal(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteError(""); }}
+                disabled={deleting}
+              >
                 Cancel
               </button>
               <button
@@ -844,7 +969,7 @@ export default function ProfilePage() {
                 onClick={handleDeleteAccount}
                 disabled={deleting || deleteConfirmText !== "DELETE"}
               >
-                {deleting ? "Deleting…" : "🗑 Confirm Delete"}
+                {deleting ? (deleteStage || "Deleting…") : "🗑 Confirm Delete"}
               </button>
             </div>
           </div>
