@@ -154,7 +154,7 @@ export default function LinkCheckerPage() {
     <div className={styles.page} data-theme={theme}>
       <div className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => router.push("/dashboard")}>
-          ← Dashboard
+          ← Back
         </button>
         <div className={styles.brand}>
           <div className={styles.brandIcon}>🛡️</div>
