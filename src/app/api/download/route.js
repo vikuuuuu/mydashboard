@@ -9,21 +9,17 @@ export async function POST(request) {
       return NextResponse.json({ error: "URL parameter is missing" }, { status: 400 });
     }
 
-    // ── STEP 1: REAL SCRAPER INTEGRATION POINT ──
-    // Yahan production me aapka custom ya rapidapi parser dynamic link nikalega.
+    // ── CORE LOGIC UPDATE ──
+    // Ab hum koi fake/dummy URL nahi lagayenge. User ka pasted URL hi aage bhejenge.
+    // NOTE: Agar aapke paas Instagram/Twitter ka video URL extractor API hai (jaise RapidAPI), 
+    // toh aap use yahan lagakar direct `.mp4` video stream CDN link nikal sakte hain.
     let extractedDirectMp4Url = url;
-
-    if (url.includes("instagram.com") || url.includes("cdninstagram.com")) {
-      // NOTE: Purana google cloud bucket link Access Denied de raha tha.
-      // Isliye ab hum ek stable public open-source stream video use kar rahe hain test validation ke liye:
-      extractedDirectMp4Url = "https://vjs.zencdn.net/v/oceans.mp4"; 
-    }
 
     return NextResponse.json({
       title: "Social Media Video Content",
       quality: "Auto-Detected (Best Quality)",
       size: "Calculated dynamically",
-      downloadUrl: extractedDirectMp4Url,
+      downloadUrl: extractedDirectMp4Url, // User ka original input link pass ho raha hai
     });
 
   } catch (error) {
@@ -54,7 +50,6 @@ export async function GET(request) {
       },
     });
 
-    // Agar destination server status code 200 nahi deta (jaise Access Denied)
     if (!videoResponse.ok) {
       console.warn(`Target CDN status error: ${videoResponse.status}. Activating fallback redirect.`);
       return NextResponse.redirect(proxyUrl);
