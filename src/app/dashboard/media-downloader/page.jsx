@@ -33,7 +33,7 @@ export default function MediaDownloader() {
     }
   }, [url]);
 
-  // Extract YouTube Video ID for preview
+  // Extract YouTube Video ID for preview iframe
   const extractYoutubeId = (url) => {
     const regExp = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([^&?/]+)/;
     const match = url.match(regExp);
@@ -59,7 +59,7 @@ export default function MediaDownloader() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ url: url }),
+        body: JSON.stringify({ url: url, action: "parse" }),
       });
 
       if (!response.ok) {
@@ -68,31 +68,36 @@ export default function MediaDownloader() {
 
       const backendData = await response.json();
 
-      let previewLink = url;
+      let previewLink = backendData.downloadUrl;
+      
+      // YouTube ke liye direct embed layout use karenge
       if (platform === "youtube") {
         const videoId = extractYoutubeId(url);
         if (videoId) previewLink = `https://www.youtube.com/embed/${videoId}`;
+      } else {
+        // Instagram/Twitter ke CORS block se bachne ke liye proxy stream URL banayenge
+        previewLink = `/api/download?proxyUrl=${encodeURIComponent(backendData.downloadUrl)}`;
       }
 
       setMediaData({
-        title: backendData.title || "Extracted Video Stream",
+        title: backendData.title || "Social Media Video Content",
         type: platform === "youtube" ? "youtube" : "video",
         preview: previewLink, 
         downloadUrl: backendData.downloadUrl, 
-        quality: backendData.quality || "High Definition",
-        size: backendData.size || "Dynamic Size",
+        quality: backendData.quality || "Auto-Detected (Best Quality)",
+        size: backendData.size || "Calculated dynamically",
         originalUrl: url
       });
 
     } catch (err) {
       console.error("Preview Exception:", err);
-      alert("Failed to extract media asset. Make sure backend route is created.");
+      alert("Failed to extract media asset. Make sure backend route is working properly.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── ADVANCED BINARY DOWNLOAD & LOCAL STORAGE STREAMER ──
+  // ── ADVANCED BINARY DOWNLOAD & LOCAL CACHE STORAGE ──
   const triggerBinaryDownload = async () => {
     if (!mediaData || !mediaData.downloadUrl) return;
 
@@ -103,8 +108,11 @@ export default function MediaDownloader() {
       const cacheName = "media-downloader-cache";
       const cache = await caches.open(cacheName);
       
-      // 1. Check if video already exists in Local Cache Storage
-      const cachedResponse = await cache.match(mediaData.downloadUrl);
+      // Proxy URL ke jariye fetch request bhejna taaki CORS browser error na aaye
+      const targetFetchUrl = `/api/download?proxyUrl=${encodeURIComponent(mediaData.downloadUrl)}`;
+      
+      // 1. Check if video already exists in Local Browser Cache Storage
+      const cachedResponse = await cache.match(targetFetchUrl);
       let blob;
 
       if (cachedResponse) {
@@ -112,48 +120,47 @@ export default function MediaDownloader() {
         setDownloadProgress(70);
         blob = await cachedResponse.blob();
       } else {
-        console.log("Downloading fresh from Backend Proxy...");
-        // 2. Fetch the actual file as Binary Data Stream
-        const response = await fetch(mediaData.downloadUrl);
+        console.log("Downloading fresh from Proxy Server...");
+        setDownloadProgress(30);
         
-        if (!response.ok) throw new Error("Network stream failed");
+        const response = await fetch(targetFetchUrl);
+        if (!response.ok) throw new Error("Network stream fetch failed");
 
-        // Clone response before consuming it to save in local cache
+        // Response ka clone banakar storage mein save karenge
         const responseClone = response.clone();
         blob = await response.blob();
 
-        // Save public data/file to Browser's Cache Storage for future use
-        await cache.put(mediaData.downloadUrl, responseClone);
+        await cache.put(targetFetchUrl, responseClone);
       }
 
       setDownloadProgress(90);
 
-      // 3. Create Local Blob Object URL to force local hardware download
+      // 2. Local BloB URL dispatch rules (forces direct local storage save)
       const blobUrl = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = blobUrl;
       
-      // Filename according to platform type
-      const extension = mediaData.type === "youtube" ? "mp4" : "mp4";
-      anchor.download = `${mediaData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${Date.now()}.${extension}`;
+      // Clean safe file name create karna
+      const cleanTitle = mediaData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      anchor.download = `${cleanTitle}-${Date.now()}.mp4`;
       
       document.body.appendChild(anchor);
       anchor.click();
       
-      // Clean up memory
+      // Memory cleanup
       document.body.removeChild(anchor);
       window.URL.revokeObjectURL(blobUrl);
       
       setDownloadProgress(100);
     } catch (err) {
       console.error("Download pipeline error:", err);
-      // Fallback: Agar browser allow na kare toh standard direct link download
-      window.open(mediaData.downloadUrl, "_blank");
+      // Fallback: Agar secure blob block ho toh proxy open direct window rule
+      window.open(`/api/download?proxyUrl=${encodeURIComponent(mediaData.downloadUrl)}`, "_blank");
     } finally {
       setTimeout(() => {
         setDownloading(false);
         setDownloadProgress(0);
-      }, 1000);
+      }, 1200);
     }
   };
 
@@ -178,7 +185,7 @@ export default function MediaDownloader() {
 
       {/* MAIN CONTAINER LAYOUT */}
       <div className={styles.layout}>
-        {/* LEFT COMPONENT PANEL */}
+        {/* LEFT PANEL */}
         <aside className={styles.leftPanel}>
           <div className={styles.panelHeader}>
             <span className={styles.panelTitle}>Paste Link</span>
@@ -201,7 +208,7 @@ export default function MediaDownloader() {
                 <input
                   type="url"
                   className={styles.textInput}
-                  placeholder="Paste direct public media link here..."
+                  placeholder="Paste direct media link here..."
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   required
@@ -221,7 +228,7 @@ export default function MediaDownloader() {
           </form>
         </aside>
 
-        {/* MIDDLE LIVE VIEW PANEL */}
+        {/* MIDDLE PANEL (PREVIEW WINDOW) */}
         <main className={styles.middlePanel}>
           {!mediaData && !loading && (
             <div className={styles.dropZone}>
@@ -229,7 +236,7 @@ export default function MediaDownloader() {
                 <div className={styles.dropEmoji}>📥</div>
                 <p className={styles.dropText}>No Active Media Target Stream</p>
                 <span className={styles.dropSub}>
-                  Paste an active public URL link into the left panel module configuration.
+                  Paste an active URL link into the left panel module configuration.
                 </span>
               </div>
             </div>
@@ -264,7 +271,9 @@ export default function MediaDownloader() {
                   <video
                     src={mediaData.preview}
                     controls
-                    style={{ width: "100%", maxHeight: "400px", borderRadius: "8px" }}
+                    crossOrigin="anonymous" /* 👈 Sabse important CORS bypass ke liye */
+                    playsInline
+                    style={{ width: "100%", maxHeight: "400px", borderRadius: "8px", backgroundColor: "#000" }}
                   />
                 )}
 
@@ -276,7 +285,7 @@ export default function MediaDownloader() {
           )}
         </main>
 
-        {/* RIGHT SYSTEM CONTROL PANEL */}
+        {/* RIGHT PANEL */}
         <aside className={styles.rightPanel}>
           <div className={styles.panelHeader}>
             <span className={styles.panelTitle}>Engine Core Controls</span>
@@ -296,14 +305,13 @@ export default function MediaDownloader() {
                 </div>
               </div>
 
-              {/* ⚡ DOWNLOADS ACTUAL FILE DATA */}
               <button 
                 onClick={triggerBinaryDownload} 
                 className={styles.convertBtn}
                 style={{ width: '100%', fontWeight: '600' }}
                 disabled={downloading}
               >
-                {downloading ? `Saving Asset (${downloadProgress}%)` : "⚡ Download File Now"}
+                {downloading ? `Processing Asset (${downloadProgress}%)` : "⚡ Download File Now"}
               </button>
 
               {downloading && (
