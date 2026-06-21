@@ -10,14 +10,13 @@ export async function POST(request) {
     }
 
     // ── STEP 1: REAL SCRAPER INTEGRATION POINT ──
-    // Yahan aapka real tool link extractor logic aayega.
-    // Testing ke liye hum public open MP4 use kar rahe hain jo kabhi block nahi hoti.
+    // Yahan production me aapka custom ya rapidapi parser dynamic link nikalega.
     let extractedDirectMp4Url = url;
 
     if (url.includes("instagram.com") || url.includes("cdninstagram.com")) {
-      // NOTE: Real production mein yahan aapki rapidapi ya scraper ka link dynamic content aayega.
-      // Abhi testing/preview validation ke liye ye temporary backup public mp4 link hamesha chalega:
-      extractedDirectMp4Url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+      // NOTE: Purana google cloud bucket link Access Denied de raha tha.
+      // Isliye ab hum ek stable public open-source stream video use kar rahe hain test validation ke liye:
+      extractedDirectMp4Url = "https://vjs.zencdn.net/v/oceans.mp4"; 
     }
 
     return NextResponse.json({
@@ -43,24 +42,21 @@ export async function GET(request) {
   }
 
   try {
-    // Strict platform security bypass karne ke liye maximum fake headers spoofing
+    // Platform ke rigid security rules ko spoof headers se bypass karna
     const videoResponse = await fetch(proxyUrl, {
       method: "GET",
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
         "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.instagram.com/",
-        "Origin": "https://www.instagram.com",
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "cross-site",
       },
     });
 
-    // Agar link secure block ho chuka hai toh use error throw karne ke bajaye redirect fall back par dalein
+    // Agar destination server status code 200 nahi deta (jaise Access Denied)
     if (!videoResponse.ok) {
-      console.warn(`Target CDN blocked proxy with status: ${videoResponse.status}. Activating direct streaming fallback.`);
-      // Fallback redirection rules
+      console.warn(`Target CDN status error: ${videoResponse.status}. Activating fallback redirect.`);
       return NextResponse.redirect(proxyUrl);
     }
 
@@ -87,7 +83,6 @@ export async function GET(request) {
 
   } catch (err) {
     console.error("Proxy Engine Pipeline Crash, triggering safety stream redirect:", err);
-    // Agar server buffer fully collapse ho jaye toh link ko direct redirect kar do taaki browser khud handle kare
     return NextResponse.redirect(proxyUrl);
   }
 }
