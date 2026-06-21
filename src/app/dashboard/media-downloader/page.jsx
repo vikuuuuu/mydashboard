@@ -49,7 +49,7 @@ export default function MediaDownloader() {
     setLoading(true);
     setMediaData(null);
     setDownloadProgress(0);
-    setUseFallbackUrl(false); // Reset standard status
+    setUseFallbackUrl(false);
 
     try {
       const response = await fetch("/api/download", {
@@ -69,7 +69,6 @@ export default function MediaDownloader() {
         const videoId = extractYoutubeId(url);
         if (videoId) previewLink = `https://www.youtube.com/embed/${videoId}`;
       } else {
-        // Build secure proxy stream URL
         previewLink = `/api/download?proxyUrl=${encodeURIComponent(backendData.downloadUrl)}`;
       }
 
@@ -101,9 +100,7 @@ export default function MediaDownloader() {
       const cacheName = "media-downloader-cache";
       const cache = await caches.open(cacheName);
       
-      // Use proxy endpoint path for downloading safely
       const targetFetchUrl = `/api/download?proxyUrl=${encodeURIComponent(mediaData.downloadUrl)}`;
-      
       const cachedResponse = await cache.match(targetFetchUrl);
       let blob;
 
@@ -114,11 +111,10 @@ export default function MediaDownloader() {
         setDownloadProgress(30);
         const response = await fetch(targetFetchUrl);
         
-        // Agar proxy pipe block ho rahi hai toh original file stream se directly uthao
         if (!response.ok) {
-          console.log("Proxy down during download, falling back to direct link stream...");
+          console.log("Proxy endpoint issues, trying direct extraction link...");
           const directResponse = await fetch(mediaData.downloadUrl);
-          if (!directResponse.ok) throw new Error("All data pipelines are closed.");
+          if (!directResponse.ok) throw new Error("All stream pipelines blocked.");
           blob = await directResponse.blob();
         } else {
           const responseClone = response.clone();
@@ -143,7 +139,6 @@ export default function MediaDownloader() {
       setDownloadProgress(100);
     } catch (err) {
       console.error("Download failure:", err);
-      // Absolute fallback rule
       window.open(mediaData.downloadUrl, "_blank");
     } finally {
       setTimeout(() => {
@@ -164,9 +159,9 @@ export default function MediaDownloader() {
           <span>Universal Media Downloader</span>
         </div>
         <div className={styles.topStats}>
-          <span className={styles.statChip}>v3.2.0</span>
+          <span className={styles.statChip}>v3.2.5</span>
           <span className={styles.statChip} style={{ borderColor: "var(--buy)", color: "var(--buy)" }}>
-            ● Advanced Proxy Active
+            ● Pipeline Fixed
           </span>
         </div>
       </header>
@@ -262,9 +257,8 @@ export default function MediaDownloader() {
                     crossOrigin="anonymous"
                     playsInline
                     onError={() => {
-                      // Agar proxy pipe data reject kare, toh auto crash-safe switch active hoga
                       if (!useFallbackUrl) {
-                        console.log("Proxy stream broke down, switching layout to direct source URL...");
+                        console.log("Proxy link rejected stream, switching setup to direct destination link...");
                         setUseFallbackUrl(true);
                       }
                     }}
