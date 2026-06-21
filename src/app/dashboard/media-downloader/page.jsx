@@ -10,8 +10,8 @@ export default function MediaDownloader() {
   const [platform, setPlatform] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [useFallbackUrl, setUseFallbackUrl] = useState(false);
 
-  // Detect Platform dynamically
   useEffect(() => {
     if (!url) {
       setPlatform("");
@@ -19,7 +19,6 @@ export default function MediaDownloader() {
     }
 
     const lowerUrl = url.toLowerCase();
-
     if (lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be")) {
       setPlatform("youtube");
     } else if (lowerUrl.includes("instagram.com")) {
@@ -33,7 +32,6 @@ export default function MediaDownloader() {
     }
   }, [url]);
 
-  // Extract YouTube Video ID for preview iframe
   const extractYoutubeId = (url) => {
     const regExp = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([^&?/]+)/;
     const match = url.match(regExp);
@@ -44,7 +42,6 @@ export default function MediaDownloader() {
     return `${styles.presetChip} ${platform === name ? styles.presetActive : ""}`;
   };
 
-  // ── CORE MEDIA PARSER ENGINE ──
   const handleFetchPreview = async (e) => {
     e.preventDefault();
     if (!url) return;
@@ -52,30 +49,27 @@ export default function MediaDownloader() {
     setLoading(true);
     setMediaData(null);
     setDownloadProgress(0);
+    setUseFallbackUrl(false); // Reset standard status
 
     try {
       const response = await fetch("/api/download", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url: url, action: "parse" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url }),
       });
 
-      if (!response.ok) {
-        throw new Error("Backend server response failed");
-      }
+      if (!response.ok) throw new Error("Backend server response failed");
 
       const backendData = await response.json();
+      if (backendData.error) throw new Error(backendData.error);
 
       let previewLink = backendData.downloadUrl;
       
-      // YouTube ke liye direct embed layout use karenge
       if (platform === "youtube") {
         const videoId = extractYoutubeId(url);
         if (videoId) previewLink = `https://www.youtube.com/embed/${videoId}`;
       } else {
-        // Instagram/Twitter ke CORS block se bachne ke liye proxy stream URL banayenge
+        // Build secure proxy stream URL
         previewLink = `/api/download?proxyUrl=${encodeURIComponent(backendData.downloadUrl)}`;
       }
 
@@ -91,13 +85,12 @@ export default function MediaDownloader() {
 
     } catch (err) {
       console.error("Preview Exception:", err);
-      alert("Failed to extract media asset. Make sure backend route is working properly.");
+      alert("Failed to extract media asset. Check if backend route is functional.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── ADVANCED BINARY DOWNLOAD & LOCAL CACHE STORAGE ──
   const triggerBinaryDownload = async () => {
     if (!mediaData || !mediaData.downloadUrl) return;
 
@@ -108,54 +101,50 @@ export default function MediaDownloader() {
       const cacheName = "media-downloader-cache";
       const cache = await caches.open(cacheName);
       
-      // Proxy URL ke jariye fetch request bhejna taaki CORS browser error na aaye
+      // Use proxy endpoint path for downloading safely
       const targetFetchUrl = `/api/download?proxyUrl=${encodeURIComponent(mediaData.downloadUrl)}`;
       
-      // 1. Check if video already exists in Local Browser Cache Storage
       const cachedResponse = await cache.match(targetFetchUrl);
       let blob;
 
       if (cachedResponse) {
-        console.log("Serving from Local Browser Storage...");
         setDownloadProgress(70);
         blob = await cachedResponse.blob();
       } else {
-        console.log("Downloading fresh from Proxy Server...");
         setDownloadProgress(30);
-        
         const response = await fetch(targetFetchUrl);
-        if (!response.ok) throw new Error("Network stream fetch failed");
-
-        // Response ka clone banakar storage mein save karenge
-        const responseClone = response.clone();
-        blob = await response.blob();
-
-        await cache.put(targetFetchUrl, responseClone);
+        
+        // Agar proxy pipe block ho rahi hai toh original file stream se directly uthao
+        if (!response.ok) {
+          console.log("Proxy down during download, falling back to direct link stream...");
+          const directResponse = await fetch(mediaData.downloadUrl);
+          if (!directResponse.ok) throw new Error("All data pipelines are closed.");
+          blob = await directResponse.blob();
+        } else {
+          const responseClone = response.clone();
+          blob = await response.blob();
+          await cache.put(targetFetchUrl, responseClone);
+        }
       }
 
       setDownloadProgress(90);
 
-      // 2. Local BloB URL dispatch rules (forces direct local storage save)
       const blobUrl = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = blobUrl;
-      
-      // Clean safe file name create karna
       const cleanTitle = mediaData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       anchor.download = `${cleanTitle}-${Date.now()}.mp4`;
       
       document.body.appendChild(anchor);
       anchor.click();
       
-      // Memory cleanup
       document.body.removeChild(anchor);
       window.URL.revokeObjectURL(blobUrl);
-      
       setDownloadProgress(100);
     } catch (err) {
-      console.error("Download pipeline error:", err);
-      // Fallback: Agar secure blob block ho toh proxy open direct window rule
-      window.open(`/api/download?proxyUrl=${encodeURIComponent(mediaData.downloadUrl)}`, "_blank");
+      console.error("Download failure:", err);
+      // Absolute fallback rule
+      window.open(mediaData.downloadUrl, "_blank");
     } finally {
       setTimeout(() => {
         setDownloading(false);
@@ -166,7 +155,6 @@ export default function MediaDownloader() {
 
   return (
     <div className={styles.page}>
-      {/* TOP BAR */}
       <header className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => window.history.back()}>
           ← Back to Dashboard
@@ -176,14 +164,13 @@ export default function MediaDownloader() {
           <span>Universal Media Downloader</span>
         </div>
         <div className={styles.topStats}>
-          <span className={styles.statChip}>v3.1.0</span>
+          <span className={styles.statChip}>v3.2.0</span>
           <span className={styles.statChip} style={{ borderColor: "var(--buy)", color: "var(--buy)" }}>
-            ● Local Storage Engine Active
+            ● Advanced Proxy Active
           </span>
         </div>
       </header>
 
-      {/* MAIN CONTAINER LAYOUT */}
       <div className={styles.layout}>
         {/* LEFT PANEL */}
         <aside className={styles.leftPanel}>
@@ -265,14 +252,22 @@ export default function MediaDownloader() {
                     src={mediaData.preview}
                     allowFullScreen
                     style={{ borderRadius: "8px", border: "none" }}
-                    title="Live Media Render Pipeline Preview"
+                    title="Live Media Preview"
                   />
                 ) : (
                   <video
-                    src={mediaData.preview}
+                    key={useFallbackUrl ? "fallback" : "proxy"}
+                    src={useFallbackUrl ? mediaData.downloadUrl : mediaData.preview}
                     controls
-                    crossOrigin="anonymous" /* 👈 Sabse important CORS bypass ke liye */
+                    crossOrigin="anonymous"
                     playsInline
+                    onError={() => {
+                      // Agar proxy pipe data reject kare, toh auto crash-safe switch active hoga
+                      if (!useFallbackUrl) {
+                        console.log("Proxy stream broke down, switching layout to direct source URL...");
+                        setUseFallbackUrl(true);
+                      }
+                    }}
                     style={{ width: "100%", maxHeight: "400px", borderRadius: "8px", backgroundColor: "#000" }}
                   />
                 )}
@@ -311,7 +306,7 @@ export default function MediaDownloader() {
                 style={{ width: '100%', fontWeight: '600' }}
                 disabled={downloading}
               >
-                {downloading ? `Processing Asset (${downloadProgress}%)` : "⚡ Download File Now"}
+                {downloading ? `Saving Asset (${downloadProgress}%)` : "⚡ Download File Now"}
               </button>
 
               {downloading && (
