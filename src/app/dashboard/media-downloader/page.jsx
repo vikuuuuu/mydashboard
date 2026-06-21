@@ -151,7 +151,7 @@ export default function MediaDownloader() {
     <div className={styles.page}>
       <header className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => window.history.back()}>
-          ← Back to Dashboard
+          ← Back
         </button>
         <div className={styles.brand}>
           <div className={styles.brandIcon}>🚀</div>
