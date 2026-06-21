@@ -73,18 +73,18 @@ export default function MediaDownloader() {
       }
 
       setMediaData({
-        title: backendData.title || "Social Media Video Content",
+        title: backendData.title || "Social Media Content",
         type: platform === "youtube" ? "youtube" : "video",
         preview: previewLink, 
         downloadUrl: backendData.downloadUrl, 
-        quality: backendData.quality || "Auto-Detected (Best Quality)",
+        quality: backendData.quality || "Auto-Detected (Best)",
         size: backendData.size || "Calculated dynamically",
         originalUrl: url
       });
 
     } catch (err) {
       console.error("Preview Exception:", err);
-      alert("Failed to extract media asset. Check if backend route is functional.");
+      alert("Failed to extract media asset.");
     } finally {
       setLoading(false);
     }
@@ -112,9 +112,8 @@ export default function MediaDownloader() {
         const response = await fetch(targetFetchUrl);
         
         if (!response.ok) {
-          console.log("Proxy endpoint issues, trying direct extraction link...");
           const directResponse = await fetch(mediaData.downloadUrl);
-          if (!directResponse.ok) throw new Error("All stream pipelines blocked.");
+          if (!directResponse.ok) throw new Error("Pipelines blocked.");
           blob = await directResponse.blob();
         } else {
           const responseClone = response.clone();
@@ -159,9 +158,9 @@ export default function MediaDownloader() {
           <span>Universal Media Downloader</span>
         </div>
         <div className={styles.topStats}>
-          <span className={styles.statChip}>v3.2.5</span>
+          <span className={styles.statChip}>v3.3.0</span>
           <span className={styles.statChip} style={{ borderColor: "var(--buy)", color: "var(--buy)" }}>
-            ● Pipeline Fixed
+            ● Direct User Input Target
           </span>
         </div>
       </header>
@@ -190,7 +189,7 @@ export default function MediaDownloader() {
                 <input
                   type="url"
                   className={styles.textInput}
-                  placeholder="Paste direct media link here..."
+                  placeholder="Paste direct video link here..."
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   required
@@ -258,7 +257,7 @@ export default function MediaDownloader() {
                     playsInline
                     onError={() => {
                       if (!useFallbackUrl) {
-                        console.log("Proxy link rejected stream, switching setup to direct destination link...");
+                        console.log("Switching setup to direct destination link...");
                         setUseFallbackUrl(true);
                       }
                     }}
