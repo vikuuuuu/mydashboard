@@ -65,7 +65,13 @@
 @keyframes toastOut { to{opacity:0} }
 
 /* ─── TOPBAR ─────────────────────────────────────────────────────────────── */
-.topBar { display:flex; align-items:center; gap:14px; margin-bottom:18px; flex-wrap:wrap; }
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
 .backBtn {
   display:flex; align-items:center; gap:6px;
   background:var(--surface); border:1px solid var(--border2);
@@ -74,7 +80,25 @@
   transition:all 0.2s; box-shadow:var(--shadow); white-space:nowrap;
 }
 .backBtn:hover { border-color:var(--accent); color:var(--accent); background:var(--accentS); }
-.titleArea { flex:1; min-width:0; }
+
+/* LEFT CONTROLS (dark/notif/history) — now on left side */
+.leftControls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.controlBtn {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; box-shadow: var(--shadow);
+}
+.controlBtn:hover { background: var(--accent); transform: scale(1.06); border-color: var(--accent); }
+.controlBtnActive { background: var(--accentS); border-color: var(--accent); }
+.controlBtnMuted  { opacity: 0.55; }
+
+.titleArea { flex: 1; min-width: 0; }
 .title {
   font-size:1.7rem; font-weight:800; color:var(--text);
   letter-spacing:-0.03em; display:flex; align-items:center; gap:10px;
@@ -84,14 +108,73 @@
   background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; letter-spacing:0.5px;
 }
 .subtitle { color:var(--text2); font-size:0.85rem; margin-top:2px; }
-.headerControls { display:flex; gap:8px; }
-.iconBtn {
-  width:36px; height:36px; border-radius:10px;
-  background:var(--surface); border:1px solid var(--border);
-  cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;
-  transition:all 0.2s; box-shadow:var(--shadow);
+
+/* ─── YEAR COUNTDOWN BANNER ──────────────────────────────────────────────── */
+.yearCountdownBanner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  border: 1px solid rgba(96,165,250,0.25);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  position: relative;
+  overflow: hidden;
 }
-.iconBtn:hover { background:var(--accent); transform:scale(1.05); }
+.yearCountdownBanner::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,0.05), transparent);
+  animation: shimmer 4s infinite;
+}
+.yearCountdownLeft {
+  display: flex; align-items: center; gap: 12px; z-index: 1;
+}
+.yearIcon { font-size: 24px; }
+.yearLabel {
+  font-size: 0.95rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em;
+}
+.yearSub { font-size: 0.78rem; color: #94a3b8; margin-top: 2px; }
+.yearCountdownUnits {
+  display: flex; gap: 10px; z-index: 1;
+}
+.yearUnit {
+  display: flex; flex-direction: column; align-items: center;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px; padding: 8px 14px; min-width: 58px;
+}
+.yearUnitNum {
+  font-size: 1.5rem; font-weight: 900; color: #60a5fa;
+  font-variant-numeric: tabular-nums; letter-spacing: 1px; line-height: 1;
+}
+.yearUnitLabel {
+  font-size: 0.64rem; color: #94a3b8; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px;
+}
+.yearProgress {
+  flex: 1; min-width: 120px; z-index: 1;
+}
+.yearProgressLabel {
+  font-size: 0.75rem; color: #94a3b8; font-weight: 600; margin-bottom: 6px;
+}
+.yearProgressBar {
+  height: 8px; background: rgba(255,255,255,0.1); border-radius: 99px; overflow: hidden; margin-bottom: 5px;
+}
+.yearProgressFill {
+  height: 100%;
+  background: linear-gradient(to right, #3b82f6, #60a5fa, #a78bfa);
+  border-radius: 99px;
+  transition: width 1s ease;
+}
+.yearProgressPct {
+  font-size: 0.75rem; color: #60a5fa; font-weight: 700;
+}
+:global([data-theme="dark"]) .yearCountdownBanner {
+  background: linear-gradient(135deg, #020617, #0f172a);
+  border-color: rgba(96,165,250,0.2);
+}
 
 /* ─── ALERTS ─────────────────────────────────────────────────────────────── */
 .upcomingAlert {
@@ -121,6 +204,29 @@
   color:#fff; cursor:pointer; transition:background 0.2s; z-index:1; white-space:nowrap;
 }
 .autoModeBadge:hover { background:rgba(255,255,255,0.3); }
+
+/* ─── EXAM QUICK BAR ─────────────────────────────────────────────────────── */
+.examQuickBar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(67,97,238,0.07), rgba(58,134,255,0.07));
+  border: 1px solid var(--border2);
+  border-radius: var(--radius); padding: 12px 18px; margin-bottom: 14px;
+}
+.examQuickInfo { display: flex; align-items: center; gap: 9px; }
+.examQuickIcon { font-size: 20px; }
+.examQuickTitle { display: block; font-size: 0.88rem; font-weight: 700; color: var(--text); }
+.examQuickAvg  { display: block; font-size: 0.75rem; color: var(--text2); margin-top: 1px; }
+.examQuickList { display: flex; gap: 7px; flex-wrap: wrap; flex: 1; }
+.examQuickChip {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 999px; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; color: var(--text);
+}
+.examQuickDays {
+  background: var(--accent); color: #fff; font-size: 10px; font-weight: 800;
+  padding: 1px 7px; border-radius: 999px;
+}
+.examQuickMore { font-size: 0.79rem; color: var(--text2); align-self: center; }
 
 /* ─── STREAK BANNER ──────────────────────────────────────────────────────── */
 .streakBanner {
@@ -242,7 +348,6 @@
 }
 .filterChip:hover { border-color:var(--accent); color:var(--accent); }
 .filterChipActive { background:var(--accent); color:#fff !important; border-color:var(--accent); }
-.todoFilters { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
 
 /* ─── TIMETABLE ──────────────────────────────────────────────────────────── */
 .timetableForm { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
@@ -387,18 +492,44 @@
 /* ─── EXAMS ──────────────────────────────────────────────────────────────── */
 .examForm { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
 .examForm .formInput, .examForm .formSelect { flex:1; min-width:130px; }
+.examAvgBadge {
+  margin-left: auto; background: var(--accentS); color: var(--accent);
+  border: 1px solid rgba(67,97,238,0.2); border-radius: 999px;
+  padding: 4px 13px; font-size: 12px; font-weight: 700;
+}
+/* Exam Summary Row */
+.examSummaryRow {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px;
+}
+.examSummaryCard {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transition: all 0.2s;
+}
+.examSummaryCard:hover { transform: translateY(-2px); box-shadow: var(--shadowMd); }
+.examSummaryIcon { font-size: 20px; }
+.examSummaryNum  { font-size: 1.6rem; font-weight: 900; color: var(--accent); line-height: 1; }
+.examSummaryLabel { font-size: 0.72rem; color: var(--text2); font-weight: 600; text-align: center; }
+
 .examDeadlineList { display:flex; flex-direction:column; gap:10px; }
 .examCountdownCard { background:linear-gradient(135deg,#fff1f2,#ffe4e6); border:1px solid #fecdd3; border-radius:13px; padding:14px 16px; display:flex; justify-content:space-between; align-items:flex-start; transition:all 0.2s; }
 :global([data-theme="dark"]) .examCountdownCard { background:linear-gradient(135deg,#450a0a,#7f1d1d); border-color:#991b1b; }
 .examCountdownCard:hover { transform:translateX(3px); box-shadow:0 4px 14px rgba(220,38,38,0.18); }
 .examUrgent  { border-color:#ef4444; box-shadow:0 0 14px rgba(239,68,68,0.25); }
 .examWarning { border-color:#f59e0b; }
-.examHeader { display:flex; align-items:center; gap:9px; margin-bottom:7px; }
+.examHeader { display:flex; align-items:center; gap:9px; margin-bottom:7px; flex-wrap: wrap; }
 .examHeader h4 { color:#991b1b; font-size:1rem; font-weight:700; }
 :global([data-theme="dark"]) .examHeader h4 { color:#fca5a5; }
 .examSubjects { font-size:0.8rem; color:#b91c1c; margin-bottom:4px; }
 .examNotes    { font-size:0.78rem; color:#b91c1c; margin-bottom:8px; font-style:italic; }
 :global([data-theme="dark"]) .examSubjects,:global([data-theme="dark"]) .examNotes { color:#f87171; }
+.examTargetScoreBadge {
+  background: rgba(239,68,68,0.15); color: #dc2626; font-size: 10.5px;
+  font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid rgba(239,68,68,0.3);
+}
+:global([data-theme="dark"]) .examTargetScoreBadge { background: rgba(252,165,165,0.15); color: #fca5a5; border-color: rgba(252,165,165,0.3); }
 .countdownGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
 .countdownUnit { background:rgba(220,38,38,0.1); padding:7px; border-radius:8px; text-align:center; }
 .countdownNumber { display:block; font-size:1.4rem; font-weight:800; color:#dc2626; font-variant-numeric:tabular-nums; }
@@ -499,6 +630,50 @@
 .habitProgressBar { height:6px; background:var(--surface3); border-radius:99px; overflow:hidden; margin-top:8px; }
 .habitProgressFill { height:100%; background:linear-gradient(to right,#10b981,var(--accent)); border-radius:99px; transition:width 0.6s ease; }
 
+/* ─── TOOL HISTORY MODAL ─────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+.modalBox {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--radius); padding: 0; width: 100%; max-width: 520px;
+  max-height: 75vh; display: flex; flex-direction: column;
+  box-shadow: var(--shadowMd); animation: slideUp 0.25s ease;
+}
+@keyframes slideUp { from{transform:translateY(30px);opacity:0} to{transform:translateY(0);opacity:1} }
+.modalHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px; border-bottom: 1px solid var(--border);
+}
+.modalHeader h2 { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+.modalClose {
+  width: 30px; height: 30px; border-radius: 8px; border: none;
+  background: var(--surface2); color: var(--text2); font-size: 14px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.modalClose:hover { background: var(--danger); color: #fff; }
+.historyList {
+  overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 7px;
+}
+.historyList::-webkit-scrollbar { width: 4px; }
+.historyList::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 99px; }
+.historyEntry {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 9px; padding: 9px 13px; transition: all 0.15s;
+}
+.historyEntry:hover { border-color: var(--accent); transform: translateX(2px); }
+.historyEntryLeft { display: flex; flex-direction: column; gap: 2px; }
+.historyAction {
+  font-size: 0.83rem; font-weight: 700; color: var(--text);
+  text-transform: capitalize; font-variant: small-caps; letter-spacing: 0.3px;
+}
+.historyResource { font-size: 0.75rem; color: var(--accent); font-weight: 600; }
+.historyTime { font-size: 0.72rem; color: var(--text3); white-space: nowrap; flex-shrink: 0; }
+
 /* ─── FULLSCREEN TIMETABLE ───────────────────────────────────────────────── */
 .fullScreenOverlay { position:fixed; inset:0; background:var(--bg); z-index:9999; overflow-y:auto; animation:fadeIn 0.25s ease; }
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
@@ -506,8 +681,6 @@
 .fullScreenHeader { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:14px; }
 .fullScreenHeader h1 { font-size:1.8rem; font-weight:800; color:var(--text); }
 .fullScreenControls { display:flex; gap:7px; flex-wrap:wrap; }
-.viewModeBtn { padding:8px 14px; border-radius:10px; border:1px solid var(--border2); background:var(--surface); color:var(--text2); font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; transition:all 0.2s; }
-.viewModeBtn:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
 .closeFullScreen { padding:8px 16px; border-radius:10px; border:none; background:#ef4444; color:#fff; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
 .closeFullScreen:hover { background:#dc2626; }
 .weekViewGrid { display:grid; grid-template-columns:repeat(7,1fr); gap:12px; }
@@ -545,6 +718,7 @@
   .studyGrid { grid-template-columns:1fr 1fr; }
   .weekViewGrid { grid-template-columns:repeat(4,1fr); }
   .analyticsGrid { grid-template-columns:1fr; }
+  .examSummaryRow { grid-template-columns:repeat(2,1fr); }
 }
 @media (max-width:900px) {
   .statsGrid { grid-template-columns:repeat(2,1fr); }
@@ -552,6 +726,7 @@
   .weekViewGrid { grid-template-columns:repeat(2,1fr); }
   .countdownGrid { grid-template-columns:repeat(2,1fr); }
   .monthlyGrid { grid-template-columns:repeat(2,1fr); }
+  .yearCountdownBanner { flex-direction:column; align-items:flex-start; }
 }
 @media (max-width:640px) {
   .page { padding:14px; }
@@ -563,4 +738,9 @@
   .timetableForm { flex-direction:column; }
   .weekViewGrid { grid-template-columns:1fr; }
   .tabBtn { padding:7px 10px; font-size:11.5px; }
+  .yearCountdownUnits { gap:7px; }
+  .yearUnit { min-width:48px; padding:6px 10px; }
+  .yearUnitNum { font-size:1.2rem; }
+  .examSummaryRow { grid-template-columns:repeat(2,1fr); }
+  .modalBox { max-width:95vw; }
 }
