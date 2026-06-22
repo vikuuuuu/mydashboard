@@ -22,6 +22,9 @@ const POMODORO_PRESETS = [
 const MOODS = ["😊 Happy","😤 Focused","😴 Tired","😰 Stressed","🔥 Motivated","🧘 Calm","😐 Neutral"];
 const SUBJECT_COLORS = ["#4361ee","#f77f00","#e63946","#0f9d6e","#9b5de5","#f15bb5","#00bbf9","#ffd166","#06d6a0","#118ab2","#e76f51","#2a9d8f"];
 
+// ─── NEW YEAR COUNTDOWN TARGET ────────────────────────────────────────────────
+const YEAR_TARGET = new Date("2027-01-01T00:00:00");
+
 export default function UltraStudyHub() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -29,6 +32,7 @@ export default function UltraStudyHub() {
   const [activeTab, setActiveTab] = useState("timetable");
   const [currentTime, setCurrentTime] = useState(new Date());
   const [toastMsg, setToastMsg] = useState(null);
+  const [yearCountdown, setYearCountdown] = useState({ d:0,h:0,m:0,s:0 });
 
   // Timetable
   const [tasks, setTasks] = useState([]);
@@ -80,6 +84,7 @@ export default function UltraStudyHub() {
   const [examPriority, setExamPriority] = useState("High");
   const [examSubjectsInput, setExamSubjectsInput] = useState("");
   const [examNotes, setExamNotes] = useState("");
+  const [examTargetScore, setExamTargetScore] = useState("");
 
   // Notes
   const [quickNotes, setQuickNotes] = useState("");
@@ -128,6 +133,10 @@ export default function UltraStudyHub() {
   const [newHabit, setNewHabit] = useState("");
   const [habitFreq, setHabitFreq] = useState("daily");
 
+  // Tool History
+  const [toolHistory, setToolHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+
   const fileInputRef = useRef(null);
   const studyTimerRef = useRef(null);
   const pomodoroRef = useRef(null);
@@ -140,6 +149,24 @@ export default function UltraStudyHub() {
     setTimeout(() => setToastMsg(null), 3200);
   }, []);
 
+  // ─── YEAR COUNTDOWN ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const diff = YEAR_TARGET - now;
+      if (diff <= 0) { setYearCountdown({ d:0,h:0,m:0,s:0 }); return; }
+      setYearCountdown({
+        d: Math.floor(diff / 86400000),
+        h: Math.floor((diff / 3600000) % 24),
+        m: Math.floor((diff / 60000) % 60),
+        s: Math.floor((diff / 1000) % 60),
+      });
+    };
+    tick();
+    const i = setInterval(tick, 1000);
+    return () => clearInterval(i);
+  }, []);
+
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
       if (!u) { router.replace("/login"); return; }
@@ -147,7 +174,8 @@ export default function UltraStudyHub() {
       setDarkMode(localStorage.getItem("studyDarkMode") === "true");
       loadCustomSubjects(u.uid);
       loadHabits(u.uid);
-      logToolUsage({ userId: u.uid, tool: "Ultra Study Hub v3 - Visit" });
+      loadToolHistory(u.uid);
+      logToolUsage({ userId: u.uid, tool: "Study Hub", action: "visit", metadata: { version: "4.0" } });
     });
     return () => unsub();
   }, [router]);
@@ -234,6 +262,20 @@ export default function UltraStudyHub() {
     return () => clearInterval(pomodoroRef.current);
   }, [isPomodoroMode, pomodoroPhase, pomodoroPreset, showToast]);
 
+  const loadToolHistory = async (uid) => {
+    try {
+      const q = query(collection(db, "tool_usage"), where("userId", "==", uid));
+      const snap = await getDocs(q);
+      const hist = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => {
+          const da = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+          const db2 = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+          return db2 - da;
+        });
+      setToolHistory(hist);
+    } catch (e) { console.error("Tool history load error:", e); }
+  };
+
   const loadCustomSubjects = async (uid) => {
     try {
       const q = query(collection(db, "custom_subjects"), where("userId", "==", uid));
@@ -244,6 +286,10 @@ export default function UltraStudyHub() {
         if (s) setCustomSubjects(JSON.parse(s));
       }
     } catch (e) { console.error(e); }
+  };
+
+  const loadHabits = async (uid) => {
+    // handled via onSnapshot listenCol
   };
 
   const saveCustomSubjects = async (subjects) => {
@@ -301,6 +347,14 @@ export default function UltraStudyHub() {
     return { d: Math.floor(diff / 86400000), h: Math.floor((diff / 3600000) % 24), m: Math.floor((diff / 60000) % 60), s: Math.floor((diff / 1000) % 60), done: false };
   };
 
+  // ─── EXAM AVERAGE TIME REMAINING ─────────────────────────────────────────────
+  const getExamAvgDaysRemaining = () => {
+    const upcoming = exams.filter(e => new Date(e.examDate) > new Date());
+    if (!upcoming.length) return null;
+    const avg = upcoming.reduce((sum, e) => sum + (new Date(e.examDate) - new Date()), 0) / upcoming.length;
+    return Math.floor(avg / 86400000);
+  };
+
   // Timetable CRUD
   const addTask = async () => {
     if (!subject || !startTime || !endTime || !user) { showToast("Sabhi fields fill karein!", "error"); return; }
@@ -312,14 +366,20 @@ export default function UltraStudyHub() {
         color: taskColorInput || getSubjectColor(subject), notes: taskNoteInput, createdAt: serverTimestamp(),
       });
     }
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_task", resourceName: subject, metadata: { days: daysToAdd, taskType } });
     setSubject(""); setStartTime(""); setEndTime(""); setTaskNoteInput(""); setRepeatDays([]);
     showToast(`Slot added${daysToAdd.length > 1 ? ` for ${daysToAdd.length} days` : ""} ✅`);
   };
 
-  const deleteTask = async (id) => { await deleteDoc(doc(db, "study_tasks", id)); showToast("Slot deleted"); };
+  const deleteTask = async (id) => {
+    await deleteDoc(doc(db, "study_tasks", id));
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_task", resourceId: id });
+    showToast("Slot deleted");
+  };
 
   const saveEditTask = async (id) => {
     await updateDoc(doc(db, "study_tasks", id), editForm);
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "edit_task", resourceId: id });
     setEditingTaskId(null); setEditForm({}); showToast("Slot updated!");
   };
 
@@ -329,12 +389,13 @@ export default function UltraStudyHub() {
       endTime: task.endTime, taskType: task.taskType, day: task.day,
       color: task.color, notes: task.notes || "", createdAt: serverTimestamp(),
     });
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "duplicate_task", resourceName: task.subject });
     showToast("Slot duplicated!");
   };
 
   const exportTimetable = (format = "json") => {
     if (format === "json") {
-      const data = { tasks, customSubjects, exportedAt: new Date().toISOString(), version: "3.0" };
+      const data = { tasks, customSubjects, exportedAt: new Date().toISOString(), version: "4.0" };
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
       a.download = `timetable-${new Date().toISOString().split("T")[0]}.json`;
@@ -348,6 +409,7 @@ export default function UltraStudyHub() {
       a.download = `timetable-${new Date().toISOString().split("T")[0]}.csv`;
       a.click(); showToast("CSV exported! ✅");
     }
+    logToolUsage({ userId: user?.uid, tool: "Study Hub", action: "export_timetable", metadata: { format } });
   };
 
   const importTimetable = async (e) => {
@@ -389,6 +451,7 @@ export default function UltraStudyHub() {
             setCustomSubjects(merged); saveCustomSubjects(merged);
           }
         }
+        await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "import_timetable", metadata: { count, format: isCSV ? "csv" : "json" } });
         showToast(`✅ ${count} slots imported!`);
       } catch (err) { showToast("❌ Import failed!", "error"); }
     };
@@ -396,9 +459,10 @@ export default function UltraStudyHub() {
     e.target.value = "";
   };
 
-  const startStudyMode = () => {
+  const startStudyMode = async () => {
     if (!activeSubject) { showToast("Subject select karein!", "error"); return; }
     setSecondsElapsed(0); setIsStudyMode(true);
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "start_study_session", resourceName: activeSubject, metadata: { targetMinutes, mood: studyMood } });
     showToast(`📚 Study started: ${activeSubject}`);
   };
 
@@ -413,6 +477,7 @@ export default function UltraStudyHub() {
         actualTime: actualMins, accuracyPercentage: accuracy,
         mood: studyMood, notes: sessionNote, tags: sessionTags, createdAt: serverTimestamp(),
       });
+      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "stop_study_session", resourceName: activeSubject, metadata: { actualMins, accuracy, mood: studyMood } });
       showToast(`🎉 Session saved! Accuracy: ${accuracy}%`);
     } catch (e) { showToast("Error saving session", "error"); }
     setSecondsElapsed(0); setSessionNote(""); setSessionTags("");
@@ -470,36 +535,58 @@ export default function UltraStudyHub() {
 
   const addExam = async () => {
     if (!examName || !examDate) { showToast("Exam name aur date zaroor!", "error"); return; }
-    await addDoc(collection(db, "study_exams"), { userId: user.uid, examName, examDate, priority: examPriority, subjects: examSubjectsInput, notes: examNotes, createdAt: serverTimestamp() });
-    setExamName(""); setExamDate(""); setExamSubjectsInput(""); setExamNotes("");
+    await addDoc(collection(db, "study_exams"), {
+      userId: user.uid, examName, examDate, priority: examPriority,
+      subjects: examSubjectsInput, notes: examNotes,
+      targetScore: examTargetScore || "",
+      createdAt: serverTimestamp()
+    });
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_exam", resourceName: examName, metadata: { examDate, priority: examPriority } });
+    setExamName(""); setExamDate(""); setExamSubjectsInput(""); setExamNotes(""); setExamTargetScore("");
     showToast(`🎯 "${examName}" set!`);
   };
-  const deleteExam = async (id) => { await deleteDoc(doc(db, "study_exams", id)); showToast("Exam deleted"); };
+  const deleteExam = async (id) => {
+    await deleteDoc(doc(db, "study_exams", id));
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_exam", resourceId: id });
+    showToast("Exam deleted");
+  };
 
   const saveNote = async () => {
     if (!quickNotes) { showToast("Note likhein!", "error"); return; }
     if (editingNoteId) {
       await updateDoc(doc(db, "study_notes", editingNoteId), { title: noteTitle || "Untitled", content: quickNotes, tag: noteTag, updatedAt: serverTimestamp() });
+      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "edit_note", resourceId: editingNoteId, resourceName: noteTitle });
       setEditingNoteId(null); showToast("Note updated!");
     } else {
       await addDoc(collection(db, "study_notes"), { userId: user.uid, title: noteTitle || "Untitled", content: quickNotes, tag: noteTag, createdAt: serverTimestamp() });
+      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_note", resourceName: noteTitle || "Untitled" });
       showToast("Note saved! 📝");
     }
     setQuickNotes(""); setNoteTitle(""); setNoteTag("");
   };
-  const deleteNote = async (id) => { await deleteDoc(doc(db, "study_notes", id)); showToast("Note deleted"); };
+  const deleteNote = async (id) => {
+    await deleteDoc(doc(db, "study_notes", id));
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_note", resourceId: id });
+    showToast("Note deleted");
+  };
   const editNote = (note) => { setNoteTitle(note.title); setQuickNotes(note.content); setNoteTag(note.tag || ""); setEditingNoteId(note.id); setActiveTab("notes"); };
 
   const addFlashcard = async () => {
     if (!newFront || !newBack) { showToast("Front aur back fill karein!", "error"); return; }
     await addDoc(collection(db, "study_flashcards"), { userId: user.uid, front: newFront, back: newBack, subject: newCardSubject || "General", tag: newCardTag, reviewCount: 0, confidence: 0, createdAt: serverTimestamp() });
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_flashcard", resourceName: newCardSubject || "General" });
     setNewFront(""); setNewBack(""); showToast("Flashcard added! 🗂️");
   };
-  const deleteFlashcard = async (id) => { await deleteDoc(doc(db, "study_flashcards", id)); showToast("Flashcard deleted"); };
+  const deleteFlashcard = async (id) => {
+    await deleteDoc(doc(db, "study_flashcards", id));
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_flashcard", resourceId: id });
+    showToast("Flashcard deleted");
+  };
   const startReview = (subjectFilter = "all") => {
     let cards = subjectFilter === "all" ? [...flashcards] : flashcards.filter(f => f.subject === subjectFilter);
     if (shuffleCards) cards = cards.sort(() => Math.random() - 0.5);
     setReviewCards(cards); setReviewIndex(0); setShowAnswer(false); setReviewMode(true);
+    logToolUsage({ userId: user.uid, tool: "Study Hub", action: "start_flashcard_review", metadata: { count: cards.length, subjectFilter } });
   };
   const rateCard = async (id, confidence) => {
     const card = flashcards.find(f => f.id === id);
@@ -511,59 +598,56 @@ export default function UltraStudyHub() {
   const addTodo = async () => {
     if (!newTodo) { showToast("Todo likhein!", "error"); return; }
     await addDoc(collection(db, "study_todos"), { userId: user.uid, text: newTodo, subject: todoSubject, dueDate: todoDue, priority: todoPriority, tag: todoTag, completed: false, createdAt: serverTimestamp() });
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_todo", resourceName: newTodo.slice(0, 50), metadata: { priority: todoPriority } });
     setNewTodo(""); setTodoDue(""); setTodoSubject(""); setTodoTag("");
     showToast("Todo added! ✅");
   };
-  const toggleTodo = async (id, completed) => { await updateDoc(doc(db, "study_todos", id), { completed: !completed }); };
-  const deleteTodo = async (id) => { await deleteDoc(doc(db, "study_todos", id)); showToast("Todo deleted"); };
+  const toggleTodo = async (id, completed) => {
+    await updateDoc(doc(db, "study_todos", id), { completed: !completed });
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: completed ? "uncomplete_todo" : "complete_todo", resourceId: id });
+  };
+  const deleteTodo = async (id) => {
+    await deleteDoc(doc(db, "study_todos", id));
+    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_todo", resourceId: id });
+    showToast("Todo deleted");
+  };
 
   // ─── FIREBASE DRIVEN HABITS ─────────────────────────────────────────────
+  const addHabit = async () => {
+    if (!newHabit.trim() || !user) return;
+    try {
+      await addDoc(collection(db, "study_habits"), {
+        userId: user.uid, text: newHabit.trim(), freq: habitFreq,
+        completedDates: [], createdAt: serverTimestamp()
+      });
+      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_habit", resourceName: newHabit.trim(), metadata: { freq: habitFreq } });
+      setNewHabit("");
+      showToast("Habit added! 🌱");
+    } catch (e) { showToast("Error adding habit", "error"); }
+  };
 
-const addHabit = async () => {
-  if (!newHabit.trim() || !user) return;
-  try {
-    await addDoc(collection(db, "study_habits"), {
-      userId: user.uid,
-      text: newHabit.trim(),
-      freq: habitFreq,
-      completedDates: [], // Khali array shuruat mein
-      createdAt: serverTimestamp()
-    });
-    setNewHabit(""); 
-    showToast("Habit added! 🌱");
-  } catch (e) {
-    showToast("Error adding habit", "error");
-  }
-};
+  const toggleHabit = async (id) => {
+    if (!user) return;
+    const today = new Date().toDateString();
+    const habitToToggle = habits.find(h => h.id === id);
+    if (!habitToToggle) return;
+    const isDoneToday = habitToToggle.completedDates.includes(today);
+    const updatedDates = isDoneToday
+      ? habitToToggle.completedDates.filter(d => d !== today)
+      : [...habitToToggle.completedDates, today];
+    try {
+      await updateDoc(doc(db, "study_habits", id), { completedDates: updatedDates });
+      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: isDoneToday ? "uncheck_habit" : "check_habit", resourceId: id, resourceName: habitToToggle.text });
+    } catch (e) { showToast("Error updating habit", "error"); }
+  };
 
-const toggleHabit = async (id) => {
-  if (!user) return;
-  const today = new Date().toDateString();
-  const habitToToggle = habits.find(h => h.id === id);
-  if (!habitToToggle) return;
-
-  const isDoneToday = habitToToggle.completedDates.includes(today);
-  const updatedDates = isDoneToday
-    ? habitToToggle.completedDates.filter(d => d !== today) // Uncheck karne par date remove hogi
-    : [...habitToToggle.completedDates, today];            // Check karne par add hogi
-
-  try {
-    await updateDoc(doc(db, "study_habits", id), {
-      completedDates: updatedDates
-    });
-  } catch (e) {
-    showToast("Error updating habit", "error");
-  }
-};
-
-const deleteHabit = async (id) => {
-  try {
-    await deleteDoc(doc(db, "study_habits", id));
-    showToast("Habit deleted");
-  } catch (e) {
-    showToast("Error deleting habit", "error");
-  }
-};
+  const deleteHabit = async (id) => {
+    try {
+      await deleteDoc(doc(db, "study_habits", id));
+      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_habit", resourceId: id });
+      showToast("Habit deleted");
+    } catch (e) { showToast("Error deleting habit", "error"); }
+  };
 
   const totalStudiedMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
   const avgAccuracy = studySessions.length ? Math.round(studySessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / studySessions.length) : 0;
@@ -592,7 +676,10 @@ const deleteHabit = async (id) => {
   const allCardSubjects = [...new Set(flashcards.map(f => f.subject).filter(Boolean))];
   const filteredFlashcards = cardSubjectFilter === "all" ? flashcards : flashcards.filter(f => f.subject === cardSubjectFilter);
 
-  // ─── FULLSCREEN TIMETABLE ────────────────────────────────────────────────
+  const avgExamDays = getExamAvgDaysRemaining();
+  const upcomingExams = exams.filter(e => new Date(e.examDate) > new Date());
+
+  // ─── FULLSCREEN TIMETABLE ──────────────────────────────────────────────────
   if (fullScreenTimetable) {
     const grouped = {};
     DAYS.forEach(d => { grouped[d] = tasks.filter(t => t.day === d).sort((a, b) => a.startTime.localeCompare(b.startTime)); });
@@ -659,20 +746,106 @@ const deleteHabit = async (id) => {
     );
   }
 
-  // ─── MAIN RENDER ─────────────────────────────────────────────────────────
+  // ─── TOOL HISTORY MODAL ────────────────────────────────────────────────────
+  const ToolHistoryModal = () => (
+    <div className={styles.modalOverlay} onClick={() => setShowHistory(false)}>
+      <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <h2>🕒 Tool History</h2>
+          <button className={styles.modalClose} onClick={() => setShowHistory(false)}>✕</button>
+        </div>
+        <div className={styles.historyList}>
+          {toolHistory.length === 0
+            ? <p className={styles.emptyState}>Koi history nahi abhi.</p>
+            : toolHistory.slice(0, 50).map((h, i) => {
+                const d = h.createdAt?.toDate?.() || new Date(h.createdAt || 0);
+                return (
+                  <div key={h.id || i} className={styles.historyEntry}>
+                    <div className={styles.historyEntryLeft}>
+                      <span className={styles.historyAction}>{h.action || h.tool}</span>
+                      {h.resourceName && <span className={styles.historyResource}>{h.resourceName}</span>}
+                    </div>
+                    <span className={styles.historyTime}>{d.toLocaleString("en-IN", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" })}</span>
+                  </div>
+                );
+              })
+          }
+        </div>
+      </div>
+    </div>
+  );
+
+  // ─── MAIN RENDER ──────────────────────────────────────────────────────────
   return (
     <div className={`${styles.page} ${darkMode ? styles.darkMode : ""}`}>
       {toastMsg && <div className={`${styles.toast} ${styles[`toast_${toastMsg.type}`]}`}>{toastMsg.msg}</div>}
+      {showHistory && <ToolHistoryModal />}
 
+      {/* ── TOP BAR ── */}
       <div className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => router.push("/dashboard")}>← Back</button>
+
+        {/* LEFT SIDE CONTROLS */}
+        <div className={styles.leftControls}>
+          <button
+            className={`${styles.controlBtn} ${darkMode ? styles.controlBtnActive : ""}`}
+            onClick={() => setDarkMode(p => !p)}
+            title={darkMode ? "Light Mode" : "Dark Mode"}
+          >
+            {darkMode ? "☀️" : "🌙"}
+          </button>
+          <button
+            className={`${styles.controlBtn} ${!notificationsEnabled ? styles.controlBtnMuted : ""}`}
+            onClick={() => setNotificationsEnabled(p => !p)}
+            title={notificationsEnabled ? "Notifications On" : "Notifications Off"}
+          >
+            {notificationsEnabled ? "🔔" : "🔕"}
+          </button>
+          <button className={styles.controlBtn} onClick={() => { setShowHistory(true); loadToolHistory(user?.uid); }} title="Tool History">
+            🕒
+          </button>
+        </div>
+
         <div className={styles.titleArea}>
-          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v3.0</span></h1>
+          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v4.0</span></h1>
           <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} • {currentDayName}, {currentTime.toLocaleDateString("en-IN")}</p>
         </div>
-        <div className={styles.headerControls}>
-          <button className={styles.iconBtn} onClick={() => setNotificationsEnabled(p => !p)}>{notificationsEnabled ? "🔔" : "🔕"}</button>
-          <button className={styles.iconBtn} onClick={() => setDarkMode(p => !p)}>{darkMode ? "☀️" : "🌙"}</button>
+      </div>
+
+      {/* ── 2026 → 2027 YEAR COUNTDOWN ── */}
+      <div className={styles.yearCountdownBanner}>
+        <div className={styles.yearCountdownLeft}>
+          <span className={styles.yearIcon}>🗓️</span>
+          <div>
+            <div className={styles.yearLabel}>2026 → 2027 Countdown</div>
+            <div className={styles.yearSub}>Naye saal tak kitna bacha</div>
+          </div>
+        </div>
+        <div className={styles.yearCountdownUnits}>
+          {[
+            { v: yearCountdown.d, l: "Days" },
+            { v: yearCountdown.h, l: "Hours" },
+            { v: yearCountdown.m, l: "Mins" },
+            { v: yearCountdown.s, l: "Secs" },
+          ].map(({ v, l }) => (
+            <div key={l} className={styles.yearUnit}>
+              <span className={styles.yearUnitNum}>{String(v).padStart(2,"0")}</span>
+              <span className={styles.yearUnitLabel}>{l}</span>
+            </div>
+          ))}
+        </div>
+        <div className={styles.yearProgress}>
+          <div className={styles.yearProgressLabel}>
+            2026 Progress
+          </div>
+          <div className={styles.yearProgressBar}>
+            <div className={styles.yearProgressFill} style={{
+              width: `${Math.min(((currentTime - new Date("2026-01-01")) / (new Date("2027-01-01") - new Date("2026-01-01"))) * 100, 100)}%`
+            }} />
+          </div>
+          <div className={styles.yearProgressPct}>
+            {Math.round(((currentTime - new Date("2026-01-01")) / (new Date("2027-01-01") - new Date("2026-01-01"))) * 100)}% done
+          </div>
         </div>
       </div>
 
@@ -689,6 +862,7 @@ const deleteHabit = async (id) => {
         </div>
       )}
 
+      {/* ── STREAK BANNER ── */}
       <div className={styles.streakBanner}>
         <div className={styles.streakItem}>🔥<div><span className={styles.streakNumber}>{streak}</span><span className={styles.streakLabel}>Day Streak</span></div></div>
         <div className={styles.streakItem}>🎯<div><span className={styles.streakNumber}>{todayStudied}/{studyGoalMinutes}</span><span className={styles.streakLabel}>Today (min)</span></div></div>
@@ -697,6 +871,7 @@ const deleteHabit = async (id) => {
         <div className={styles.progressBarContainer}><div className={styles.progressBar} style={{ width: `${Math.min((todayStudied / studyGoalMinutes) * 100, 100)}%` }} /></div>
       </div>
 
+      {/* ── STATS GRID ── */}
       <div className={styles.statsGrid}>
         {[
           { icon: "⏱️", val: `${Math.floor(totalStudiedMins / 60)}h ${totalStudiedMins % 60}m`, lbl: "Total Studied" },
@@ -713,6 +888,35 @@ const deleteHabit = async (id) => {
         ))}
       </div>
 
+      {/* ── EXAM QUICK OVERVIEW (above tabs) ── */}
+      {upcomingExams.length > 0 && (
+        <div className={styles.examQuickBar}>
+          <div className={styles.examQuickInfo}>
+            <span className={styles.examQuickIcon}>📋</span>
+            <div>
+              <span className={styles.examQuickTitle}>{upcomingExams.length} Upcoming Exam{upcomingExams.length > 1 ? "s" : ""}</span>
+              {avgExamDays !== null && (
+                <span className={styles.examQuickAvg}>Avg {avgExamDays} days remaining</span>
+              )}
+            </div>
+          </div>
+          <div className={styles.examQuickList}>
+            {upcomingExams.slice(0, 3).map(e => {
+              const cd = getCD(e.examDate);
+              return (
+                <div key={e.id} className={styles.examQuickChip}>
+                  <span>{e.examName}</span>
+                  {!cd.done && <span className={styles.examQuickDays}>{cd.d}d left</span>}
+                </div>
+              );
+            })}
+            {upcomingExams.length > 3 && <span className={styles.examQuickMore}>+{upcomingExams.length - 3} more</span>}
+          </div>
+          <button className={styles.smBtn} onClick={() => setActiveTab("exams")}>View All →</button>
+        </div>
+      )}
+
+      {/* ── TAB NAV ── */}
       <div className={styles.tabNav}>
         {[
           { id: "timetable", label: "📅 Timetable" },
@@ -737,7 +941,7 @@ const deleteHabit = async (id) => {
               <button className={styles.smBtn} onClick={() => setFullScreenTimetable(true)}>🔲 Full View</button>
               <button className={styles.smBtn} onClick={() => exportTimetable("json")}>⬇ JSON</button>
               <button className={styles.smBtn} onClick={() => exportTimetable("csv")}>⬇ CSV</button>
-              <button className={`${styles.smBtn} ${styles.smBtnGreen}`} onClick={() => fileInputRef.current?.click()}>⬆ Import (JSON/CSV)</button>
+              <button className={`${styles.smBtn} ${styles.smBtnGreen}`} onClick={() => fileInputRef.current?.click()}>⬆ Import</button>
               <input ref={fileInputRef} type="file" accept=".json,.csv" style={{ display: "none" }} onChange={importTimetable} />
             </div>
           </div>
@@ -985,6 +1189,13 @@ const deleteHabit = async (id) => {
               ) : <p className={styles.emptyState}>Sessions karein to insights aayenge</p>}
               {avgAccuracy < 70 && <div className={styles.recommendation}><span className={styles.recIcon}>💡</span><div><strong>Tip</strong><p>25-min Pomodoro sessions accuracy improve karti hai</p></div></div>}
               {streak >= 3 && <div className={styles.recommendation}><span className={styles.recIcon}>🔥</span><div><strong>Streak!</strong><p>{streak} din ki streak! Keep it up!</p></div></div>}
+              {/* 2027 prep insight */}
+              {yearCountdown.d < 200 && (
+                <div className={styles.recommendation}>
+                  <span className={styles.recIcon}>🗓️</span>
+                  <div><strong>2027 Approaching!</strong><p>Sirf <mark>{yearCountdown.d} din</mark> bacha hai 2027 mein — apne goals set karein abhi!</p></div>
+                </div>
+              )}
             </div>
           </div>
           <div className={`${styles.card} ${styles.spanFull}`}>
@@ -1006,15 +1217,50 @@ const deleteHabit = async (id) => {
       {/* ══════ EXAMS ══════ */}
       {activeTab === "exams" && (
         <div className={styles.card}>
-          <div className={styles.cardHead}><span>🎯</span><h2>Target Exam Deadlines</h2></div>
+          <div className={styles.cardHead}>
+            <span>🎯</span><h2>Target Exam Deadlines</h2>
+            {avgExamDays !== null && (
+              <div className={styles.examAvgBadge}>
+                📊 Avg {avgExamDays} days remaining across {upcomingExams.length} exam{upcomingExams.length > 1 ? "s" : ""}
+              </div>
+            )}
+          </div>
           <div className={styles.examForm}>
             <input placeholder="Exam name (e.g. SSC CGL, UPSC)" value={examName} onChange={e => setExamName(e.target.value)} className={styles.formInput} />
             <input type="datetime-local" value={examDate} onChange={e => setExamDate(e.target.value)} className={styles.formInput} />
             <select value={examPriority} onChange={e => setExamPriority(e.target.value)} className={styles.formSelect}><option>High</option><option>Medium</option><option>Low</option></select>
             <input placeholder="Key subjects (optional)" value={examSubjectsInput} onChange={e => setExamSubjectsInput(e.target.value)} className={styles.formInput} />
+            <input placeholder="Target score (optional)" value={examTargetScore} onChange={e => setExamTargetScore(e.target.value)} className={styles.formInput} />
             <input placeholder="Notes (optional)" value={examNotes} onChange={e => setExamNotes(e.target.value)} className={styles.formInput} />
             <button onClick={addExam} className={styles.addBtn}>Set Target</button>
           </div>
+
+          {/* Exam Summary Cards */}
+          {upcomingExams.length > 0 && (
+            <div className={styles.examSummaryRow}>
+              <div className={styles.examSummaryCard}>
+                <span className={styles.examSummaryIcon}>📋</span>
+                <span className={styles.examSummaryNum}>{upcomingExams.length}</span>
+                <span className={styles.examSummaryLabel}>Upcoming</span>
+              </div>
+              <div className={styles.examSummaryCard}>
+                <span className={styles.examSummaryIcon}>⏳</span>
+                <span className={styles.examSummaryNum}>{avgExamDays ?? "—"}</span>
+                <span className={styles.examSummaryLabel}>Avg Days Left</span>
+              </div>
+              <div className={styles.examSummaryCard}>
+                <span className={styles.examSummaryIcon}>🔴</span>
+                <span className={styles.examSummaryNum}>{upcomingExams.filter(e => getCD(e.examDate).d < 30).length}</span>
+                <span className={styles.examSummaryLabel}>Critical (&lt;30d)</span>
+              </div>
+              <div className={styles.examSummaryCard}>
+                <span className={styles.examSummaryIcon}>✅</span>
+                <span className={styles.examSummaryNum}>{exams.filter(e => new Date(e.examDate) <= new Date()).length}</span>
+                <span className={styles.examSummaryLabel}>Completed</span>
+              </div>
+            </div>
+          )}
+
           <div className={styles.examDeadlineList}>
             {exams.length === 0 ? <p className={styles.emptyState}>Koi exam target nahi.</p> :
               exams.sort((a, b) => new Date(a.examDate) - new Date(b.examDate)).map(ex => {
@@ -1025,6 +1271,7 @@ const deleteHabit = async (id) => {
                       <div className={styles.examHeader}>
                         <h4>{ex.examName}</h4>
                         <span className={`${styles.priorityBadge} ${styles[`priority_${ex.priority?.toLowerCase()}`]}`}>{ex.priority}</span>
+                        {ex.targetScore && <span className={styles.examTargetScoreBadge}>🎯 Target: {ex.targetScore}</span>}
                       </div>
                       {ex.subjects && <p className={styles.examSubjects}>📚 {ex.subjects}</p>}
                       {ex.notes && <p className={styles.examNotes}>📌 {ex.notes}</p>}
