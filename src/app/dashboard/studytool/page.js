@@ -22,8 +22,12 @@ const POMODORO_PRESETS = [
 const MOODS = ["😊 Happy","😤 Focused","😴 Tired","😰 Stressed","🔥 Motivated","🧘 Calm","😐 Neutral"];
 const SUBJECT_COLORS = ["#4361ee","#f77f00","#e63946","#0f9d6e","#9b5de5","#f15bb5","#00bbf9","#ffd166","#06d6a0","#118ab2","#e76f51","#2a9d8f"];
 
-// ─── NEW YEAR COUNTDOWN TARGET ────────────────────────────────────────────────
-const YEAR_TARGET = new Date("2027-01-01T00:00:00");
+// ─── AUTO NEXT-YEAR TARGET ────────────────────────────────────────────────────
+const getNextYearTarget = () => {
+  const now = new Date();
+  const nextYear = now.getFullYear() + 1;
+  return new Date(`${nextYear}-01-01T00:00:00`);
+};
 
 export default function UltraStudyHub() {
   const router = useRouter();
@@ -32,7 +36,7 @@ export default function UltraStudyHub() {
   const [activeTab, setActiveTab] = useState("timetable");
   const [currentTime, setCurrentTime] = useState(new Date());
   const [toastMsg, setToastMsg] = useState(null);
-  const [yearCountdown, setYearCountdown] = useState({ d:0,h:0,m:0,s:0 });
+  const [yearCountdown, setYearCountdown] = useState({ d:0,h:0,m:0,s:0, targetYear: getNextYearTarget().getFullYear() });
 
   // Timetable
   const [tasks, setTasks] = useState([]);
@@ -58,6 +62,7 @@ export default function UltraStudyHub() {
 
   // Study Timer
   const [isStudyMode, setIsStudyMode] = useState(false);
+  const [studyFullScreen, setStudyFullScreen] = useState(false);
   const [activeSubject, setActiveSubject] = useState("");
   const [targetMinutes, setTargetMinutes] = useState("60");
   const [secondsElapsed, setSecondsElapsed] = useState(0);
@@ -133,10 +138,6 @@ export default function UltraStudyHub() {
   const [newHabit, setNewHabit] = useState("");
   const [habitFreq, setHabitFreq] = useState("daily");
 
-  // Tool History
-  const [toolHistory, setToolHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
-
   const fileInputRef = useRef(null);
   const studyTimerRef = useRef(null);
   const pomodoroRef = useRef(null);
@@ -149,17 +150,22 @@ export default function UltraStudyHub() {
     setTimeout(() => setToastMsg(null), 3200);
   }, []);
 
-  // ─── YEAR COUNTDOWN ──────────────────────────────────────────────────────────
+  // ─── AUTO YEAR COUNTDOWN ──────────────────────────────────────────────────────
   useEffect(() => {
     const tick = () => {
       const now = new Date();
-      const diff = YEAR_TARGET - now;
-      if (diff <= 0) { setYearCountdown({ d:0,h:0,m:0,s:0 }); return; }
+      const target = getNextYearTarget();
+      const diff = target - now;
+      if (diff <= 0) {
+        setYearCountdown({ d:0, h:0, m:0, s:0, targetYear: target.getFullYear() });
+        return;
+      }
       setYearCountdown({
         d: Math.floor(diff / 86400000),
         h: Math.floor((diff / 3600000) % 24),
         m: Math.floor((diff / 60000) % 60),
         s: Math.floor((diff / 1000) % 60),
+        targetYear: target.getFullYear(),
       });
     };
     tick();
@@ -173,8 +179,6 @@ export default function UltraStudyHub() {
       setUser(u);
       setDarkMode(localStorage.getItem("studyDarkMode") === "true");
       loadCustomSubjects(u.uid);
-      loadHabits(u.uid);
-      loadToolHistory(u.uid);
       logToolUsage({ userId: u.uid, tool: "Study Hub", action: "visit", metadata: { version: "4.0" } });
     });
     return () => unsub();
@@ -252,7 +256,7 @@ export default function UltraStudyHub() {
             const next = pomodoroPhase === "work" ? "break" : "work";
             setPomodoroPhase(next);
             if (next === "break") setPomodoroCount(c => c + 1);
-            showToast(next === "break" ? `☕ Break! ${pomodoroPreset.short} min` : "🎯 Focus shuru!", next === "break" ? "info" : "success");
+            showToast(next === "break" ? `☕ Break time! ${pomodoroPreset.short} min` : "🎯 Focus time! Let's go!", next === "break" ? "info" : "success");
             return next === "work" ? pomodoroPreset.work * 60 : pomodoroPreset.short * 60;
           }
           return p - 1;
@@ -262,19 +266,12 @@ export default function UltraStudyHub() {
     return () => clearInterval(pomodoroRef.current);
   }, [isPomodoroMode, pomodoroPhase, pomodoroPreset, showToast]);
 
-  const loadToolHistory = async (uid) => {
-    try {
-      const q = query(collection(db, "tool_usage"), where("userId", "==", uid));
-      const snap = await getDocs(q);
-      const hist = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => {
-          const da = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
-          const db2 = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
-          return db2 - da;
-        });
-      setToolHistory(hist);
-    } catch (e) { console.error("Tool history load error:", e); }
-  };
+  // ─── ESC key exits study fullscreen ──────────────────────────────────────────
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === "Escape" && studyFullScreen) setStudyFullScreen(false); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [studyFullScreen]);
 
   const loadCustomSubjects = async (uid) => {
     try {
@@ -286,10 +283,6 @@ export default function UltraStudyHub() {
         if (s) setCustomSubjects(JSON.parse(s));
       }
     } catch (e) { console.error(e); }
-  };
-
-  const loadHabits = async (uid) => {
-    // handled via onSnapshot listenCol
   };
 
   const saveCustomSubjects = async (subjects) => {
@@ -306,7 +299,7 @@ export default function UltraStudyHub() {
   const addCustomSubject = () => {
     const s = newSubjectInput.trim();
     if (!s) return;
-    if (allSubjects.includes(s)) { showToast("Already exists!", "error"); return; }
+    if (allSubjects.includes(s)) { showToast("Subject already exists!", "error"); return; }
     const updated = [...customSubjects, s];
     setCustomSubjects(updated); saveCustomSubjects(updated); setNewSubjectInput("");
     showToast(`"${s}" added!`);
@@ -347,7 +340,6 @@ export default function UltraStudyHub() {
     return { d: Math.floor(diff / 86400000), h: Math.floor((diff / 3600000) % 24), m: Math.floor((diff / 60000) % 60), s: Math.floor((diff / 1000) % 60), done: false };
   };
 
-  // ─── EXAM AVERAGE TIME REMAINING ─────────────────────────────────────────────
   const getExamAvgDaysRemaining = () => {
     const upcoming = exams.filter(e => new Date(e.examDate) > new Date());
     if (!upcoming.length) return null;
@@ -355,10 +347,10 @@ export default function UltraStudyHub() {
     return Math.floor(avg / 86400000);
   };
 
-  // Timetable CRUD
+  // ─── TIMETABLE CRUD ──────────────────────────────────────────────────────────
   const addTask = async () => {
-    if (!subject || !startTime || !endTime || !user) { showToast("Sabhi fields fill karein!", "error"); return; }
-    if (startTime >= endTime) { showToast("End time baad honi chahiye!", "error"); return; }
+    if (!subject || !startTime || !endTime || !user) { showToast("Please fill all required fields!", "error"); return; }
+    if (startTime >= endTime) { showToast("End time must be after start time!", "error"); return; }
     const daysToAdd = repeatDays.length > 0 ? repeatDays : [day];
     for (const d of daysToAdd) {
       await addDoc(collection(db, "study_tasks"), {
@@ -460,14 +452,17 @@ export default function UltraStudyHub() {
   };
 
   const startStudyMode = async () => {
-    if (!activeSubject) { showToast("Subject select karein!", "error"); return; }
-    setSecondsElapsed(0); setIsStudyMode(true);
+    if (!activeSubject) { showToast("Please select a subject!", "error"); return; }
+    setSecondsElapsed(0);
+    setIsStudyMode(true);
+    setStudyFullScreen(true);
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "start_study_session", resourceName: activeSubject, metadata: { targetMinutes, mood: studyMood } });
-    showToast(`📚 Study started: ${activeSubject}`);
+    showToast(`📚 Study session started: ${activeSubject}`);
   };
 
   const stopStudyMode = async () => {
     setIsStudyMode(false);
+    setStudyFullScreen(false);
     const actualMins = Math.round(secondsElapsed / 60);
     const expected = parseInt(targetMinutes) || 1;
     const accuracy = Math.min(Math.round((actualMins / expected) * 100), 100);
@@ -534,16 +529,15 @@ export default function UltraStudyHub() {
   };
 
   const addExam = async () => {
-    if (!examName || !examDate) { showToast("Exam name aur date zaroor!", "error"); return; }
+    if (!examName || !examDate) { showToast("Exam name and date are required!", "error"); return; }
     await addDoc(collection(db, "study_exams"), {
       userId: user.uid, examName, examDate, priority: examPriority,
       subjects: examSubjectsInput, notes: examNotes,
-      targetScore: examTargetScore || "",
-      createdAt: serverTimestamp()
+      targetScore: examTargetScore || "", createdAt: serverTimestamp()
     });
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_exam", resourceName: examName, metadata: { examDate, priority: examPriority } });
     setExamName(""); setExamDate(""); setExamSubjectsInput(""); setExamNotes(""); setExamTargetScore("");
-    showToast(`🎯 "${examName}" set!`);
+    showToast(`🎯 "${examName}" added!`);
   };
   const deleteExam = async (id) => {
     await deleteDoc(doc(db, "study_exams", id));
@@ -552,7 +546,7 @@ export default function UltraStudyHub() {
   };
 
   const saveNote = async () => {
-    if (!quickNotes) { showToast("Note likhein!", "error"); return; }
+    if (!quickNotes) { showToast("Please write something!", "error"); return; }
     if (editingNoteId) {
       await updateDoc(doc(db, "study_notes", editingNoteId), { title: noteTitle || "Untitled", content: quickNotes, tag: noteTag, updatedAt: serverTimestamp() });
       await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "edit_note", resourceId: editingNoteId, resourceName: noteTitle });
@@ -572,7 +566,7 @@ export default function UltraStudyHub() {
   const editNote = (note) => { setNoteTitle(note.title); setQuickNotes(note.content); setNoteTag(note.tag || ""); setEditingNoteId(note.id); setActiveTab("notes"); };
 
   const addFlashcard = async () => {
-    if (!newFront || !newBack) { showToast("Front aur back fill karein!", "error"); return; }
+    if (!newFront || !newBack) { showToast("Please fill front and back!", "error"); return; }
     await addDoc(collection(db, "study_flashcards"), { userId: user.uid, front: newFront, back: newBack, subject: newCardSubject || "General", tag: newCardTag, reviewCount: 0, confidence: 0, createdAt: serverTimestamp() });
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_flashcard", resourceName: newCardSubject || "General" });
     setNewFront(""); setNewBack(""); showToast("Flashcard added! 🗂️");
@@ -592,11 +586,11 @@ export default function UltraStudyHub() {
     const card = flashcards.find(f => f.id === id);
     await updateDoc(doc(db, "study_flashcards", id), { confidence, reviewCount: (card?.reviewCount || 0) + 1, lastReviewed: serverTimestamp() });
     if (reviewIndex < reviewCards.length - 1) { setReviewIndex(reviewIndex + 1); setShowAnswer(false); }
-    else { setReviewMode(false); showToast(`🎉 Review complete! ${reviewCards.length} cards`); }
+    else { setReviewMode(false); showToast(`🎉 Review complete! ${reviewCards.length} cards reviewed`); }
   };
 
   const addTodo = async () => {
-    if (!newTodo) { showToast("Todo likhein!", "error"); return; }
+    if (!newTodo) { showToast("Please write a todo!", "error"); return; }
     await addDoc(collection(db, "study_todos"), { userId: user.uid, text: newTodo, subject: todoSubject, dueDate: todoDue, priority: todoPriority, tag: todoTag, completed: false, createdAt: serverTimestamp() });
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_todo", resourceName: newTodo.slice(0, 50), metadata: { priority: todoPriority } });
     setNewTodo(""); setTodoDue(""); setTodoSubject(""); setTodoTag("");
@@ -612,7 +606,7 @@ export default function UltraStudyHub() {
     showToast("Todo deleted");
   };
 
-  // ─── FIREBASE DRIVEN HABITS ─────────────────────────────────────────────
+  // ─── HABITS ──────────────────────────────────────────────────────────────────
   const addHabit = async () => {
     if (!newHabit.trim() || !user) return;
     try {
@@ -649,9 +643,13 @@ export default function UltraStudyHub() {
     } catch (e) { showToast("Error deleting habit", "error"); }
   };
 
+  // ─── COMPUTED VALUES ──────────────────────────────────────────────────────────
   const totalStudiedMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
   const avgAccuracy = studySessions.length ? Math.round(studySessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / studySessions.length) : 0;
-  const todayStudied = studySessions.filter(s => { const d = s.createdAt?.toDate?.() || new Date(s.createdAt); return d.toDateString() === new Date().toDateString(); }).reduce((a, s) => a + (s.actualTime || 0), 0);
+  const todayStudied = studySessions.filter(s => {
+    const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
+    return d.toDateString() === new Date().toDateString();
+  }).reduce((a, s) => a + (s.actualTime || 0), 0);
 
   const filteredTasks = tasks.filter(t => {
     const matchDay = filterDay === "today" ? t.day === currentDayName : filterDay === "week" ? true : t.day === filterDay;
@@ -675,9 +673,105 @@ export default function UltraStudyHub() {
   const allNoteTags = [...new Set(savedNotes.map(n => n.tag).filter(Boolean))];
   const allCardSubjects = [...new Set(flashcards.map(f => f.subject).filter(Boolean))];
   const filteredFlashcards = cardSubjectFilter === "all" ? flashcards : flashcards.filter(f => f.subject === cardSubjectFilter);
-
   const avgExamDays = getExamAvgDaysRemaining();
   const upcomingExams = exams.filter(e => new Date(e.examDate) > new Date());
+
+  // ─── YEAR PROGRESS ────────────────────────────────────────────────────────────
+  const currentYear = currentTime.getFullYear();
+  const yearStart = new Date(`${currentYear}-01-01`);
+  const yearEnd = new Date(`${currentYear + 1}-01-01`);
+  const yearPct = Math.round(((currentTime - yearStart) / (yearEnd - yearStart)) * 100);
+
+  // ─── FULLSCREEN STUDY MODE ────────────────────────────────────────────────────
+  if (studyFullScreen && isStudyMode) {
+    const pct = Math.min((secondsElapsed / (parseInt(targetMinutes) * 60)) * 100, 100);
+    const circumference = 2 * Math.PI * 90;
+    return (
+      <div className={styles.studyFsOverlay}>
+        <div className={styles.studyFsContent}>
+          <div className={styles.studyFsHeader}>
+            <div className={styles.studyFsSubjectBadge} style={{ background: getSubjectColor(activeSubject) }}>
+              📚 {activeSubject}
+            </div>
+            <div className={styles.studyFsMoodBadge}>{studyMood}</div>
+            <button className={styles.studyFsEsc} onClick={() => setStudyFullScreen(false)} title="Minimize (Esc)">⤡ Minimize</button>
+          </div>
+
+          <div className={styles.studyFsRing}>
+            <svg width="220" height="220" viewBox="0 0 220 220">
+              <circle cx="110" cy="110" r="90" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="12" />
+              <circle
+                cx="110" cy="110" r="90" fill="none"
+                stroke="url(#studyGrad)" strokeWidth="12"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={circumference - (pct / 100) * circumference}
+                transform="rotate(-90 110 110)"
+                style={{ transition: "stroke-dashoffset 1s ease" }}
+              />
+              <defs>
+                <linearGradient id="studyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#10b981" />
+                  <stop offset="100%" stopColor="#3b82f6" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <div className={styles.studyFsRingInner}>
+              <div className={styles.studyFsTimer}>{fmt(secondsElapsed)}</div>
+              <div className={styles.studyFsTimerLabel}>Elapsed</div>
+              <div className={styles.studyFsPct}>{Math.round(pct)}%</div>
+            </div>
+          </div>
+
+          <div className={styles.studyFsStats}>
+            <div className={styles.studyFsStat}>
+              <span className={styles.studyFsStatVal}>{targetMinutes}</span>
+              <span className={styles.studyFsStatLbl}>Target (min)</span>
+            </div>
+            <div className={styles.studyFsStat}>
+              <span className={styles.studyFsStatVal}>{Math.round(secondsElapsed / 60)}</span>
+              <span className={styles.studyFsStatLbl}>Done (min)</span>
+            </div>
+            <div className={styles.studyFsStat}>
+              <span className={styles.studyFsStatVal}>{Math.max(0, parseInt(targetMinutes) - Math.round(secondsElapsed / 60))}</span>
+              <span className={styles.studyFsStatLbl}>Remaining</span>
+            </div>
+          </div>
+
+          <div className={styles.studyFsNoteArea}>
+            <textarea
+              placeholder="Add session notes..."
+              value={sessionNote}
+              onChange={e => setSessionNote(e.target.value)}
+              className={styles.studyFsNote}
+            />
+            <input
+              placeholder="Tags (e.g. exam-prep, chapter-5)"
+              value={sessionTags}
+              onChange={e => setSessionTags(e.target.value)}
+              className={styles.studyFsTagInput}
+            />
+          </div>
+
+          <div className={styles.studyFsActions}>
+            <button onClick={stopStudyMode} className={styles.studyFsStop}>
+              ⏹ Stop & Save Session
+            </button>
+            <button onClick={() => setStudyFullScreen(false)} className={styles.studyFsMin}>
+              ⤡ Minimize
+            </button>
+          </div>
+
+          <div className={styles.studyFsBreakHint}>
+            {breakReminder && secondsElapsed > 0 && secondsElapsed % 1500 < 5
+              ? "☕ Time for a short break! You've been studying for 25 minutes."
+              : `🔥 Stay focused! ${streak} day streak going strong.`
+            }
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ─── FULLSCREEN TIMETABLE ──────────────────────────────────────────────────
   if (fullScreenTimetable) {
@@ -722,7 +816,7 @@ export default function UltraStudyHub() {
           ) : (
             <div className={styles.dayViewContainer}>
               <h2>{currentDayName}'s Schedule</h2>
-              {grouped[currentDayName].length === 0 ? <p className={styles.emptyState}>Aaj koi class nahi 🎉</p> :
+              {grouped[currentDayName].length === 0 ? <p className={styles.emptyState}>No classes today 🎉</p> :
                 grouped[currentDayName].map(t => (
                   <div key={t.id} className={`${styles.dayViewSlot} ${isTaskActive(t) ? styles.activeSlot : ""}`}
                     style={{ borderLeft: `6px solid ${t.color || getSubjectColor(t.subject)}` }}>
@@ -746,79 +840,40 @@ export default function UltraStudyHub() {
     );
   }
 
-  // ─── TOOL HISTORY MODAL ────────────────────────────────────────────────────
-  const ToolHistoryModal = () => (
-    <div className={styles.modalOverlay} onClick={() => setShowHistory(false)}>
-      <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2>🕒 Tool History</h2>
-          <button className={styles.modalClose} onClick={() => setShowHistory(false)}>✕</button>
-        </div>
-        <div className={styles.historyList}>
-          {toolHistory.length === 0
-            ? <p className={styles.emptyState}>Koi history nahi abhi.</p>
-            : toolHistory.slice(0, 50).map((h, i) => {
-                const d = h.createdAt?.toDate?.() || new Date(h.createdAt || 0);
-                return (
-                  <div key={h.id || i} className={styles.historyEntry}>
-                    <div className={styles.historyEntryLeft}>
-                      <span className={styles.historyAction}>{h.action || h.tool}</span>
-                      {h.resourceName && <span className={styles.historyResource}>{h.resourceName}</span>}
-                    </div>
-                    <span className={styles.historyTime}>{d.toLocaleString("en-IN", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" })}</span>
-                  </div>
-                );
-              })
-          }
-        </div>
-      </div>
-    </div>
-  );
-
-  // ─── MAIN RENDER ──────────────────────────────────────────────────────────
+  // ─── MAIN RENDER ──────────────────────────────────────────────────────────────
   return (
     <div className={`${styles.page} ${darkMode ? styles.darkMode : ""}`}>
       {toastMsg && <div className={`${styles.toast} ${styles[`toast_${toastMsg.type}`]}`}>{toastMsg.msg}</div>}
-      {showHistory && <ToolHistoryModal />}
 
       {/* ── TOP BAR ── */}
       <div className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => router.push("/dashboard")}>← Back</button>
-
-        {/* LEFT SIDE CONTROLS */}
         <div className={styles.leftControls}>
-          <button
-            className={`${styles.controlBtn} ${darkMode ? styles.controlBtnActive : ""}`}
-            onClick={() => setDarkMode(p => !p)}
-            title={darkMode ? "Light Mode" : "Dark Mode"}
-          >
+          <button className={`${styles.controlBtn} ${darkMode ? styles.controlBtnActive : ""}`} onClick={() => setDarkMode(p => !p)} title={darkMode ? "Light Mode" : "Dark Mode"}>
             {darkMode ? "☀️" : "🌙"}
           </button>
-          <button
-            className={`${styles.controlBtn} ${!notificationsEnabled ? styles.controlBtnMuted : ""}`}
-            onClick={() => setNotificationsEnabled(p => !p)}
-            title={notificationsEnabled ? "Notifications On" : "Notifications Off"}
-          >
+          <button className={`${styles.controlBtn} ${!notificationsEnabled ? styles.controlBtnMuted : ""}`} onClick={() => setNotificationsEnabled(p => !p)} title="Toggle Notifications">
             {notificationsEnabled ? "🔔" : "🔕"}
           </button>
-          <button className={styles.controlBtn} onClick={() => { setShowHistory(true); loadToolHistory(user?.uid); }} title="Tool History">
-            🕒
-          </button>
+          {isStudyMode && (
+            <button className={styles.controlBtnLive} onClick={() => setStudyFullScreen(true)} title="Open Study Fullscreen">
+              ⚡ Live Session
+            </button>
+          )}
         </div>
-
         <div className={styles.titleArea}>
           <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v4.0</span></h1>
           <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} • {currentDayName}, {currentTime.toLocaleDateString("en-IN")}</p>
         </div>
       </div>
 
-      {/* ── 2026 → 2027 YEAR COUNTDOWN ── */}
+      {/* ── YEAR COUNTDOWN BANNER ── */}
       <div className={styles.yearCountdownBanner}>
         <div className={styles.yearCountdownLeft}>
           <span className={styles.yearIcon}>🗓️</span>
           <div>
-            <div className={styles.yearLabel}>2026 → 2027 Countdown</div>
-            <div className={styles.yearSub}>Naye saal tak kitna bacha</div>
+            <div className={styles.yearLabel}>{currentYear} → {yearCountdown.targetYear} Countdown</div>
+            <div className={styles.yearSub}>Days remaining until New Year {yearCountdown.targetYear}</div>
           </div>
         </div>
         <div className={styles.yearCountdownUnits}>
@@ -829,29 +884,24 @@ export default function UltraStudyHub() {
             { v: yearCountdown.s, l: "Secs" },
           ].map(({ v, l }) => (
             <div key={l} className={styles.yearUnit}>
-              <span className={styles.yearUnitNum}>{String(v).padStart(2,"0")}</span>
+              <span className={styles.yearUnitNum}>{String(v).padStart(2, "0")}</span>
               <span className={styles.yearUnitLabel}>{l}</span>
             </div>
           ))}
         </div>
         <div className={styles.yearProgress}>
-          <div className={styles.yearProgressLabel}>
-            2026 Progress
-          </div>
+          <div className={styles.yearProgressLabel}>{currentYear} Progress</div>
           <div className={styles.yearProgressBar}>
-            <div className={styles.yearProgressFill} style={{
-              width: `${Math.min(((currentTime - new Date("2026-01-01")) / (new Date("2027-01-01") - new Date("2026-01-01"))) * 100, 100)}%`
-            }} />
+            <div className={styles.yearProgressFill} style={{ width: `${yearPct}%` }} />
           </div>
-          <div className={styles.yearProgressPct}>
-            {Math.round(((currentTime - new Date("2026-01-01")) / (new Date("2027-01-01") - new Date("2026-01-01"))) * 100)}% done
-          </div>
+          <div className={styles.yearProgressPct}>{yearPct}% of {currentYear} complete</div>
         </div>
       </div>
 
+      {/* ── ALERTS ── */}
       {upcomingClasses.length > 0 && (
         <div className={styles.upcomingAlert}>
-          ⏰ <span><strong>15 min mein:</strong> {upcomingClasses[0].subject} at {upcomingClasses[0].startTime}</span>
+          ⏰ <span><strong>In 15 minutes:</strong> {upcomingClasses[0].subject} at {upcomingClasses[0].startTime}</span>
         </div>
       )}
       {currentActiveClass && (
@@ -888,16 +938,14 @@ export default function UltraStudyHub() {
         ))}
       </div>
 
-      {/* ── EXAM QUICK OVERVIEW (above tabs) ── */}
+      {/* ── EXAM QUICK BAR ── */}
       {upcomingExams.length > 0 && (
         <div className={styles.examQuickBar}>
           <div className={styles.examQuickInfo}>
             <span className={styles.examQuickIcon}>📋</span>
             <div>
               <span className={styles.examQuickTitle}>{upcomingExams.length} Upcoming Exam{upcomingExams.length > 1 ? "s" : ""}</span>
-              {avgExamDays !== null && (
-                <span className={styles.examQuickAvg}>Avg {avgExamDays} days remaining</span>
-              )}
+              {avgExamDays !== null && <span className={styles.examQuickAvg}>Avg {avgExamDays} days remaining</span>}
             </div>
           </div>
           <div className={styles.examQuickList}>
@@ -948,7 +996,7 @@ export default function UltraStudyHub() {
           <div className={styles.timetableForm}>
             <select value={day} onChange={e => setDay(e.target.value)} className={styles.formSelect}>{DAYS.map(d => <option key={d}>{d}</option>)}</select>
             <select value={subject} onChange={e => setSubject(e.target.value)} className={styles.formSelect}>
-              <option value="">-- Subject --</option>
+              <option value="">-- Select Subject --</option>
               {allSubjects.map(s => <option key={s}>{s}</option>)}
             </select>
             <select value={taskType} onChange={e => setTaskType(e.target.value)} className={styles.formSelect}>{TASK_TYPES.map(t => <option key={t}>{t}</option>)}</select>
@@ -979,7 +1027,7 @@ export default function UltraStudyHub() {
             ))}
           </div>
           <div className={styles.filterRow}>
-            <input placeholder="🔍 Search..." value={timetableSearch} onChange={e => setTimetableSearch(e.target.value)} className={styles.searchInput} />
+            <input placeholder="🔍 Search slots..." value={timetableSearch} onChange={e => setTimetableSearch(e.target.value)} className={styles.searchInput} />
             <div className={styles.filterBtns}>
               {["today", "week", ...DAYS].map(f => (
                 <button key={f} className={`${styles.filterChip} ${filterDay === f ? styles.filterChipActive : ""}`} onClick={() => setFilterDay(f)}>
@@ -996,7 +1044,7 @@ export default function UltraStudyHub() {
             📋 {filteredTasks.length} slots • {[...new Set(filteredTasks.map(t => t.subject))].length} subjects
           </div>
           <div className={styles.taskList}>
-            {filteredTasks.length === 0 ? <p className={styles.emptyState}>Koi slot nahi. Upar se add karein!</p> :
+            {filteredTasks.length === 0 ? <p className={styles.emptyState}>No slots found. Add one above!</p> :
               filteredTasks.map(task => (
                 <div key={task.id} className={`${styles.taskCard} ${isTaskActive(task) ? styles.activeTaskCard : ""}`}
                   style={{ borderLeft: `4px solid ${task.color || getSubjectColor(task.subject)}` }}>
@@ -1024,7 +1072,7 @@ export default function UltraStudyHub() {
                         {task.notes && <p className={styles.taskNote}>📌 {task.notes}</p>}
                       </div>
                       <div className={styles.taskActions}>
-                        <button onClick={() => { setActiveSubject(task.subject); setActiveTab("study"); }} className={styles.iconBtnSm} title="Study">▶</button>
+                        <button onClick={() => { setActiveSubject(task.subject); setActiveTab("study"); }} className={styles.iconBtnSm} title="Start Study">▶</button>
                         <button onClick={() => { setEditingTaskId(task.id); setEditForm({}); }} className={styles.iconBtnSm}>✏️</button>
                         <button onClick={() => duplicateTask(task)} className={styles.iconBtnSm}>⎘</button>
                         <button onClick={() => deleteTask(task.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
@@ -1042,7 +1090,13 @@ export default function UltraStudyHub() {
       {activeTab === "study" && (
         <div className={styles.studyGrid}>
           <div className={`${styles.card} ${isStudyMode ? styles.activeStudyPulse : ""}`}>
-            <div className={styles.cardHead}><span>⏱️</span><h2>{isStudyMode ? "⚡ LIVE Study Mode" : "Study Timer"}</h2></div>
+            <div className={styles.cardHead}>
+              <span>⏱️</span>
+              <h2>{isStudyMode ? "⚡ LIVE — Session Running" : "Study Timer"}</h2>
+              {isStudyMode && (
+                <button className={styles.fsBtnInline} onClick={() => setStudyFullScreen(true)}>⤢ Fullscreen</button>
+              )}
+            </div>
             {!isStudyMode ? (
               <div className={styles.studySetupForm}>
                 <select value={activeSubject} onChange={e => setActiveSubject(e.target.value)} className={styles.formSelect}>
@@ -1055,21 +1109,25 @@ export default function UltraStudyHub() {
                   <label>Daily Goal (min):</label>
                   <input type="number" value={studyGoalMinutes} onChange={e => setStudyGoalMinutes(parseInt(e.target.value) || 120)} className={styles.formInput} style={{ width: 80 }} />
                 </div>
-                <label className={styles.checkLabel}><input type="checkbox" checked={breakReminder} onChange={e => setBreakReminder(e.target.checked)} /> ☕ Break reminder (every 25 min)</label>
-                <button onClick={startStudyMode} className={styles.startModeBtn}>▶ Start Study Mode</button>
+                <label className={styles.checkLabel}><input type="checkbox" checked={breakReminder} onChange={e => setBreakReminder(e.target.checked)} /> ☕ Break reminder every 25 min</label>
+                <button onClick={startStudyMode} className={styles.startModeBtn}>▶ Start Study Session (Fullscreen)</button>
               </div>
             ) : (
               <div className={styles.liveConsoleArea}>
-                <h3>Padh rahe ho: <mark>{activeSubject}</mark></h3>
+                <h3>Studying: <mark>{activeSubject}</mark></h3>
                 <div className={styles.liveClockDisplay}>{fmt(secondsElapsed)}</div>
                 <p>Target: {targetMinutes} min | Mood: {studyMood.split(" ")[0]}</p>
                 <div className={styles.liveProgress}><div className={styles.liveProgressFill} style={{ width: `${Math.min((secondsElapsed / (parseInt(targetMinutes) * 60)) * 100, 100)}%` }} /></div>
                 <textarea placeholder="Session notes..." value={sessionNote} onChange={e => setSessionNote(e.target.value)} className={styles.sessionNote} />
                 <input placeholder="Tags (e.g. exam-prep)" value={sessionTags} onChange={e => setSessionTags(e.target.value)} className={`${styles.formInput} ${styles.tagInput}`} />
-                <button onClick={stopStudyMode} className={styles.stopModeBtn}>⏹ Stop & Save Session</button>
+                <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                  <button onClick={() => setStudyFullScreen(true)} className={styles.smBtn}>⤢ Fullscreen</button>
+                  <button onClick={stopStudyMode} className={styles.stopModeBtn}>⏹ Stop & Save</button>
+                </div>
               </div>
             )}
           </div>
+
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🍅</span><h2>Pomodoro Timer</h2></div>
             <div className={styles.pomodoroPresets}>
@@ -1097,10 +1155,11 @@ export default function UltraStudyHub() {
               <button onClick={() => { setIsPomodoroMode(false); setPomodoroPhase("work"); setPomodoroSeconds(pomodoroPreset.work * 60); setPomodoroCount(0); }} className={styles.smBtn}>↺ Reset</button>
             </div>
           </div>
+
           <div className={styles.card}>
             <div className={styles.cardHead}><span>📋</span><h2>Recent Sessions</h2></div>
             <div className={styles.sessionHistoryContainer}>
-              {studySessions.length === 0 ? <p className={styles.emptyState}>Abhi koi session nahi.</p> :
+              {studySessions.length === 0 ? <p className={styles.emptyState}>No sessions yet. Start studying!</p> :
                 studySessions.slice(-10).reverse().map(s => (
                   <div key={s.id} className={styles.historyItemLog}>
                     <div className={styles.historyMetaRow}>
@@ -1139,7 +1198,7 @@ export default function UltraStudyHub() {
           </div>
           <div className={styles.card}>
             <div className={styles.cardHead}><span>📅</span><h2>Monthly Overview</h2></div>
-            {monthlyStats.length === 0 ? <p className={styles.emptyState}>Data nahi hai</p> : (
+            {monthlyStats.length === 0 ? <p className={styles.emptyState}>No data yet</p> : (
               <div className={styles.monthlyGrid}>
                 {monthlyStats.map((m, i) => (
                   <div key={i} className={styles.monthCard}>
@@ -1155,7 +1214,7 @@ export default function UltraStudyHub() {
           <div className={styles.card}>
             <div className={styles.cardHead}><span>📊</span><h2>Subject Performance</h2></div>
             <div className={styles.subjectStatsContainer}>
-              {Object.entries(subjectStats).length === 0 ? <p className={styles.emptyState}>Data nahi hai</p> :
+              {Object.entries(subjectStats).length === 0 ? <p className={styles.emptyState}>No data yet</p> :
                 Object.entries(subjectStats).sort((a, b) => b[1].avgAccuracy - a[1].avgAccuracy).map(([sub, st]) => (
                   <div key={sub} className={styles.subjectStatItem}>
                     <div className={styles.subjectStatHeader}><span className={styles.subjectName}>{sub}</span><span className={styles.subjectAccuracy}>{st.avgAccuracy}%</span></div>
@@ -1173,27 +1232,26 @@ export default function UltraStudyHub() {
                 <>
                   <div className={styles.recommendation}>
                     <span className={styles.recIcon}>⚠️</span>
-                    <div><strong>Weak Area</strong><p><mark>{Object.entries(subjectStats).sort((a, b) => a[1].avgAccuracy - b[1].avgAccuracy)[0]?.[0]}</mark> par focus karein</p></div>
+                    <div><strong>Weak Area</strong><p>Focus more on <mark>{Object.entries(subjectStats).sort((a, b) => a[1].avgAccuracy - b[1].avgAccuracy)[0]?.[0]}</mark></p></div>
                   </div>
                   <div className={styles.recommendation}>
                     <span className={styles.recIcon}>⭐</span>
-                    <div><strong>Strong Subject</strong><p><mark>{Object.entries(subjectStats).sort((a, b) => b[1].avgAccuracy - a[1].avgAccuracy)[0]?.[0]}</mark> best performance!</p></div>
+                    <div><strong>Top Subject</strong><p><mark>{Object.entries(subjectStats).sort((a, b) => b[1].avgAccuracy - a[1].avgAccuracy)[0]?.[0]}</mark> — best performance!</p></div>
                   </div>
                   {Object.entries(subjectStats).filter(([, v]) => { const d = v.lastStudied; return d && (new Date() - d) > 7 * 86400000; }).slice(0, 2).map(([sub]) => (
                     <div key={sub} className={styles.recommendation}>
                       <span className={styles.recIcon}>📅</span>
-                      <div><strong>Not Studied Recently</strong><p><mark>{sub}</mark> ko revise karein!</p></div>
+                      <div><strong>Not Studied Recently</strong><p>Revise <mark>{sub}</mark> — it's been over 7 days!</p></div>
                     </div>
                   ))}
                 </>
-              ) : <p className={styles.emptyState}>Sessions karein to insights aayenge</p>}
-              {avgAccuracy < 70 && <div className={styles.recommendation}><span className={styles.recIcon}>💡</span><div><strong>Tip</strong><p>25-min Pomodoro sessions accuracy improve karti hai</p></div></div>}
-              {streak >= 3 && <div className={styles.recommendation}><span className={styles.recIcon}>🔥</span><div><strong>Streak!</strong><p>{streak} din ki streak! Keep it up!</p></div></div>}
-              {/* 2027 prep insight */}
+              ) : <p className={styles.emptyState}>Complete study sessions to see insights</p>}
+              {avgAccuracy < 70 && <div className={styles.recommendation}><span className={styles.recIcon}>💡</span><div><strong>Tip</strong><p>Try 25-min Pomodoro sessions to improve focus and accuracy</p></div></div>}
+              {streak >= 3 && <div className={styles.recommendation}><span className={styles.recIcon}>🔥</span><div><strong>On Fire!</strong><p>{streak}-day study streak! Keep it going!</p></div></div>}
               {yearCountdown.d < 200 && (
                 <div className={styles.recommendation}>
                   <span className={styles.recIcon}>🗓️</span>
-                  <div><strong>2027 Approaching!</strong><p>Sirf <mark>{yearCountdown.d} din</mark> bacha hai 2027 mein — apne goals set karein abhi!</p></div>
+                  <div><strong>{yearCountdown.targetYear} is Coming!</strong><p>Only <mark>{yearCountdown.d} days</mark> left — set your goals now!</p></div>
                 </div>
               )}
             </div>
@@ -1201,7 +1259,7 @@ export default function UltraStudyHub() {
           <div className={`${styles.card} ${styles.spanFull}`}>
             <div className={styles.cardHead}><span>🏆</span><h2>Achievements ({achievements.length})</h2></div>
             <div className={styles.achievementsGrid}>
-              {achievements.length === 0 ? <p className={styles.emptyState}>Study karein to achievements milenge!</p> :
+              {achievements.length === 0 ? <p className={styles.emptyState}>Keep studying to unlock achievements!</p> :
                 achievements.map(a => (
                   <div key={a.id} className={styles.achievementCard}>
                     <span className={styles.achievementIcon}>{a.icon}</span>
@@ -1218,11 +1276,9 @@ export default function UltraStudyHub() {
       {activeTab === "exams" && (
         <div className={styles.card}>
           <div className={styles.cardHead}>
-            <span>🎯</span><h2>Target Exam Deadlines</h2>
+            <span>🎯</span><h2>Exam Deadlines</h2>
             {avgExamDays !== null && (
-              <div className={styles.examAvgBadge}>
-                📊 Avg {avgExamDays} days remaining across {upcomingExams.length} exam{upcomingExams.length > 1 ? "s" : ""}
-              </div>
+              <div className={styles.examAvgBadge}>📊 Avg {avgExamDays} days remaining across {upcomingExams.length} exam{upcomingExams.length > 1 ? "s" : ""}</div>
             )}
           </div>
           <div className={styles.examForm}>
@@ -1232,37 +1288,28 @@ export default function UltraStudyHub() {
             <input placeholder="Key subjects (optional)" value={examSubjectsInput} onChange={e => setExamSubjectsInput(e.target.value)} className={styles.formInput} />
             <input placeholder="Target score (optional)" value={examTargetScore} onChange={e => setExamTargetScore(e.target.value)} className={styles.formInput} />
             <input placeholder="Notes (optional)" value={examNotes} onChange={e => setExamNotes(e.target.value)} className={styles.formInput} />
-            <button onClick={addExam} className={styles.addBtn}>Set Target</button>
+            <button onClick={addExam} className={styles.addBtn}>+ Set Target</button>
           </div>
 
-          {/* Exam Summary Cards */}
           {upcomingExams.length > 0 && (
             <div className={styles.examSummaryRow}>
-              <div className={styles.examSummaryCard}>
-                <span className={styles.examSummaryIcon}>📋</span>
-                <span className={styles.examSummaryNum}>{upcomingExams.length}</span>
-                <span className={styles.examSummaryLabel}>Upcoming</span>
-              </div>
-              <div className={styles.examSummaryCard}>
-                <span className={styles.examSummaryIcon}>⏳</span>
-                <span className={styles.examSummaryNum}>{avgExamDays ?? "—"}</span>
-                <span className={styles.examSummaryLabel}>Avg Days Left</span>
-              </div>
-              <div className={styles.examSummaryCard}>
-                <span className={styles.examSummaryIcon}>🔴</span>
-                <span className={styles.examSummaryNum}>{upcomingExams.filter(e => getCD(e.examDate).d < 30).length}</span>
-                <span className={styles.examSummaryLabel}>Critical (&lt;30d)</span>
-              </div>
-              <div className={styles.examSummaryCard}>
-                <span className={styles.examSummaryIcon}>✅</span>
-                <span className={styles.examSummaryNum}>{exams.filter(e => new Date(e.examDate) <= new Date()).length}</span>
-                <span className={styles.examSummaryLabel}>Completed</span>
-              </div>
+              {[
+                { icon:"📋", num: upcomingExams.length, lbl:"Upcoming" },
+                { icon:"⏳", num: avgExamDays ?? "—", lbl:"Avg Days Left" },
+                { icon:"🔴", num: upcomingExams.filter(e => { const cd = getCD(e.examDate); return !cd.done && cd.d < 30; }).length, lbl:"Critical (<30d)" },
+                { icon:"✅", num: exams.filter(e => new Date(e.examDate) <= new Date()).length, lbl:"Completed" },
+              ].map(({ icon, num, lbl }) => (
+                <div key={lbl} className={styles.examSummaryCard}>
+                  <span className={styles.examSummaryIcon}>{icon}</span>
+                  <span className={styles.examSummaryNum}>{num}</span>
+                  <span className={styles.examSummaryLabel}>{lbl}</span>
+                </div>
+              ))}
             </div>
           )}
 
           <div className={styles.examDeadlineList}>
-            {exams.length === 0 ? <p className={styles.emptyState}>Koi exam target nahi.</p> :
+            {exams.length === 0 ? <p className={styles.emptyState}>No exam targets set yet.</p> :
               exams.sort((a, b) => new Date(a.examDate) - new Date(b.examDate)).map(ex => {
                 const cd = getCD(ex.examDate);
                 return (
@@ -1299,9 +1346,9 @@ export default function UltraStudyHub() {
             <div className={styles.cardHead}><span>📝</span><h2>{editingNoteId ? "Edit Note" : "New Note"}</h2></div>
             <input placeholder="Title..." value={noteTitle} onChange={e => setNoteTitle(e.target.value)} className={`${styles.formInput} ${styles.noteTitleInput}`} />
             <input placeholder="Tag (e.g. Math, Important)" value={noteTag} onChange={e => setNoteTag(e.target.value)} className={styles.formInput} style={{ marginBottom: 10 }} />
-            <textarea placeholder="Note likhein..." value={quickNotes} onChange={e => setQuickNotes(e.target.value)} className={styles.notesTextarea} />
+            <textarea placeholder="Write your note here..." value={quickNotes} onChange={e => setQuickNotes(e.target.value)} className={styles.notesTextarea} />
             <div className={styles.noteActions}>
-              <button onClick={saveNote} className={styles.addBtn}>💾 {editingNoteId ? "Update" : "Save Note"}</button>
+              <button onClick={saveNote} className={styles.addBtn}>💾 {editingNoteId ? "Update Note" : "Save Note"}</button>
               {editingNoteId && <button onClick={() => { setEditingNoteId(null); setQuickNotes(""); setNoteTitle(""); setNoteTag(""); }} className={styles.smBtn}>✕ Cancel</button>}
             </div>
           </div>
@@ -1315,7 +1362,7 @@ export default function UltraStudyHub() {
               </div>
             </div>
             <div className={styles.notesList}>
-              {filteredNotes.length === 0 ? <p className={styles.emptyState}>Koi note nahi.</p> :
+              {filteredNotes.length === 0 ? <p className={styles.emptyState}>No notes found.</p> :
                 filteredNotes.map(n => (
                   <div key={n.id} className={styles.noteCard}>
                     <div className={styles.noteCardHeader}>
@@ -1342,7 +1389,7 @@ export default function UltraStudyHub() {
               <div className={styles.card}>
                 <div className={styles.cardHead}><span>🗂️</span><h2>Add Flashcard</h2></div>
                 <select value={newCardSubject} onChange={e => setNewCardSubject(e.target.value)} className={styles.formSelect}>
-                  <option value="">-- Subject --</option>
+                  <option value="">-- Select Subject --</option>
                   {allSubjects.map(s => <option key={s}>{s}</option>)}
                 </select>
                 <input placeholder="Tag (optional)" value={newCardTag} onChange={e => setNewCardTag(e.target.value)} className={styles.formInput} style={{ marginBottom: 8, marginTop: 8 }} />
@@ -1355,7 +1402,7 @@ export default function UltraStudyHub() {
                   <span>📖</span><h2>My Cards ({flashcards.length})</h2>
                   <div className={styles.cardHeadRight}>
                     <label className={styles.checkLabel}><input type="checkbox" checked={shuffleCards} onChange={e => setShuffleCards(e.target.checked)} /> 🔀 Shuffle</label>
-                    <button onClick={() => startReview(cardSubjectFilter)} className={styles.addBtn} disabled={flashcards.length === 0}>▶ Review</button>
+                    <button onClick={() => startReview(cardSubjectFilter)} className={styles.addBtn} disabled={flashcards.length === 0}>▶ Start Review</button>
                   </div>
                 </div>
                 <div className={styles.filterRow}>
@@ -1365,7 +1412,7 @@ export default function UltraStudyHub() {
                   </div>
                 </div>
                 <div className={styles.flashcardsList}>
-                  {filteredFlashcards.length === 0 ? <p className={styles.emptyState}>Koi card nahi.</p> :
+                  {filteredFlashcards.length === 0 ? <p className={styles.emptyState}>No cards found.</p> :
                     filteredFlashcards.map(f => (
                       <div key={f.id} className={styles.flashcardItem}>
                         <div className={styles.flashcardHeader}>
@@ -1396,9 +1443,9 @@ export default function UltraStudyHub() {
                 ) : (
                   <>
                     <div className={styles.reviewAnswer}>{reviewCards[reviewIndex]?.back}</div>
-                    <p style={{ textAlign: "center", color: "var(--text2)", fontSize: "0.88rem", marginBottom: 12 }}>Kitna yaad tha?</p>
+                    <p style={{ textAlign: "center", color: "var(--text2)", fontSize: "0.88rem", marginBottom: 12 }}>How well did you remember?</p>
                     <div className={styles.rateButtons}>
-                      {[{ r: 1, l: "😓 Bhool gaya" }, { r: 2, l: "😕 Thoda" }, { r: 3, l: "🙂 Theek hai" }, { r: 4, l: "😊 Acha" }, { r: 5, l: "🔥 Perfect!" }].map(({ r, l }) => (
+                      {[{ r: 1, l: "😓 Forgot" }, { r: 2, l: "😕 Barely" }, { r: 3, l: "🙂 Okay" }, { r: 4, l: "😊 Good" }, { r: 5, l: "🔥 Perfect!" }].map(({ r, l }) => (
                         <button key={r} onClick={() => rateCard(reviewCards[reviewIndex].id, r)} className={`${styles.rateBtn} ${styles[`rate${r}`]}`}>{l}</button>
                       ))}
                     </div>
@@ -1416,7 +1463,7 @@ export default function UltraStudyHub() {
         <div className={styles.card}>
           <div className={styles.cardHead}><span>✅</span><h2>Study Todo List</h2></div>
           <div className={styles.todoForm}>
-            <input placeholder="Todo likhein..." value={newTodo} onChange={e => setNewTodo(e.target.value)} onKeyPress={e => e.key === "Enter" && addTodo()} className={styles.formInput} />
+            <input placeholder="Write a todo..." value={newTodo} onChange={e => setNewTodo(e.target.value)} onKeyPress={e => e.key === "Enter" && addTodo()} className={styles.formInput} />
             <select value={todoSubject} onChange={e => setTodoSubject(e.target.value)} className={styles.formSelect}>
               <option value="">-- Subject --</option>
               {allSubjects.map(s => <option key={s}>{s}</option>)}
@@ -1437,7 +1484,7 @@ export default function UltraStudyHub() {
             <input placeholder="🔍 Search todos..." value={todoSearch} onChange={e => setTodoSearch(e.target.value)} className={styles.searchInput} />
           </div>
           <div className={styles.todoList}>
-            {filteredTodos.length === 0 ? <p className={styles.emptyState}>Koi todo nahi!</p> :
+            {filteredTodos.length === 0 ? <p className={styles.emptyState}>No todos yet. Add one above!</p> :
               filteredTodos.map(t => (
                 <div key={t.id} className={`${styles.todoItem} ${t.completed ? styles.todoDone : ""}`}>
                   <button onClick={() => toggleTodo(t.id, t.completed)} className={styles.todoCheck}>{t.completed ? "✅" : <div className={styles.todoUnchecked} />}</button>
@@ -1463,12 +1510,12 @@ export default function UltraStudyHub() {
         <div className={styles.card}>
           <div className={styles.cardHead}><span>🌱</span><h2>Habit Tracker</h2></div>
           <div className={styles.habitForm}>
-            <input placeholder="New habit (e.g. Daily revision karein)" value={newHabit} onChange={e => setNewHabit(e.target.value)} onKeyPress={e => e.key === "Enter" && addHabit()} className={styles.formInput} />
+            <input placeholder="New habit (e.g. Read for 30 minutes daily)" value={newHabit} onChange={e => setNewHabit(e.target.value)} onKeyPress={e => e.key === "Enter" && addHabit()} className={styles.formInput} />
             <select value={habitFreq} onChange={e => setHabitFreq(e.target.value)} className={styles.formSelect}><option value="daily">Daily</option><option value="weekly">Weekly</option></select>
             <button onClick={addHabit} className={styles.addBtn}>+ Add Habit</button>
           </div>
           <div className={styles.habitList}>
-            {habits.length === 0 ? <p className={styles.emptyState}>Koi habit set nahi. Add karein!</p> :
+            {habits.length === 0 ? <p className={styles.emptyState}>No habits set. Add one to get started!</p> :
               habits.map(h => {
                 const todayStr = new Date().toDateString();
                 const doneToday = h.completedDates.includes(todayStr);
