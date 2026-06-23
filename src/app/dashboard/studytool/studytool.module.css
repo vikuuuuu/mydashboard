@@ -66,11 +66,8 @@
 
 /* ─── TOPBAR ─────────────────────────────────────────────────────────────── */
 .topBar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px; flex-wrap: wrap;
 }
 .backBtn {
   display:flex; align-items:center; gap:6px;
@@ -81,24 +78,27 @@
 }
 .backBtn:hover { border-color:var(--accent); color:var(--accent); background:var(--accentS); }
 
-/* LEFT CONTROLS (dark/notif/history) — now on left side */
-.leftControls {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
+.leftControls { display:flex; gap:6px; align-items:center; }
 .controlBtn {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: var(--surface); border: 1px solid var(--border);
-  cursor: pointer; font-size: 16px;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s; box-shadow: var(--shadow);
+  width:36px; height:36px; border-radius:10px;
+  background:var(--surface); border:1px solid var(--border);
+  cursor:pointer; font-size:16px;
+  display:flex; align-items:center; justify-content:center;
+  transition:all 0.2s; box-shadow:var(--shadow);
 }
-.controlBtn:hover { background: var(--accent); transform: scale(1.06); border-color: var(--accent); }
-.controlBtnActive { background: var(--accentS); border-color: var(--accent); }
-.controlBtnMuted  { opacity: 0.55; }
+.controlBtn:hover { background:var(--accent); transform:scale(1.06); border-color:var(--accent); }
+.controlBtnActive { background:var(--accentS); border-color:var(--accent); }
+.controlBtnMuted  { opacity:0.55; }
+.controlBtnLive {
+  display:flex; align-items:center; gap:6px;
+  padding:7px 14px; border-radius:999px; border:none;
+  background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff;
+  font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;
+  animation:livePulse 2s infinite; box-shadow:0 3px 10px rgba(239,68,68,0.4);
+}
+@keyframes livePulse { 0%,100%{box-shadow:0 3px 10px rgba(239,68,68,0.4)} 50%{box-shadow:0 3px 20px rgba(239,68,68,0.7)} }
 
-.titleArea { flex: 1; min-width: 0; }
+.titleArea { flex:1; min-width:0; }
 .title {
   font-size:1.7rem; font-weight:800; color:var(--text);
   letter-spacing:-0.03em; display:flex; align-items:center; gap:10px;
@@ -111,70 +111,45 @@
 
 /* ─── YEAR COUNTDOWN BANNER ──────────────────────────────────────────────── */
 .yearCountdownBanner {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  background: linear-gradient(135deg, #0f172a, #1e293b);
-  border: 1px solid rgba(96,165,250,0.25);
-  border-radius: var(--radius);
-  padding: 14px 20px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-  position: relative;
-  overflow: hidden;
+  display:flex; align-items:center; gap:20px;
+  background:linear-gradient(135deg,#0f172a,#1e293b);
+  border:1px solid rgba(96,165,250,0.25); border-radius:var(--radius);
+  padding:14px 20px; margin-bottom:14px; flex-wrap:wrap;
+  position:relative; overflow:hidden;
 }
 .yearCountdownBanner::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(96,165,250,0.05), transparent);
-  animation: shimmer 4s infinite;
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(90deg,transparent,rgba(96,165,250,0.05),transparent);
+  animation:shimmer 4s infinite;
 }
-.yearCountdownLeft {
-  display: flex; align-items: center; gap: 12px; z-index: 1;
-}
-.yearIcon { font-size: 24px; }
-.yearLabel {
-  font-size: 0.95rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em;
-}
-.yearSub { font-size: 0.78rem; color: #94a3b8; margin-top: 2px; }
-.yearCountdownUnits {
-  display: flex; gap: 10px; z-index: 1;
-}
+.yearCountdownLeft { display:flex; align-items:center; gap:12px; z-index:1; }
+.yearIcon { font-size:24px; }
+.yearLabel { font-size:0.95rem; font-weight:800; color:#e2e8f0; letter-spacing:-0.01em; }
+.yearSub   { font-size:0.78rem; color:#94a3b8; margin-top:2px; }
+.yearCountdownUnits { display:flex; gap:10px; z-index:1; }
 .yearUnit {
-  display: flex; flex-direction: column; align-items: center;
-  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 10px; padding: 8px 14px; min-width: 58px;
+  display:flex; flex-direction:column; align-items:center;
+  background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);
+  border-radius:10px; padding:8px 14px; min-width:58px;
 }
 .yearUnitNum {
-  font-size: 1.5rem; font-weight: 900; color: #60a5fa;
-  font-variant-numeric: tabular-nums; letter-spacing: 1px; line-height: 1;
+  font-size:1.5rem; font-weight:900; color:#60a5fa;
+  font-variant-numeric:tabular-nums; letter-spacing:1px; line-height:1;
 }
 .yearUnitLabel {
-  font-size: 0.64rem; color: #94a3b8; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px;
+  font-size:0.64rem; color:#94a3b8; font-weight:700;
+  text-transform:uppercase; letter-spacing:0.5px; margin-top:3px;
 }
-.yearProgress {
-  flex: 1; min-width: 120px; z-index: 1;
-}
-.yearProgressLabel {
-  font-size: 0.75rem; color: #94a3b8; font-weight: 600; margin-bottom: 6px;
-}
-.yearProgressBar {
-  height: 8px; background: rgba(255,255,255,0.1); border-radius: 99px; overflow: hidden; margin-bottom: 5px;
-}
+.yearProgress { flex:1; min-width:120px; z-index:1; }
+.yearProgressLabel { font-size:0.75rem; color:#94a3b8; font-weight:600; margin-bottom:6px; }
+.yearProgressBar { height:8px; background:rgba(255,255,255,0.1); border-radius:99px; overflow:hidden; margin-bottom:5px; }
 .yearProgressFill {
-  height: 100%;
-  background: linear-gradient(to right, #3b82f6, #60a5fa, #a78bfa);
-  border-radius: 99px;
-  transition: width 1s ease;
+  height:100%;
+  background:linear-gradient(to right,#3b82f6,#60a5fa,#a78bfa);
+  border-radius:99px; transition:width 1s ease;
 }
-.yearProgressPct {
-  font-size: 0.75rem; color: #60a5fa; font-weight: 700;
-}
-:global([data-theme="dark"]) .yearCountdownBanner {
-  background: linear-gradient(135deg, #020617, #0f172a);
-  border-color: rgba(96,165,250,0.2);
-}
+.yearProgressPct { font-size:0.75rem; color:#60a5fa; font-weight:700; }
+:global([data-theme="dark"]) .yearCountdownBanner { background:linear-gradient(135deg,#020617,#0f172a); border-color:rgba(96,165,250,0.2); }
 
 /* ─── ALERTS ─────────────────────────────────────────────────────────────── */
 .upcomingAlert {
@@ -207,26 +182,23 @@
 
 /* ─── EXAM QUICK BAR ─────────────────────────────────────────────────────── */
 .examQuickBar {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  background: linear-gradient(135deg, rgba(67,97,238,0.07), rgba(58,134,255,0.07));
-  border: 1px solid var(--border2);
-  border-radius: var(--radius); padding: 12px 18px; margin-bottom: 14px;
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:linear-gradient(135deg,rgba(67,97,238,0.07),rgba(58,134,255,0.07));
+  border:1px solid var(--border2); border-radius:var(--radius);
+  padding:12px 18px; margin-bottom:14px;
 }
-.examQuickInfo { display: flex; align-items: center; gap: 9px; }
-.examQuickIcon { font-size: 20px; }
-.examQuickTitle { display: block; font-size: 0.88rem; font-weight: 700; color: var(--text); }
-.examQuickAvg  { display: block; font-size: 0.75rem; color: var(--text2); margin-top: 1px; }
-.examQuickList { display: flex; gap: 7px; flex-wrap: wrap; flex: 1; }
+.examQuickInfo { display:flex; align-items:center; gap:9px; }
+.examQuickIcon { font-size:20px; }
+.examQuickTitle { display:block; font-size:0.88rem; font-weight:700; color:var(--text); }
+.examQuickAvg  { display:block; font-size:0.75rem; color:var(--text2); margin-top:1px; }
+.examQuickList { display:flex; gap:7px; flex-wrap:wrap; flex:1; }
 .examQuickChip {
-  display: flex; align-items: center; gap: 7px;
-  background: var(--surface); border: 1px solid var(--border2);
-  border-radius: 999px; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; color: var(--text);
+  display:flex; align-items:center; gap:7px;
+  background:var(--surface); border:1px solid var(--border2);
+  border-radius:999px; padding:4px 12px; font-size:0.8rem; font-weight:600; color:var(--text);
 }
-.examQuickDays {
-  background: var(--accent); color: #fff; font-size: 10px; font-weight: 800;
-  padding: 1px 7px; border-radius: 999px;
-}
-.examQuickMore { font-size: 0.79rem; color: var(--text2); align-self: center; }
+.examQuickDays { background:var(--accent); color:#fff; font-size:10px; font-weight:800; padding:1px 7px; border-radius:999px; }
+.examQuickMore { font-size:0.79rem; color:var(--text2); align-self:center; }
 
 /* ─── STREAK BANNER ──────────────────────────────────────────────────────── */
 .streakBanner {
@@ -305,13 +277,18 @@
 .iconBtnSm {
   width:27px; height:27px; border-radius:7px; border:none;
   background:var(--surface2); color:var(--text2); cursor:pointer;
-  font-size:13px; display:flex; align-items:center; justify-content:center;
-  transition:all 0.15s;
+  font-size:13px; display:flex; align-items:center; justify-content:center; transition:all 0.15s;
 }
 .iconBtnSm:hover { background:var(--accent); color:#fff; }
 .iconBtnDanger:hover { background:#ef4444 !important; color:#fff !important; }
 .miniDeleteBtn { background:transparent; border:none; color:#ef4444; cursor:pointer; padding:5px; border-radius:8px; font-size:15px; transition:all 0.15s; }
 .miniDeleteBtn:hover { background:#ef4444; color:#fff; }
+.fsBtnInline {
+  margin-left:auto; padding:5px 12px; border-radius:8px; border:1px solid var(--border2);
+  background:var(--accentS); color:var(--accent); font-family:inherit;
+  font-size:11.5px; font-weight:700; cursor:pointer; transition:all 0.2s;
+}
+.fsBtnInline:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
 
 /* ─── FORM ELEMENTS ──────────────────────────────────────────────────────── */
 .formSelect, .formInput {
@@ -351,22 +328,19 @@
 
 /* ─── TIMETABLE ──────────────────────────────────────────────────────────── */
 .timetableForm { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
-.timetableForm .formSelect,
-.timetableForm .formInput { flex:1; min-width:100px; }
+.timetableForm .formSelect,.timetableForm .formInput { flex:1; min-width:100px; }
 .advancedForm { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
 .repeatRow { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
 .repeatLabel { font-size:12px; color:var(--text2); font-weight:600; white-space:nowrap; }
 .repeatDay {
   padding:4px 9px; border-radius:999px; border:1px solid var(--border2);
-  background:var(--surface2); color:var(--text2); font-size:11px;
-  font-weight:700; cursor:pointer; transition:all 0.15s;
+  background:var(--surface2); color:var(--text2); font-size:11px; font-weight:700; cursor:pointer; transition:all 0.15s;
 }
 .repeatDayActive { background:var(--accent); color:#fff; border-color:var(--accent); }
 .subjectManager { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
 .subjectChip {
   display:inline-flex; align-items:center; gap:4px;
-  padding:4px 10px 4px 11px; border-radius:999px; color:#fff;
-  font-size:11.5px; font-weight:600;
+  padding:4px 10px 4px 11px; border-radius:999px; color:#fff; font-size:11.5px; font-weight:600;
 }
 .chipDel { background:rgba(0,0,0,0.25); border:none; color:#fff; cursor:pointer; border-radius:50%; width:15px; height:15px; display:flex; align-items:center; justify-content:center; font-size:9px; }
 .chipDel:hover { background:rgba(0,0,0,0.55); }
@@ -381,8 +355,7 @@
 .taskCard:hover { transform:translateX(3px); box-shadow:0 3px 10px rgba(67,97,238,0.1); }
 .activeTaskCard {
   background:linear-gradient(135deg,#fef2f2,#fee2e2);
-  border:2px solid var(--live);
-  animation:taskPulse 2s infinite;
+  border:2px solid var(--live); animation:taskPulse 2s infinite;
 }
 :global([data-theme="dark"]) .activeTaskCard { background:linear-gradient(135deg,#450a0a,#7f1d1d); }
 @keyframes taskPulse { 0%,100%{box-shadow:0 0 12px rgba(239,68,68,0.2)} 50%{box-shadow:0 0 24px rgba(239,68,68,0.4)} }
@@ -397,14 +370,118 @@
 .taskNote    { font-size:0.78rem; color:var(--text3); font-style:italic; margin-top:3px; }
 .taskActions { display:flex; gap:5px; }
 .editFormInline { display:flex; gap:6px; flex-wrap:wrap; width:100%; align-items:center; }
-.editFormInline .formSelect,
-.editFormInline .formInput { flex:1; min-width:85px; padding:6px 9px; font-size:12px; }
+.editFormInline .formSelect,.editFormInline .formInput { flex:1; min-width:85px; padding:6px 9px; font-size:12px; }
 
-/* ─── STUDY MODE ─────────────────────────────────────────────────────────── */
+/* ─── STUDY FULLSCREEN OVERLAY ───────────────────────────────────────────── */
+.studyFsOverlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: linear-gradient(160deg, #0a0f1e 0%, #0f1a35 50%, #0a1628 100%);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.3s ease;
+  overflow-y: auto;
+}
+.studyFsContent {
+  width: 100%; max-width: 680px;
+  padding: 32px 28px;
+  display: flex; flex-direction: column; align-items: center; gap: 24px;
+}
+.studyFsHeader {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+}
+.studyFsSubjectBadge {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 18px; border-radius: 999px; color: #fff;
+  font-size: 0.95rem; font-weight: 800; letter-spacing: -0.01em;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.studyFsMoodBadge {
+  padding: 6px 14px; border-radius: 999px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: #e2e8f0; font-size: 0.88rem; font-weight: 600;
+}
+.studyFsEsc {
+  margin-left: auto; padding: 7px 14px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.07);
+  color: #94a3b8; font-family: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.studyFsEsc:hover { background: rgba(255,255,255,0.14); color: #fff; }
+
+/* SVG Ring */
+.studyFsRing {
+  position: relative; width: 220px; height: 220px;
+  display: flex; align-items: center; justify-content: center;
+  filter: drop-shadow(0 0 32px rgba(59,130,246,0.35));
+}
+.studyFsRingInner {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.studyFsTimer {
+  font-size: 2.6rem; font-weight: 900; color: #fff;
+  font-variant-numeric: tabular-nums; letter-spacing: 3px; line-height: 1;
+}
+.studyFsTimerLabel { font-size: 0.72rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
+.studyFsPct { font-size: 1rem; font-weight: 800; color: #60a5fa; margin-top: 4px; }
+
+/* Stats Row */
+.studyFsStats {
+  display: flex; gap: 14px; width: 100%;
+}
+.studyFsStat {
+  flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px; padding: 14px 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.studyFsStatVal { font-size: 1.6rem; font-weight: 900; color: #60a5fa; line-height: 1; font-variant-numeric: tabular-nums; }
+.studyFsStatLbl { font-size: 0.72rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* Note Area */
+.studyFsNoteArea { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.studyFsNote {
+  width: 100%; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05);
+  color: #e2e8f0; font-family: inherit; font-size: 13px;
+  resize: vertical; min-height: 72px; outline: none; transition: all 0.2s;
+}
+.studyFsNote::placeholder { color: #475569; }
+.studyFsNote:focus { border-color: rgba(96,165,250,0.5); background: rgba(255,255,255,0.08); }
+.studyFsTagInput {
+  width: 100%; padding: 10px 14px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
+  color: #e2e8f0; font-family: inherit; font-size: 13px; outline: none; transition: all 0.2s;
+}
+.studyFsTagInput::placeholder { color: #475569; }
+.studyFsTagInput:focus { border-color: rgba(96,165,250,0.4); }
+
+/* Actions */
+.studyFsActions { display: flex; gap: 10px; width: 100%; }
+.studyFsStop {
+  flex: 1; padding: 14px; border-radius: var(--radiusSm); border: none;
+  background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff;
+  font-family: inherit; font-size: 0.95rem; font-weight: 800;
+  cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 16px rgba(239,68,68,0.4);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.studyFsStop:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(239,68,68,0.55); }
+.studyFsMin {
+  padding: 14px 20px; border-radius: var(--radiusSm); border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.07); color: #94a3b8;
+  font-family: inherit; font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
+}
+.studyFsMin:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+/* Hint Bar */
+.studyFsBreakHint {
+  width: 100%; padding: 12px 16px; border-radius: 10px;
+  background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2);
+  color: #6ee7b7; font-size: 0.82rem; font-weight: 600; text-align: center;
+}
+
+/* ─── STUDY MODE (normal card) ───────────────────────────────────────────── */
 .studyGrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
 .studySetupForm { display:flex; flex-direction:column; gap:9px; }
-.studySetupForm .formSelect,
-.studySetupForm .formInput { width:100%; }
+.studySetupForm .formSelect,.studySetupForm .formInput { width:100%; }
 .startModeBtn {
   padding:11px; border-radius:var(--radiusSm); border:none;
   background:#10b981; color:#fff; font-family:inherit; font-size:0.92rem;
@@ -451,7 +528,7 @@
 .historyMetaRow strong { color:var(--text); }
 .historyItemLog p { font-size:0.79rem; color:var(--text2); }
 .goodScore { color:#10b981; font-weight:700; background:rgba(16,185,129,0.1); padding:2px 7px; border-radius:5px; font-size:0.82rem; }
-.badScore  { color:#f59e0b; font-weight:700; background:rgba(245,158,11,0.1);  padding:2px 7px; border-radius:5px; font-size:0.82rem; }
+.badScore  { color:#f59e0b; font-weight:700; background:rgba(245,158,11,0.1); padding:2px 7px; border-radius:5px; font-size:0.82rem; }
 
 /* ─── ANALYTICS ──────────────────────────────────────────────────────────── */
 .analyticsGrid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
@@ -493,43 +570,37 @@
 .examForm { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
 .examForm .formInput, .examForm .formSelect { flex:1; min-width:130px; }
 .examAvgBadge {
-  margin-left: auto; background: var(--accentS); color: var(--accent);
-  border: 1px solid rgba(67,97,238,0.2); border-radius: 999px;
-  padding: 4px 13px; font-size: 12px; font-weight: 700;
+  margin-left:auto; background:var(--accentS); color:var(--accent);
+  border:1px solid rgba(67,97,238,0.2); border-radius:999px;
+  padding:4px 13px; font-size:12px; font-weight:700;
 }
-/* Exam Summary Row */
-.examSummaryRow {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px;
-}
+.examSummaryRow { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
 .examSummaryCard {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 12px; padding: 14px 12px;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  transition: all 0.2s;
+  background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 12px;
+  display:flex; flex-direction:column; align-items:center; gap:4px; transition:all 0.2s;
 }
-.examSummaryCard:hover { transform: translateY(-2px); box-shadow: var(--shadowMd); }
-.examSummaryIcon { font-size: 20px; }
-.examSummaryNum  { font-size: 1.6rem; font-weight: 900; color: var(--accent); line-height: 1; }
-.examSummaryLabel { font-size: 0.72rem; color: var(--text2); font-weight: 600; text-align: center; }
-
+.examSummaryCard:hover { transform:translateY(-2px); box-shadow:var(--shadowMd); }
+.examSummaryIcon { font-size:20px; }
+.examSummaryNum  { font-size:1.6rem; font-weight:900; color:var(--accent); line-height:1; }
+.examSummaryLabel { font-size:0.72rem; color:var(--text2); font-weight:600; text-align:center; }
 .examDeadlineList { display:flex; flex-direction:column; gap:10px; }
 .examCountdownCard { background:linear-gradient(135deg,#fff1f2,#ffe4e6); border:1px solid #fecdd3; border-radius:13px; padding:14px 16px; display:flex; justify-content:space-between; align-items:flex-start; transition:all 0.2s; }
 :global([data-theme="dark"]) .examCountdownCard { background:linear-gradient(135deg,#450a0a,#7f1d1d); border-color:#991b1b; }
 .examCountdownCard:hover { transform:translateX(3px); box-shadow:0 4px 14px rgba(220,38,38,0.18); }
 .examUrgent  { border-color:#ef4444; box-shadow:0 0 14px rgba(239,68,68,0.25); }
 .examWarning { border-color:#f59e0b; }
-.examHeader { display:flex; align-items:center; gap:9px; margin-bottom:7px; flex-wrap: wrap; }
+.examHeader { display:flex; align-items:center; gap:9px; margin-bottom:7px; flex-wrap:wrap; }
 .examHeader h4 { color:#991b1b; font-size:1rem; font-weight:700; }
 :global([data-theme="dark"]) .examHeader h4 { color:#fca5a5; }
 .examSubjects { font-size:0.8rem; color:#b91c1c; margin-bottom:4px; }
 .examNotes    { font-size:0.78rem; color:#b91c1c; margin-bottom:8px; font-style:italic; }
 :global([data-theme="dark"]) .examSubjects,:global([data-theme="dark"]) .examNotes { color:#f87171; }
 .examTargetScoreBadge {
-  background: rgba(239,68,68,0.15); color: #dc2626; font-size: 10.5px;
-  font-weight: 700; padding: 2px 8px; border-radius: 999px;
-  border: 1px solid rgba(239,68,68,0.3);
+  background:rgba(239,68,68,0.15); color:#dc2626; font-size:10.5px;
+  font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid rgba(239,68,68,0.3);
 }
-:global([data-theme="dark"]) .examTargetScoreBadge { background: rgba(252,165,165,0.15); color: #fca5a5; border-color: rgba(252,165,165,0.3); }
+:global([data-theme="dark"]) .examTargetScoreBadge { background:rgba(252,165,165,0.15); color:#fca5a5; border-color:rgba(252,165,165,0.3); }
+.examCountdownInfo { flex:1; }
 .countdownGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
 .countdownUnit { background:rgba(220,38,38,0.1); padding:7px; border-radius:8px; text-align:center; }
 .countdownNumber { display:block; font-size:1.4rem; font-weight:800; color:#dc2626; font-variant-numeric:tabular-nums; }
@@ -538,7 +609,7 @@
 :global([data-theme="dark"]) .countdownLabel { color:#fca5a5; }
 .examCompletedText { color:#059669; font-weight:700; font-size:0.95rem; }
 .priorityBadge { padding:2px 9px; border-radius:999px; font-size:10.5px; font-weight:700; }
-.priority_high   { background:rgba(239,68,68,0.12);  color:#ef4444; }
+.priority_high   { background:rgba(239,68,68,0.12); color:#ef4444; }
 .priority_medium { background:rgba(245,158,11,0.12); color:#f59e0b; }
 .priority_low    { background:rgba(16,185,129,0.12); color:#10b981; }
 
@@ -589,7 +660,7 @@
 
 /* ─── TODO ───────────────────────────────────────────────────────────────── */
 .todoForm { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:10px; }
-.todoForm .formInput, .todoForm .formSelect { flex:1; min-width:110px; }
+.todoForm .formInput,.todoForm .formSelect { flex:1; min-width:110px; }
 .todoList { display:flex; flex-direction:column; gap:7px; max-height:500px; overflow-y:auto; }
 .todoItem { display:flex; align-items:center; gap:10px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:10px 13px; transition:all 0.2s; }
 .todoItem:hover { border-color:var(--accent); }
@@ -609,7 +680,7 @@
 
 /* ─── HABITS ─────────────────────────────────────────────────────────────── */
 .habitForm { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
-.habitForm .formInput, .habitForm .formSelect { flex:1; min-width:140px; }
+.habitForm .formInput,.habitForm .formSelect { flex:1; min-width:140px; }
 .habitList { display:flex; flex-direction:column; gap:10px; }
 .habitCard { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:14px; transition:all 0.2s; }
 .habitCard:hover { border-color:var(--accent); }
@@ -629,50 +700,6 @@
 .habitSummary { margin-top:14px; padding:12px 14px; background:var(--surface2); border-radius:10px; border:1px solid var(--border); font-size:13px; color:var(--text2); }
 .habitProgressBar { height:6px; background:var(--surface3); border-radius:99px; overflow:hidden; margin-top:8px; }
 .habitProgressFill { height:100%; background:linear-gradient(to right,#10b981,var(--accent)); border-radius:99px; transition:width 0.6s ease; }
-
-/* ─── TOOL HISTORY MODAL ─────────────────────────────────────────────────── */
-.modalOverlay {
-  position: fixed; inset: 0; z-index: 10000;
-  background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center;
-  animation: fadeIn 0.2s ease;
-}
-.modalBox {
-  background: var(--surface); border: 1px solid var(--border2);
-  border-radius: var(--radius); padding: 0; width: 100%; max-width: 520px;
-  max-height: 75vh; display: flex; flex-direction: column;
-  box-shadow: var(--shadowMd); animation: slideUp 0.25s ease;
-}
-@keyframes slideUp { from{transform:translateY(30px);opacity:0} to{transform:translateY(0);opacity:1} }
-.modalHeader {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px; border-bottom: 1px solid var(--border);
-}
-.modalHeader h2 { font-size: 1.05rem; font-weight: 700; color: var(--text); }
-.modalClose {
-  width: 30px; height: 30px; border-radius: 8px; border: none;
-  background: var(--surface2); color: var(--text2); font-size: 14px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;
-}
-.modalClose:hover { background: var(--danger); color: #fff; }
-.historyList {
-  overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 7px;
-}
-.historyList::-webkit-scrollbar { width: 4px; }
-.historyList::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 99px; }
-.historyEntry {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 9px; padding: 9px 13px; transition: all 0.15s;
-}
-.historyEntry:hover { border-color: var(--accent); transform: translateX(2px); }
-.historyEntryLeft { display: flex; flex-direction: column; gap: 2px; }
-.historyAction {
-  font-size: 0.83rem; font-weight: 700; color: var(--text);
-  text-transform: capitalize; font-variant: small-caps; letter-spacing: 0.3px;
-}
-.historyResource { font-size: 0.75rem; color: var(--accent); font-weight: 600; }
-.historyTime { font-size: 0.72rem; color: var(--text3); white-space: nowrap; flex-shrink: 0; }
 
 /* ─── FULLSCREEN TIMETABLE ───────────────────────────────────────────────── */
 .fullScreenOverlay { position:fixed; inset:0; background:var(--bg); z-index:9999; overflow-y:auto; animation:fadeIn 0.25s ease; }
@@ -727,6 +754,7 @@
   .countdownGrid { grid-template-columns:repeat(2,1fr); }
   .monthlyGrid { grid-template-columns:repeat(2,1fr); }
   .yearCountdownBanner { flex-direction:column; align-items:flex-start; }
+  .studyFsStats { gap:8px; }
 }
 @media (max-width:640px) {
   .page { padding:14px; }
@@ -742,5 +770,9 @@
   .yearUnit { min-width:48px; padding:6px 10px; }
   .yearUnitNum { font-size:1.2rem; }
   .examSummaryRow { grid-template-columns:repeat(2,1fr); }
-  .modalBox { max-width:95vw; }
+  .studyFsContent { padding:20px 16px; gap:16px; }
+  .studyFsTimer { font-size:2rem; }
+  .studyFsRing { width:180px; height:180px; }
+  .studyFsStats { flex-wrap:wrap; }
+  .studyFsStat { min-width:calc(50% - 7px); }
 }
