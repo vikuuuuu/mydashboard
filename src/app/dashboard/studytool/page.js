@@ -60,7 +60,7 @@ export default function UltraStudyHub() {
   const [customSubjects, setCustomSubjects] = useState([]);
   const [newSubjectInput, setNewSubjectInput] = useState("");
 
-  // Study Timer
+  // ─── STUDY TIMER (Date.now based — background-tab safe) ───────────────────
   const [isStudyMode, setIsStudyMode] = useState(false);
   const [studyFullScreen, setStudyFullScreen] = useState(false);
   const [activeSubject, setActiveSubject] = useState("");
@@ -73,7 +73,11 @@ export default function UltraStudyHub() {
   const [studySessions, setStudySessions] = useState([]);
   const [sessionTags, setSessionTags] = useState("");
 
-  // Pomodoro
+  // Refs for accurate timing (not affected by tab throttling)
+  const studyStartTimestamp = useRef(null); // Date.now() when session started
+  const studyTimerRef = useRef(null);
+
+  // ─── POMODORO (Date.now based — background-tab safe) ─────────────────────
   const [isPomodoroMode, setIsPomodoroMode] = useState(false);
   const [pomodoroPreset, setPomodoroPreset] = useState(POMODORO_PRESETS[0]);
   const [pomodoroPhase, setPomodoroPhase] = useState("work");
@@ -81,6 +85,11 @@ export default function UltraStudyHub() {
   const [pomodoroSeconds, setPomodoroSeconds] = useState(25 * 60);
   const [customPomWork, setCustomPomWork] = useState(25);
   const [customPomBreak, setCustomPomBreak] = useState(5);
+
+  // Refs for pomodoro accurate timing
+  const pomodoroStartTimestamp = useRef(null);
+  const pomodoroBaseSeconds = useRef(25 * 60); // seconds remaining when timer last started
+  const pomodoroRef = useRef(null);
 
   // Exams
   const [exams, setExams] = useState([]);
@@ -139,8 +148,6 @@ export default function UltraStudyHub() {
   const [habitFreq, setHabitFreq] = useState("daily");
 
   const fileInputRef = useRef(null);
-  const studyTimerRef = useRef(null);
-  const pomodoroRef = useRef(null);
 
   const currentDayName = DAYS[new Date().getDay()];
   const allSubjects = [...DEFAULT_SUBJECTS, ...customSubjects];
@@ -150,7 +157,7 @@ export default function UltraStudyHub() {
     setTimeout(() => setToastMsg(null), 3200);
   }, []);
 
-  // ─── AUTO YEAR COUNTDOWN ──────────────────────────────────────────────────────
+  // ─── AUTO YEAR COUNTDOWN ──────────────────────────────────────────────────
   useEffect(() => {
     const tick = () => {
       const now = new Date();
@@ -179,7 +186,7 @@ export default function UltraStudyHub() {
       setUser(u);
       setDarkMode(localStorage.getItem("studyDarkMode") === "true");
       loadCustomSubjects(u.uid);
-      logToolUsage({ userId: u.uid, tool: "Study Hub", action: "visit", metadata: { version: "4.0" } });
+      logToolUsage({ userId: u.uid, tool: "Study Hub", action: "visit", metadata: { version: "4.1" } });
     });
     return () => unsub();
   }, [router]);
@@ -241,32 +248,85 @@ export default function UltraStudyHub() {
     return () => clearInterval(i);
   }, [tasks]);
 
+  // ─── STUDY TIMER (background-tab safe) ───────────────────────────────────
+  // Uses Date.now() wall-clock difference so tab throttling doesn't matter.
   useEffect(() => {
     if (isStudyMode) {
-      studyTimerRef.current = setInterval(() => setSecondsElapsed(p => p + 1), 1000);
-    } else clearInterval(studyTimerRef.current);
+      // Record wall-clock start time
+      studyStartTimestamp.current = Date.now() - secondsElapsed * 1000;
+
+      studyTimerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - studyStartTimestamp.current) / 1000);
+        setSecondsElapsed(elapsed);
+      }, 500); // poll every 500ms; even if throttled to 1s it won't drift
+    } else {
+      clearInterval(studyTimerRef.current);
+    }
     return () => clearInterval(studyTimerRef.current);
   }, [isStudyMode]);
 
+  // ─── POMODORO TIMER (background-tab safe) ────────────────────────────────
   useEffect(() => {
     if (isPomodoroMode) {
+      pomodoroStartTimestamp.current = Date.now();
+      pomodoroBaseSeconds.current = pomodoroSeconds; // snapshot current remaining
+
       pomodoroRef.current = setInterval(() => {
-        setPomodoroSeconds(p => {
-          if (p <= 1) {
-            const next = pomodoroPhase === "work" ? "break" : "work";
-            setPomodoroPhase(next);
-            if (next === "break") setPomodoroCount(c => c + 1);
-            showToast(next === "break" ? `☕ Break time! ${pomodoroPreset.short} min` : "🎯 Focus time! Let's go!", next === "break" ? "info" : "success");
-            return next === "work" ? pomodoroPreset.work * 60 : pomodoroPreset.short * 60;
-          }
-          return p - 1;
-        });
-      }, 1000);
-    } else clearInterval(pomodoroRef.current);
+        const elapsed = Math.floor((Date.now() - pomodoroStartTimestamp.current) / 1000);
+        const remaining = pomodoroBaseSeconds.current - elapsed;
+
+        if (remaining <= 0) {
+          // Phase switch
+          const next = pomodoroPhase === "work" ? "break" : "work";
+          setPomodoroPhase(next);
+          if (next === "break") setPomodoroCount(c => c + 1);
+          showToast(
+            next === "break"
+              ? `☕ Break time! ${pomodoroPreset.short} min`
+              : "🎯 Focus time! Let's go!",
+            next === "break" ? "info" : "success"
+          );
+          const newSeconds = next === "work"
+            ? pomodoroPreset.work * 60
+            : pomodoroPreset.short * 60;
+          setPomodoroSeconds(newSeconds);
+          // Reset the timestamp for the new phase
+          pomodoroStartTimestamp.current = Date.now();
+          pomodoroBaseSeconds.current = newSeconds;
+        } else {
+          setPomodoroSeconds(remaining);
+        }
+      }, 500);
+    } else {
+      clearInterval(pomodoroRef.current);
+      // Save current remaining as base for next resume
+      pomodoroBaseSeconds.current = pomodoroSeconds;
+    }
     return () => clearInterval(pomodoroRef.current);
   }, [isPomodoroMode, pomodoroPhase, pomodoroPreset, showToast]);
 
-  // ─── ESC key exits study fullscreen ──────────────────────────────────────────
+  // ─── Page Visibility API — wake up timer when tab becomes active ──────────
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // Recalibrate study timer
+        if (isStudyMode && studyStartTimestamp.current) {
+          const elapsed = Math.floor((Date.now() - studyStartTimestamp.current) / 1000);
+          setSecondsElapsed(elapsed);
+        }
+        // Recalibrate pomodoro timer
+        if (isPomodoroMode && pomodoroStartTimestamp.current) {
+          const elapsed = Math.floor((Date.now() - pomodoroStartTimestamp.current) / 1000);
+          const remaining = Math.max(0, pomodoroBaseSeconds.current - elapsed);
+          setPomodoroSeconds(remaining);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [isStudyMode, isPomodoroMode]);
+
+  // ─── ESC key exits study fullscreen ──────────────────────────────────────
   useEffect(() => {
     const handleKey = (e) => { if (e.key === "Escape" && studyFullScreen) setStudyFullScreen(false); };
     window.addEventListener("keydown", handleKey);
@@ -347,7 +407,7 @@ export default function UltraStudyHub() {
     return Math.floor(avg / 86400000);
   };
 
-  // ─── TIMETABLE CRUD ──────────────────────────────────────────────────────────
+  // ─── TIMETABLE CRUD ──────────────────────────────────────────────────────
   const addTask = async () => {
     if (!subject || !startTime || !endTime || !user) { showToast("Please fill all required fields!", "error"); return; }
     if (startTime >= endTime) { showToast("End time must be after start time!", "error"); return; }
@@ -387,7 +447,7 @@ export default function UltraStudyHub() {
 
   const exportTimetable = (format = "json") => {
     if (format === "json") {
-      const data = { tasks, customSubjects, exportedAt: new Date().toISOString(), version: "4.0" };
+      const data = { tasks, customSubjects, exportedAt: new Date().toISOString(), version: "4.1" };
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
       a.download = `timetable-${new Date().toISOString().split("T")[0]}.json`;
@@ -454,6 +514,7 @@ export default function UltraStudyHub() {
   const startStudyMode = async () => {
     if (!activeSubject) { showToast("Please select a subject!", "error"); return; }
     setSecondsElapsed(0);
+    studyStartTimestamp.current = Date.now(); // set wall-clock start
     setIsStudyMode(true);
     setStudyFullScreen(true);
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "start_study_session", resourceName: activeSubject, metadata: { targetMinutes, mood: studyMood } });
@@ -463,7 +524,11 @@ export default function UltraStudyHub() {
   const stopStudyMode = async () => {
     setIsStudyMode(false);
     setStudyFullScreen(false);
-    const actualMins = Math.round(secondsElapsed / 60);
+    // Use wall-clock elapsed for accuracy even if called from background
+    const actualElapsed = studyStartTimestamp.current
+      ? Math.floor((Date.now() - studyStartTimestamp.current) / 1000)
+      : secondsElapsed;
+    const actualMins = Math.round(actualElapsed / 60);
     const expected = parseInt(targetMinutes) || 1;
     const accuracy = Math.min(Math.round((actualMins / expected) * 100), 100);
     try {
@@ -473,8 +538,9 @@ export default function UltraStudyHub() {
         mood: studyMood, notes: sessionNote, tags: sessionTags, createdAt: serverTimestamp(),
       });
       await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "stop_study_session", resourceName: activeSubject, metadata: { actualMins, accuracy, mood: studyMood } });
-      showToast(`🎉 Session saved! Accuracy: ${accuracy}%`);
+      showToast(`🎉 Session saved! ${actualMins} min • Accuracy: ${accuracy}%`);
     } catch (e) { showToast("Error saving session", "error"); }
+    studyStartTimestamp.current = null;
     setSecondsElapsed(0); setSessionNote(""); setSessionTags("");
   };
 
@@ -606,7 +672,7 @@ export default function UltraStudyHub() {
     showToast("Todo deleted");
   };
 
-  // ─── HABITS ──────────────────────────────────────────────────────────────────
+  // ─── HABITS ──────────────────────────────────────────────────────────────
   const addHabit = async () => {
     if (!newHabit.trim() || !user) return;
     try {
@@ -643,7 +709,7 @@ export default function UltraStudyHub() {
     } catch (e) { showToast("Error deleting habit", "error"); }
   };
 
-  // ─── COMPUTED VALUES ──────────────────────────────────────────────────────────
+  // ─── COMPUTED VALUES ──────────────────────────────────────────────────────
   const totalStudiedMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
   const avgAccuracy = studySessions.length ? Math.round(studySessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / studySessions.length) : 0;
   const todayStudied = studySessions.filter(s => {
@@ -676,16 +742,18 @@ export default function UltraStudyHub() {
   const avgExamDays = getExamAvgDaysRemaining();
   const upcomingExams = exams.filter(e => new Date(e.examDate) > new Date());
 
-  // ─── YEAR PROGRESS ────────────────────────────────────────────────────────────
+  // ─── YEAR PROGRESS ────────────────────────────────────────────────────────
   const currentYear = currentTime.getFullYear();
   const yearStart = new Date(`${currentYear}-01-01`);
   const yearEnd = new Date(`${currentYear + 1}-01-01`);
   const yearPct = Math.round(((currentTime - yearStart) / (yearEnd - yearStart)) * 100);
 
-  // ─── FULLSCREEN STUDY MODE ────────────────────────────────────────────────────
+  // ─── FULLSCREEN STUDY MODE ────────────────────────────────────────────────
   if (studyFullScreen && isStudyMode) {
     const pct = Math.min((secondsElapsed / (parseInt(targetMinutes) * 60)) * 100, 100);
     const circumference = 2 * Math.PI * 90;
+    const remainingSecs = Math.max(0, parseInt(targetMinutes) * 60 - secondsElapsed);
+    const isOvertime = secondsElapsed > parseInt(targetMinutes) * 60;
     return (
       <div className={styles.studyFsOverlay}>
         <div className={styles.studyFsContent}>
@@ -694,53 +762,66 @@ export default function UltraStudyHub() {
               📚 {activeSubject}
             </div>
             <div className={styles.studyFsMoodBadge}>{studyMood}</div>
+            {/* Timer accuracy indicator */}
+            <div className={styles.studyFsAccurateBadge} title="Timer is background-tab accurate">
+              ⚡ Accurate Timer
+            </div>
             <button className={styles.studyFsEsc} onClick={() => setStudyFullScreen(false)} title="Minimize (Esc)">⤡ Minimize</button>
           </div>
 
           <div className={styles.studyFsRing}>
             <svg width="220" height="220" viewBox="0 0 220 220">
-              <circle cx="110" cy="110" r="90" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="12" />
+              <circle cx="110" cy="110" r="90" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="12" />
               <circle
                 cx="110" cy="110" r="90" fill="none"
-                stroke="url(#studyGrad)" strokeWidth="12"
+                stroke={isOvertime ? "url(#overtimeGrad)" : "url(#studyGrad)"}
+                strokeWidth="12"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
-                strokeDashoffset={circumference - (pct / 100) * circumference}
+                strokeDashoffset={circumference - (Math.min(pct, 100) / 100) * circumference}
                 transform="rotate(-90 110 110)"
-                style={{ transition: "stroke-dashoffset 1s ease" }}
+                style={{ transition: "stroke-dashoffset 0.5s ease" }}
               />
               <defs>
                 <linearGradient id="studyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                   <stop offset="0%" stopColor="#10b981" />
                   <stop offset="100%" stopColor="#3b82f6" />
                 </linearGradient>
+                <linearGradient id="overtimeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#ef4444" />
+                </linearGradient>
               </defs>
             </svg>
             <div className={styles.studyFsRingInner}>
               <div className={styles.studyFsTimer}>{fmt(secondsElapsed)}</div>
-              <div className={styles.studyFsTimerLabel}>Elapsed</div>
-              <div className={styles.studyFsPct}>{Math.round(pct)}%</div>
+              <div className={styles.studyFsTimerLabel}>ELAPSED</div>
+              <div className={styles.studyFsPct} style={{ color: isOvertime ? "#fbbf24" : "#60a5fa" }}>
+                {isOvertime ? `+${fmt(secondsElapsed - parseInt(targetMinutes) * 60)}` : `${Math.round(pct)}%`}
+              </div>
             </div>
           </div>
 
           <div className={styles.studyFsStats}>
             <div className={styles.studyFsStat}>
               <span className={styles.studyFsStatVal}>{targetMinutes}</span>
-              <span className={styles.studyFsStatLbl}>Target (min)</span>
+              <span className={styles.studyFsStatLbl}>Target</span>
             </div>
             <div className={styles.studyFsStat}>
               <span className={styles.studyFsStatVal}>{Math.round(secondsElapsed / 60)}</span>
               <span className={styles.studyFsStatLbl}>Done (min)</span>
             </div>
             <div className={styles.studyFsStat}>
-              <span className={styles.studyFsStatVal}>{Math.max(0, parseInt(targetMinutes) - Math.round(secondsElapsed / 60))}</span>
-              <span className={styles.studyFsStatLbl}>Remaining</span>
+              <span className={styles.studyFsStatVal} style={{ color: isOvertime ? "#fbbf24" : "#60a5fa" }}>
+                {isOvertime ? "OT" : Math.max(0, parseInt(targetMinutes) - Math.round(secondsElapsed / 60))}
+              </span>
+              <span className={styles.studyFsStatLbl}>{isOvertime ? "Overtime!" : "Remaining"}</span>
             </div>
           </div>
 
           <div className={styles.studyFsNoteArea}>
             <textarea
-              placeholder="Add session notes..."
+              placeholder="Session notes..."
               value={sessionNote}
               onChange={e => setSessionNote(e.target.value)}
               className={styles.studyFsNote}
@@ -763,9 +844,11 @@ export default function UltraStudyHub() {
           </div>
 
           <div className={styles.studyFsBreakHint}>
-            {breakReminder && secondsElapsed > 0 && secondsElapsed % 1500 < 5
-              ? "☕ Time for a short break! You've been studying for 25 minutes."
-              : `🔥 Stay focused! ${streak} day streak going strong.`
+            {isOvertime
+              ? `🏆 Target complete! You're in overtime — great dedication!`
+              : breakReminder && secondsElapsed > 0 && Math.floor(secondsElapsed / 1500) > 0 && secondsElapsed % 1500 < 10
+                ? "☕ 25 min done — consider a short break!"
+                : `🔥 ${streak} day streak • Stay focused!`
             }
           </div>
         </div>
@@ -773,7 +856,7 @@ export default function UltraStudyHub() {
     );
   }
 
-  // ─── FULLSCREEN TIMETABLE ──────────────────────────────────────────────────
+  // ─── FULLSCREEN TIMETABLE ─────────────────────────────────────────────────
   if (fullScreenTimetable) {
     const grouped = {};
     DAYS.forEach(d => { grouped[d] = tasks.filter(t => t.day === d).sort((a, b) => a.startTime.localeCompare(b.startTime)); });
@@ -840,7 +923,7 @@ export default function UltraStudyHub() {
     );
   }
 
-  // ─── MAIN RENDER ──────────────────────────────────────────────────────────────
+  // ─── MAIN RENDER ──────────────────────────────────────────────────────────
   return (
     <div className={`${styles.page} ${darkMode ? styles.darkMode : ""}`}>
       {toastMsg && <div className={`${styles.toast} ${styles[`toast_${toastMsg.type}`]}`}>{toastMsg.msg}</div>}
@@ -857,12 +940,12 @@ export default function UltraStudyHub() {
           </button>
           {isStudyMode && (
             <button className={styles.controlBtnLive} onClick={() => setStudyFullScreen(true)} title="Open Study Fullscreen">
-              ⚡ Live Session
+              ⚡ Live: {fmt(secondsElapsed)}
             </button>
           )}
         </div>
         <div className={styles.titleArea}>
-          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v4.0</span></h1>
+          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v4.1</span></h1>
           <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} • {currentDayName}, {currentTime.toLocaleDateString("en-IN")}</p>
         </div>
       </div>
@@ -918,6 +1001,11 @@ export default function UltraStudyHub() {
         <div className={styles.streakItem}>🎯<div><span className={styles.streakNumber}>{todayStudied}/{studyGoalMinutes}</span><span className={styles.streakLabel}>Today (min)</span></div></div>
         <div className={styles.streakItem}>🏆<div><span className={styles.streakNumber}>{achievements.length}</span><span className={styles.streakLabel}>Achievements</span></div></div>
         <div className={styles.streakItem}>📅<div><span className={styles.streakNumber}>{tasks.length}</span><span className={styles.streakLabel}>Slots</span></div></div>
+        {isStudyMode && (
+          <div className={styles.streakItem} style={{ cursor:"pointer" }} onClick={() => setStudyFullScreen(true)}>
+            ⏱️<div><span className={styles.streakNumber} style={{ color:"#fbbf24" }}>{fmt(secondsElapsed)}</span><span className={styles.streakLabel}>Live Timer</span></div>
+          </div>
+        )}
         <div className={styles.progressBarContainer}><div className={styles.progressBar} style={{ width: `${Math.min((todayStudied / studyGoalMinutes) * 100, 100)}%` }} /></div>
       </div>
 
@@ -1097,6 +1185,12 @@ export default function UltraStudyHub() {
                 <button className={styles.fsBtnInline} onClick={() => setStudyFullScreen(true)}>⤢ Fullscreen</button>
               )}
             </div>
+
+            {/* Timer Accuracy Badge */}
+            <div className={styles.timerAccuracyNote}>
+              ✅ Background-tab accurate timer — switch tabs freely, timer stays correct
+            </div>
+
             {!isStudyMode ? (
               <div className={styles.studySetupForm}>
                 <select value={activeSubject} onChange={e => setActiveSubject(e.target.value)} className={styles.formSelect}>
@@ -1130,11 +1224,19 @@ export default function UltraStudyHub() {
 
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🍅</span><h2>Pomodoro Timer</h2></div>
+            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate — tab switch karo, timer sahi rahega</div>
             <div className={styles.pomodoroPresets}>
               {POMODORO_PRESETS.map(p => (
                 <button key={p.label}
                   className={`${styles.presetBtn} ${pomodoroPreset.label === p.label ? styles.presetBtnActive : ""}`}
-                  onClick={() => { setPomodoroPreset(p); setPomodoroSeconds(p.work * 60); setIsPomodoroMode(false); setPomodoroPhase("work"); setPomodoroCount(0); }}>
+                  onClick={() => {
+                    setPomodoroPreset(p);
+                    setPomodoroSeconds(p.work * 60);
+                    pomodoroBaseSeconds.current = p.work * 60;
+                    setIsPomodoroMode(false);
+                    setPomodoroPhase("work");
+                    setPomodoroCount(0);
+                  }}>
                   {p.label}
                 </button>
               ))}
@@ -1142,7 +1244,15 @@ export default function UltraStudyHub() {
             <div className={styles.customPomRow}>
               <input type="number" placeholder="Work min" value={customPomWork} onChange={e => setCustomPomWork(+e.target.value)} className={styles.formInput} style={{ width: 80 }} />
               <input type="number" placeholder="Break min" value={customPomBreak} onChange={e => setCustomPomBreak(+e.target.value)} className={styles.formInput} style={{ width: 80 }} />
-              <button className={styles.smBtn} onClick={() => { const p = { label: "Custom", work: customPomWork, short: customPomBreak }; setPomodoroPreset(p); setPomodoroSeconds(p.work * 60); setIsPomodoroMode(false); setPomodoroPhase("work"); setPomodoroCount(0); }}>Set Custom</button>
+              <button className={styles.smBtn} onClick={() => {
+                const p = { label: "Custom", work: customPomWork, short: customPomBreak };
+                setPomodoroPreset(p);
+                setPomodoroSeconds(p.work * 60);
+                pomodoroBaseSeconds.current = p.work * 60;
+                setIsPomodoroMode(false);
+                setPomodoroPhase("work");
+                setPomodoroCount(0);
+              }}>Set Custom</button>
             </div>
             <div className={`${styles.pomodoroDisplay} ${pomodoroPhase === "break" ? styles.pomodoroBreak : ""}`}>
               <div className={styles.pomodoroPhaseLabel}>{pomodoroPhase === "work" ? "🎯 Focus Time" : "☕ Break Time"}</div>
@@ -1152,7 +1262,14 @@ export default function UltraStudyHub() {
             </div>
             <div className={styles.pomodoroControls}>
               <button onClick={() => setIsPomodoroMode(p => !p)} className={styles.startModeBtn}>{isPomodoroMode ? "⏹ Stop" : "▶ Start"}</button>
-              <button onClick={() => { setIsPomodoroMode(false); setPomodoroPhase("work"); setPomodoroSeconds(pomodoroPreset.work * 60); setPomodoroCount(0); }} className={styles.smBtn}>↺ Reset</button>
+              <button onClick={() => {
+                setIsPomodoroMode(false);
+                setPomodoroPhase("work");
+                const newSecs = pomodoroPreset.work * 60;
+                setPomodoroSeconds(newSecs);
+                pomodoroBaseSeconds.current = newSecs;
+                setPomodoroCount(0);
+              }} className={styles.smBtn}>↺ Reset</button>
             </div>
           </div>
 
