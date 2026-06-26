@@ -22,38 +22,6 @@ const POMODORO_PRESETS = [
 const MOODS = ["😊 Happy","😤 Focused","😴 Tired","😰 Stressed","🔥 Motivated","🧘 Calm","😐 Neutral"];
 const SUBJECT_COLORS = ["#4361ee","#f77f00","#e63946","#0f9d6e","#9b5de5","#f15bb5","#00bbf9","#ffd166","#06d6a0","#118ab2","#e76f51","#2a9d8f"];
 
-// Activity types with icons and labels
-const ACTIVITY_META = {
-  visit:                  { icon:"👁️",  label:"App Visit",           color:"#6366f1" },
-  add_task:               { icon:"📅",  label:"Slot Added",          color:"#4361ee" },
-  edit_task:              { icon:"✏️",  label:"Slot Edited",         color:"#f77f00" },
-  delete_task:            { icon:"🗑️",  label:"Slot Deleted",        color:"#ef4444" },
-  duplicate_task:         { icon:"⎘",   label:"Slot Duplicated",     color:"#9b5de5" },
-  export_timetable:       { icon:"⬇️",  label:"Timetable Exported",  color:"#0f9d6e" },
-  import_timetable:       { icon:"⬆️",  label:"Timetable Imported",  color:"#0f9d6e" },
-  start_study_session:    { icon:"▶️",  label:"Study Started",       color:"#10b981" },
-  stop_study_session:     { icon:"⏹️",  label:"Study Saved",         color:"#3b82f6" },
-  add_exam:               { icon:"🎯",  label:"Exam Added",          color:"#e63946" },
-  delete_exam:            { icon:"🗑️",  label:"Exam Deleted",        color:"#ef4444" },
-  add_note:               { icon:"📝",  label:"Note Created",        color:"#f77f00" },
-  edit_note:              { icon:"✏️",  label:"Note Updated",        color:"#f59e0b" },
-  delete_note:            { icon:"🗑️",  label:"Note Deleted",        color:"#ef4444" },
-  add_flashcard:          { icon:"🗂️",  label:"Card Added",          color:"#9b5de5" },
-  delete_flashcard:       { icon:"🗑️",  label:"Card Deleted",        color:"#ef4444" },
-  start_flashcard_review: { icon:"🧠",  label:"Review Started",      color:"#00bbf9" },
-  add_todo:               { icon:"✅",  label:"Todo Added",          color:"#10b981" },
-  complete_todo:          { icon:"☑️",  label:"Todo Done",           color:"#10b981" },
-  uncomplete_todo:        { icon:"↩️",  label:"Todo Undone",         color:"#f59e0b" },
-  delete_todo:            { icon:"🗑️",  label:"Todo Deleted",        color:"#ef4444" },
-  add_habit:              { icon:"🌱",  label:"Habit Added",         color:"#06d6a0" },
-  check_habit:            { icon:"✅",  label:"Habit Checked",       color:"#10b981" },
-  uncheck_habit:          { icon:"↩️",  label:"Habit Unchecked",     color:"#f59e0b" },
-  delete_habit:           { icon:"🗑️",  label:"Habit Deleted",       color:"#ef4444" },
-  add_syllabus:           { icon:"📚",  label:"Syllabus Added",      color:"#4361ee" },
-  update_syllabus_topic:  { icon:"📖",  label:"Topic Updated",       color:"#0f9d6e" },
-  delete_syllabus:        { icon:"🗑️",  label:"Syllabus Deleted",    color:"#ef4444" },
-};
-
 const getNextYearTarget = () => {
   const now = new Date();
   const nextYear = now.getFullYear() + 1;
@@ -174,9 +142,8 @@ export default function UltraStudyHub() {
   const [newHabit, setNewHabit] = useState("");
   const [habitFreq, setHabitFreq] = useState("daily");
 
-  // ── NEW: Syllabus ──────────────────────────────────────────────────────────
+  // Syllabus
   const [syllabusItems, setSyllabusItems] = useState([]);
-  const [syllabusExamId, setSyllabusExamId] = useState("");
   const [syllabusExamName, setSyllabusExamName] = useState("");
   const [syllabusSubject, setSyllabusSubject] = useState("");
   const [syllabusTopicInput, setSyllabusTopicInput] = useState("");
@@ -184,12 +151,6 @@ export default function UltraStudyHub() {
   const [syllabusFilter, setSyllabusFilter] = useState("all");
   const [syllabusSearch, setSyllabusSearch] = useState("");
   const [expandedSyllabus, setExpandedSyllabus] = useState(null);
-
-  // ── NEW: Activity History ──────────────────────────────────────────────────
-  const [activityLogs, setActivityLogs] = useState([]);
-  const [activityFilter, setActivityFilter] = useState("all");
-  const [activityPage, setActivityPage] = useState(1);
-  const ACTIVITY_PER_PAGE = 20;
 
   const fileInputRef = useRef(null);
   const currentDayName = DAYS[new Date().getDay()];
@@ -251,19 +212,6 @@ export default function UltraStudyHub() {
     listenCol("study_notes", setSavedNotes);
     listenCol("study_habits", setHabits);
     listenCol("study_syllabus", setSyllabusItems);
-
-    // Activity logs
-    const qLogs = query(collection(db, "tool_usage_logs"), where("userId", "==", uid));
-    unsubs.push(onSnapshot(qLogs, snap => {
-      const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .filter(l => l.tool === "Study Hub")
-        .sort((a, b) => {
-          const da = a.timestamp?.toDate?.() || new Date(a.timestamp || 0);
-          const db2 = b.timestamp?.toDate?.() || new Date(b.timestamp || 0);
-          return db2 - da;
-        });
-      setActivityLogs(logs);
-    }));
 
     const qSess = query(collection(db, "study_sessions"), where("userId", "==", uid));
     unsubs.push(onSnapshot(qSess, snap => {
@@ -430,7 +378,7 @@ export default function UltraStudyHub() {
     return Math.floor(upcoming.reduce((sum, e) => sum + (new Date(e.examDate) - new Date()), 0) / upcoming.length / 86400000);
   };
 
-  // ── TIMETABLE CRUD ────────────────────────────────────────────────────────
+  // TIMETABLE CRUD
   const addTask = async () => {
     if (!subject || !startTime || !endTime || !user) { showToast("Please fill all required fields!", "error"); return; }
     if (startTime >= endTime) { showToast("End time must be after start time!", "error"); return; }
@@ -511,8 +459,8 @@ export default function UltraStudyHub() {
           }
         }
         await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "import_timetable", metadata: { count, format: isCSV ? "csv" : "json" } });
-        showToast(`✅ ${count} slots imported!`);
-      } catch (err) { showToast("❌ Import failed!", "error"); }
+        showToast(`¼¾ ${count} slots imported!`);
+      } catch (err) { showToast("â Œ Import failed!", "error"); }
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -525,7 +473,7 @@ export default function UltraStudyHub() {
     setIsStudyMode(true);
     setStudyFullScreen(true);
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "start_study_session", resourceName: activeSubject, metadata: { targetMinutes, mood: studyMood } });
-    showToast(`📚 Study session started: ${activeSubject}`);
+    showToast(`ðŸ“š Study session started: ${activeSubject}`);
   };
   const stopStudyMode = async () => {
     setIsStudyMode(false);
@@ -537,7 +485,7 @@ export default function UltraStudyHub() {
     try {
       await addDoc(collection(db, "study_sessions"), { userId: user.uid, subjectName: activeSubject, targetTime: expected, actualTime: actualMins, accuracyPercentage: accuracy, mood: studyMood, notes: sessionNote, tags: sessionTags, createdAt: serverTimestamp() });
       await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "stop_study_session", resourceName: activeSubject, metadata: { actualMins, accuracy, mood: studyMood } });
-      showToast(`🎉 Session saved! ${actualMins} min • Accuracy: ${accuracy}%`);
+      showToast(`ðŸŽ‰ Session saved! ${actualMins} min â€¢ Accuracy: ${accuracy}%`);
     } catch (e) { showToast("Error saving session", "error"); }
     studyStartTimestamp.current = null;
     setSecondsElapsed(0); setSessionNote(""); setSessionTags("");
@@ -584,7 +532,7 @@ export default function UltraStudyHub() {
     await addDoc(collection(db, "study_exams"), { userId: user.uid, examName, examDate, priority: examPriority, subjects: examSubjectsInput, notes: examNotes, targetScore: examTargetScore || "", createdAt: serverTimestamp() });
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_exam", resourceName: examName, metadata: { examDate, priority: examPriority } });
     setExamName(""); setExamDate(""); setExamSubjectsInput(""); setExamNotes(""); setExamTargetScore("");
-    showToast(`🎯 "${examName}" added!`);
+    showToast(`ðŸŽ¯ "${examName}" added!`);
   };
   const deleteExam = async (id) => {
     await deleteDoc(doc(db, "study_exams", id));
@@ -601,7 +549,7 @@ export default function UltraStudyHub() {
     } else {
       await addDoc(collection(db, "study_notes"), { userId: user.uid, title: noteTitle || "Untitled", content: quickNotes, tag: noteTag, createdAt: serverTimestamp() });
       await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_note", resourceName: noteTitle || "Untitled" });
-      showToast("Note saved! 📝");
+      showToast("Note saved! ðŸ“ ");
     }
     setQuickNotes(""); setNoteTitle(""); setNoteTag("");
   };
@@ -616,7 +564,7 @@ export default function UltraStudyHub() {
     if (!newFront || !newBack) { showToast("Please fill front and back!", "error"); return; }
     await addDoc(collection(db, "study_flashcards"), { userId: user.uid, front: newFront, back: newBack, subject: newCardSubject || "General", tag: newCardTag, reviewCount: 0, confidence: 0, createdAt: serverTimestamp() });
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_flashcard", resourceName: newCardSubject || "General" });
-    setNewFront(""); setNewBack(""); showToast("Flashcard added! 🗂️");
+    setNewFront(""); setNewBack(""); showToast("Flashcard added! ðŸ—‚ï¸ ");
   };
   const deleteFlashcard = async (id) => {
     await deleteDoc(doc(db, "study_flashcards", id));
@@ -633,7 +581,7 @@ export default function UltraStudyHub() {
     const card = flashcards.find(f => f.id === id);
     await updateDoc(doc(db, "study_flashcards", id), { confidence, reviewCount: (card?.reviewCount || 0) + 1, lastReviewed: serverTimestamp() });
     if (reviewIndex < reviewCards.length - 1) { setReviewIndex(reviewIndex + 1); setShowAnswer(false); }
-    else { setReviewMode(false); showToast(`🎉 Review complete! ${reviewCards.length} cards reviewed`); }
+    else { setReviewMode(false); showToast(`ðŸŽ‰ Review complete! ${reviewCards.length} cards reviewed`); }
   };
 
   const addTodo = async () => {
@@ -641,7 +589,7 @@ export default function UltraStudyHub() {
     await addDoc(collection(db, "study_todos"), { userId: user.uid, text: newTodo, subject: todoSubject, dueDate: todoDue, priority: todoPriority, tag: todoTag, completed: false, createdAt: serverTimestamp() });
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_todo", resourceName: newTodo.slice(0, 50), metadata: { priority: todoPriority } });
     setNewTodo(""); setTodoDue(""); setTodoSubject(""); setTodoTag("");
-    showToast("Todo added! ✅");
+    showToast("Todo added! âœ…");
   };
   const toggleTodo = async (id, completed) => {
     await updateDoc(doc(db, "study_todos", id), { completed: !completed });
@@ -660,7 +608,7 @@ export default function UltraStudyHub() {
       await addDoc(collection(db, "study_habits"), { userId: user.uid, text: newHabit.trim(), freq: habitFreq, completedDates: [], createdAt: serverTimestamp() });
       await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_habit", resourceName: newHabit.trim(), metadata: { freq: habitFreq } });
       setNewHabit("");
-      showToast("Habit added! 🌱");
+      showToast("Habit added! ðŸŒ±");
     } catch (e) { showToast("Error adding habit", "error"); }
   };
   const toggleHabit = async (id) => {
@@ -683,7 +631,7 @@ export default function UltraStudyHub() {
     } catch (e) { showToast("Error deleting habit", "error"); }
   };
 
-  // ── NEW: SYLLABUS CRUD ─────────────────────────────────────────────────────
+  // SYLLABUS CRUD
   const addSyllabus = async () => {
     if (!syllabusSubject || !syllabusExamName) { showToast("Subject and Exam name required!", "error"); return; }
     const topics = syllabusTopicInput.split("\n").map(t => t.trim()).filter(Boolean).map(t => ({ name: t, done: false, note: "" }));
@@ -700,7 +648,7 @@ export default function UltraStudyHub() {
       });
       await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_syllabus", resourceName: `${syllabusExamName} - ${syllabusSubject}`, metadata: { topicsCount: topics.length } });
       setSyllabusSubject(""); setSyllabusTopicInput(""); setSyllabusDescription(""); setSyllabusExamName("");
-      showToast(`📚 Syllabus added! ${topics.length} topics`);
+      showToast(`ðŸ“š Syllabus added! ${topics.length} topics`);
     } catch (e) { showToast("Error adding syllabus", "error"); }
   };
 
@@ -769,17 +717,15 @@ export default function UltraStudyHub() {
     return matchExam && matchSearch;
   });
 
-  // Activity computed
-  const filteredActivity = activityLogs.filter(l => activityFilter === "all" || l.action === activityFilter);
-  const pagedActivity = filteredActivity.slice(0, activityPage * ACTIVITY_PER_PAGE);
-  const allActivityActions = [...new Set(activityLogs.map(l => l.action).filter(Boolean))];
+  // Extract unique active exam names from exams list to build dropdown
+  const createdExamNames = [...new Set(exams.map(e => e.examName).filter(Boolean))];
 
   const currentYear = currentTime.getFullYear();
   const yearStart = new Date(`${currentYear}-01-01`);
   const yearEnd = new Date(`${currentYear+1}-01-01`);
   const yearPct = Math.round(((currentTime - yearStart) / (yearEnd - yearStart)) * 100);
 
-  // ── FULLSCREEN STUDY ──────────────────────────────────────────────────────
+  // FULLSCREEN STUDY
   if (studyFullScreen && isStudyMode) {
     const pct = Math.min((secondsElapsed / (parseInt(targetMinutes) * 60)) * 100, 100);
     const circumference = 2 * Math.PI * 90;
@@ -788,10 +734,10 @@ export default function UltraStudyHub() {
       <div className={styles.studyFsOverlay}>
         <div className={styles.studyFsContent}>
           <div className={styles.studyFsHeader}>
-            <div className={styles.studyFsSubjectBadge} style={{ background: getSubjectColor(activeSubject) }}>📚 {activeSubject}</div>
+            <div className={styles.studyFsSubjectBadge} style={{ background: getSubjectColor(activeSubject) }}>ðŸ“š {activeSubject}</div>
             <div className={styles.studyFsMoodBadge}>{studyMood}</div>
-            <div className={styles.studyFsAccurateBadge}>⚡ Accurate Timer</div>
-            <button className={styles.studyFsEsc} onClick={() => setStudyFullScreen(false)}>⤡ Minimize</button>
+            <div className={styles.studyFsAccurateBadge}>âš¡ Accurate Timer</div>
+            <button className={styles.studyFsEsc} onClick={() => setStudyFullScreen(false)}>â¤¡ Minimize</button>
           </div>
           <div className={styles.studyFsRing}>
             <svg width="220" height="220" viewBox="0 0 220 220">
@@ -819,18 +765,18 @@ export default function UltraStudyHub() {
             <input placeholder="Tags (e.g. exam-prep, chapter-5)" value={sessionTags} onChange={e => setSessionTags(e.target.value)} className={styles.studyFsTagInput} />
           </div>
           <div className={styles.studyFsActions}>
-            <button onClick={stopStudyMode} className={styles.studyFsStop}>⏹ Stop & Save Session</button>
-            <button onClick={() => setStudyFullScreen(false)} className={styles.studyFsMin}>⤡ Minimize</button>
+            <button onClick={stopStudyMode} className={styles.studyFsStop}>â–¹ Stop & Save Session</button>
+            <button onClick={() => setStudyFullScreen(false)} className={styles.studyFsMin}>â¤¡ Minimize</button>
           </div>
           <div className={styles.studyFsBreakHint}>
-            {isOvertime ? `🏆 Target complete! You're in overtime — great dedication!` : breakReminder && secondsElapsed > 0 && Math.floor(secondsElapsed/1500) > 0 && secondsElapsed%1500 < 10 ? "☕ 25 min done — consider a short break!" : `🔥 ${streak} day streak • Stay focused!`}
+            {isOvertime ? `ðŸ † Target complete! You're in overtime â€” great dedication!` : breakReminder && secondsElapsed > 0 && Math.floor(secondsElapsed/1500) > 0 && secondsElapsed%1500 < 10 ? "â˜• 25 min done â€” consider a short break!" : `ðŸ”¥ ${streak} day streak â€¢ Stay focused!`}
           </div>
         </div>
       </div>
     );
   }
 
-  // ── FULLSCREEN TIMETABLE ──────────────────────────────────────────────────
+  // FULLSCREEN TIMETABLE
   if (fullScreenTimetable) {
     const grouped = {};
     DAYS.forEach(d => { grouped[d] = tasks.filter(t => t.day === d).sort((a, b) => a.startTime.localeCompare(b.startTime)); });
@@ -838,12 +784,12 @@ export default function UltraStudyHub() {
       <div className={styles.fullScreenOverlay}>
         <div className={styles.fullScreenContent}>
           <div className={styles.fullScreenHeader}>
-            <h1>📅 Weekly Timetable</h1>
+            <h1>ðŸ“… Weekly Timetable</h1>
             <div className={styles.fullScreenControls}>
-              <button className={styles.smBtn} onClick={() => setTimetableViewMode(v => v==="week"?"day":"week")}>{timetableViewMode==="week"?"📋 Day View":"📊 Week View"}</button>
-              <button className={styles.smBtn} onClick={() => exportTimetable("csv")}>⬇ CSV</button>
-              <button className={styles.smBtn} onClick={() => exportTimetable("json")}>⬇ JSON</button>
-              <button className={styles.closeFullScreen} onClick={() => setFullScreenTimetable(false)}>✕ Close</button>
+              <button className={styles.smBtn} onClick={() => setTimetableViewMode(v => v==="week"?"day":"week")}>{timetableViewMode==="week"?"ðŸ“‹ Day View":"ðŸ“Š Week View"}</button>
+              <button className={styles.smBtn} onClick={() => exportTimetable("csv")}>â¬‡ CSV</button>
+              <button className={styles.smBtn} onClick={() => exportTimetable("json")}>â¬‡ JSON</button>
+              <button className={styles.closeFullScreen} onClick={() => setFullScreenTimetable(false)}>âœ• Close</button>
             </div>
           </div>
           {timetableViewMode==="week" ? (
@@ -852,14 +798,14 @@ export default function UltraStudyHub() {
                 <div key={d} className={`${styles.dayColumn} ${d===currentDayName?styles.todayColumn:""}`}>
                   <h3>{d.slice(0,3)}</h3>
                   <div className={styles.daySlots}>
-                    {grouped[d].length===0 ? <p className={styles.noSlots}>Free 🎉</p> :
+                    {grouped[d].length===0 ? <p className={styles.noSlots}>Free ðŸŽ‰</p> :
                       grouped[d].map(t => (
                         <div key={t.id} className={`${styles.fullScreenSlot} ${isTaskActive(t)?styles.activeSlot:""}`} style={{borderLeft:`4px solid ${t.color||getSubjectColor(t.subject)}`}}>
-                          <span className={styles.slotTime}>{t.startTime}–{t.endTime}</span>
+                          <span className={styles.slotTime}>{t.startTime}â€“{t.endTime}</span>
                           <h4>{t.subject}</h4>
                           <span className={styles.slotType}>{t.taskType}</span>
-                          {t.notes && <p className={styles.slotNote}>📌 {t.notes}</p>}
-                          {isTaskActive(t) && <div className={styles.liveIndicator}>● LIVE NOW</div>}
+                          {t.notes && <p className={styles.slotNote}>ðŸ“Œ {t.notes}</p>}
+                          {isTaskActive(t) && <div className={styles.liveIndicator}>â—  LIVE NOW</div>}
                         </div>
                       ))
                     }
@@ -870,12 +816,12 @@ export default function UltraStudyHub() {
           ) : (
             <div className={styles.dayViewContainer}>
               <h2>{currentDayName}'s Schedule</h2>
-              {grouped[currentDayName].length===0 ? <p className={styles.emptyState}>No classes today 🎉</p> :
+              {grouped[currentDayName].length===0 ? <p className={styles.emptyState}>No classes today ðŸŽ‰</p> :
                 grouped[currentDayName].map(t => (
                   <div key={t.id} className={`${styles.dayViewSlot} ${isTaskActive(t)?styles.activeSlot:""}`} style={{borderLeft:`6px solid ${t.color||getSubjectColor(t.subject)}`}}>
-                    <div className={styles.slotTimeBlock}><span className={styles.slotStartTime}>{t.startTime}</span><span className={styles.slotEndTime}> → {t.endTime}</span></div>
-                    <div className={styles.slotContent}><h3>{t.subject}</h3><span className={styles.slotTypeBadge}>{t.taskType}</span>{t.notes && <p className={styles.slotNote}>📌 {t.notes}</p>}</div>
-                    {isTaskActive(t) && <div className={styles.liveIndicatorLarge}>🔴 LIVE NOW</div>}
+                    <div className={styles.slotTimeBlock}><span className={styles.slotStartTime}>{t.startTime}</span><span className={styles.slotEndTime}> â†’ {t.endTime}</span></div>
+                    <div className={styles.slotContent}><h3>{t.subject}</h3><span className={styles.slotTypeBadge}>{t.taskType}</span>{t.notes && <p className={styles.slotNote}>ðŸ“Œ {t.notes}</p>}</div>
+                    {isTaskActive(t) && <div className={styles.liveIndicatorLarge}>ðŸ”´ LIVE NOW</div>}
                   </div>
                 ))
               }
@@ -886,32 +832,31 @@ export default function UltraStudyHub() {
     );
   }
 
-  // ── MAIN RENDER ───────────────────────────────────────────────────────────
   return (
     <div className={`${styles.page} ${darkMode ? styles.darkMode : ""}`}>
       {toastMsg && <div className={`${styles.toast} ${styles[`toast_${toastMsg.type}`]}`}>{toastMsg.msg}</div>}
 
       {/* TOP BAR */}
       <div className={styles.topBar}>
-        <button className={styles.backBtn} onClick={() => router.push("/dashboard")}>← Back</button>
+        <button className={styles.backBtn} onClick={() => router.push("/dashboard")}>â†  Back</button>
         <div className={styles.leftControls}>
-          <button className={`${styles.controlBtn} ${darkMode?styles.controlBtnActive:""}`} onClick={() => setDarkMode(p=>!p)}>{darkMode?"☀️":"🌙"}</button>
-          <button className={`${styles.controlBtn} ${!notificationsEnabled?styles.controlBtnMuted:""}`} onClick={() => setNotificationsEnabled(p=>!p)}>{notificationsEnabled?"🔔":"🔕"}</button>
+          <button className={`${styles.controlBtn} ${darkMode?styles.controlBtnActive:""}`} onClick={() => setDarkMode(p=>!p)}>{darkMode?"â˜€ï¸ ":"ðŸŒ™"}</button>
+          <button className={`${styles.controlBtn} ${!notificationsEnabled?styles.controlBtnMuted:""}`} onClick={() => setNotificationsEnabled(p=>!p)}>{notificationsEnabled?"ðŸ””":"ðŸ”•"}</button>
           {isStudyMode && (
-            <button className={styles.controlBtnLive} onClick={() => setStudyFullScreen(true)}>⚡ Live: {fmt(secondsElapsed)}</button>
+            <button className={styles.controlBtnLive} onClick={() => setStudyFullScreen(true)}>âš¡ Live: {fmt(secondsElapsed)}</button>
           )}
         </div>
         <div className={styles.titleArea}>
           <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v4.2</span></h1>
-          <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} • {currentDayName}, {currentTime.toLocaleDateString("en-IN")}</p>
+          <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} â€¢ {currentDayName}, {currentTime.toLocaleDateString("en-IN")}</p>
         </div>
       </div>
 
       {/* YEAR COUNTDOWN */}
       <div className={styles.yearCountdownBanner}>
         <div className={styles.yearCountdownLeft}>
-          <span className={styles.yearIcon}>🗓️</span>
-          <div><div className={styles.yearLabel}>{currentYear} → {yearCountdown.targetYear} Countdown</div><div className={styles.yearSub}>Days remaining until New Year {yearCountdown.targetYear}</div></div>
+          <span className={styles.yearIcon}>ðŸ“…</span>
+          <div><div className={styles.yearLabel}>{currentYear} â†’ {yearCountdown.targetYear} Countdown</div><div className={styles.yearSub}>Days remaining until New Year {yearCountdown.targetYear}</div></div>
         </div>
         <div className={styles.yearCountdownUnits}>
           {[{v:yearCountdown.d,l:"Days"},{v:yearCountdown.h,l:"Hours"},{v:yearCountdown.m,l:"Mins"},{v:yearCountdown.s,l:"Secs"}].map(({v,l})=>(
@@ -927,26 +872,26 @@ export default function UltraStudyHub() {
 
       {/* ALERTS */}
       {upcomingClasses.length > 0 && (
-        <div className={styles.upcomingAlert}>⏰ <span><strong>In 15 minutes:</strong> {upcomingClasses[0].subject} at {upcomingClasses[0].startTime}</span></div>
+        <div className={styles.upcomingAlert}>â ³ <span><strong>In 15 minutes:</strong> {upcomingClasses[0].subject} at {upcomingClasses[0].startTime}</span></div>
       )}
       {currentActiveClass && (
         <div className={styles.activeClassBanner}>
-          <span className={styles.pulseIcon}>🔴</span>
-          <div><h3>LIVE: {currentActiveClass.subject}</h3><p>{currentActiveClass.startTime}–{currentActiveClass.endTime} • {currentActiveClass.taskType}</p></div>
-          <button className={styles.autoModeBadge} onClick={() => { setActiveSubject(currentActiveClass.subject); setActiveTab("study"); }}>▶ Start Session</button>
+          <span className={styles.pulseIcon}>ðŸ”´</span>
+          <div><h3>LIVE: {currentActiveClass.subject}</h3><p>{currentActiveClass.startTime}â€“{currentActiveClass.endTime} â€¢ {currentActiveClass.taskType}</p></div>
+          <button className={styles.autoModeBadge} onClick={() => { setActiveSubject(currentActiveClass.subject); setActiveTab("study"); }}>â–¹ Start Session</button>
         </div>
       )}
 
       {/* STREAK */}
       <div className={styles.streakBanner}>
-        <div className={styles.streakItem}>🔥<div><span className={styles.streakNumber}>{streak}</span><span className={styles.streakLabel}>Day Streak</span></div></div>
-        <div className={styles.streakItem}>🎯<div><span className={styles.streakNumber}>{todayStudied}/{studyGoalMinutes}</span><span className={styles.streakLabel}>Today (min)</span></div></div>
-        <div className={styles.streakItem}>🏆<div><span className={styles.streakNumber}>{achievements.length}</span><span className={styles.streakLabel}>Achievements</span></div></div>
-        <div className={styles.streakItem}>📅<div><span className={styles.streakNumber}>{tasks.length}</span><span className={styles.streakLabel}>Slots</span></div></div>
-        <div className={styles.streakItem}>📚<div><span className={styles.streakNumber}>{syllabusItems.length}</span><span className={styles.streakLabel}>Syllabi</span></div></div>
+        <div className={styles.streakItem}>ðŸ”¥<div><span className={styles.streakNumber}>{streak}</span><span className={styles.streakLabel}>Day Streak</span></div></div>
+        <div className={styles.streakItem}>ðŸŽ¯<div><span className={styles.streakNumber}>{todayStudied}/{studyGoalMinutes}</span><span className={styles.streakLabel}>Today (min)</span></div></div>
+        <div className={styles.streakItem}>ðŸ †<div><span className={styles.streakNumber}>{achievements.length}</span><span className={styles.streakLabel}>Achievements</span></div></div>
+        <div className={styles.streakItem}>ðŸ“…<div><span className={styles.streakNumber}>{tasks.length}</span><span className={styles.streakLabel}>Slots</span></div></div>
+        <div className={styles.streakItem}>ðŸ“š<div><span className={styles.streakNumber}>{syllabusItems.length}</span><span className={styles.streakLabel}>Syllabi</span></div></div>
         {isStudyMode && (
           <div className={styles.streakItem} style={{cursor:"pointer"}} onClick={() => setStudyFullScreen(true)}>
-            ⏱️<div><span className={styles.streakNumber} style={{color:"#fbbf24"}}>{fmt(secondsElapsed)}</span><span className={styles.streakLabel}>Live Timer</span></div>
+            â ±ï¸ <div><span className={styles.streakNumber} style={{color:"#fbbf24"}}>{fmt(secondsElapsed)}</span><span className={styles.streakLabel}>Live Timer</span></div>
           </div>
         )}
         <div className={styles.progressBarContainer}><div className={styles.progressBar} style={{width:`${Math.min((todayStudied/studyGoalMinutes)*100,100)}%`}} /></div>
@@ -955,12 +900,12 @@ export default function UltraStudyHub() {
       {/* STATS */}
       <div className={styles.statsGrid}>
         {[
-          {icon:"⏱️",val:`${Math.floor(totalStudiedMins/60)}h ${totalStudiedMins%60}m`,lbl:"Total Studied"},
-          {icon:"🎯",val:`${avgAccuracy}%`,lbl:"Avg Accuracy"},
-          {icon:"📚",val:studySessions.length,lbl:"Sessions"},
-          {icon:"✅",val:`${todos.filter(t=>t.completed).length}/${todos.length}`,lbl:"Todos Done"},
-          {icon:"🗂️",val:flashcards.length,lbl:"Flashcards"},
-          {icon:"📖",val:syllabusItems.reduce((a,s)=>a+(s.topics?.length||0),0),lbl:"Topics Total"},
+          {icon:"â ±ï¸ ",val:`${Math.floor(totalStudiedMins/60)}h ${totalStudiedMins%60}m`,lbl:"Total Studied"},
+          {icon:"ðŸŽ¯",val:`${avgAccuracy}%`,lbl:"Avg Accuracy"},
+          {icon:"ðŸ“š",val:studySessions.length,lbl:"Sessions"},
+          {icon:"âœ…",val:`${todos.filter(t=>t.completed).length}/${todos.length}`,lbl:"Todos Done"},
+          {icon:"ðŸ—‚ï¸ ",val:flashcards.length,lbl:"Flashcards"},
+          {icon:"ðŸ“–",val:syllabusItems.reduce((a,s)=>a+(s.topics?.length||0),0),lbl:"Topics Total"},
         ].map(({icon,val,lbl})=>(
           <div key={lbl} className={styles.statCard}>
             <span className={styles.statIcon}>{icon}</span>
@@ -973,45 +918,44 @@ export default function UltraStudyHub() {
       {upcomingExams.length > 0 && (
         <div className={styles.examQuickBar}>
           <div className={styles.examQuickInfo}>
-            <span className={styles.examQuickIcon}>📋</span>
+            <span className={styles.examQuickIcon}>ðŸ“‹</span>
             <div><span className={styles.examQuickTitle}>{upcomingExams.length} Upcoming Exam{upcomingExams.length>1?"s":""}</span>{avgExamDays!==null && <span className={styles.examQuickAvg}>Avg {avgExamDays} days remaining</span>}</div>
           </div>
           <div className={styles.examQuickList}>
             {upcomingExams.slice(0,3).map(e=>{ const cd=getCD(e.examDate); return (<div key={e.id} className={styles.examQuickChip}><span>{e.examName}</span>{!cd.done&&<span className={styles.examQuickDays}>{cd.d}d left</span>}</div>); })}
             {upcomingExams.length>3&&<span className={styles.examQuickMore}>+{upcomingExams.length-3} more</span>}
           </div>
-          <button className={styles.smBtn} onClick={()=>setActiveTab("exams")}>View All →</button>
+          <button className={styles.smBtn} onClick={()=>setActiveTab("exams")}>View All â†’</button>
         </div>
       )}
 
       {/* TAB NAV */}
       <div className={styles.tabNav}>
         {[
-          {id:"timetable",label:"📅 Timetable"},
-          {id:"study",label:"⏱️ Study Mode"},
-          {id:"syllabus",label:"📚 Syllabus"},
-          {id:"analytics",label:"📊 Analytics"},
-          {id:"exams",label:"🎯 Exams"},
-          {id:"notes",label:"📝 Notes"},
-          {id:"flashcards",label:"🗂️ Flashcards"},
-          {id:"todo",label:"✅ Todo"},
-          {id:"habits",label:"🌱 Habits"},
-          {id:"history",label:"🕒 History"},
+          {id:"timetable",label:"ðŸ“… Timetable"},
+          {id:"study",label:"â ±ï¸ Study Mode"},
+          {id:"syllabus",label:"ðŸ“š Syllabus"},
+          {id:"analytics",label:"ðŸ“Š Analytics"},
+          {id:"exams",label:"ðŸŽ¯ Exams"},
+          {id:"notes",label:"ðŸ“ Notes"},
+          {id:"flashcards",label:"ðŸ—‚ï¸ Flashcards"},
+          {id:"todo",label:"âœ… Todo"},
+          {id:"habits",label:"ðŸŒ± Habits"},
         ].map(t=>(
           <button key={t.id} className={`${styles.tabBtn} ${activeTab===t.id?styles.tabActive:""}`} onClick={()=>setActiveTab(t.id)}>{t.label}</button>
         ))}
       </div>
 
-      {/* ══════ TIMETABLE ══════ */}
+      {/* TIMETABLE */}
       {activeTab==="timetable" && (
         <div className={styles.card}>
           <div className={styles.cardHead}>
-            <span>📅</span><h2>Smart Timetable</h2>
+            <span>ðŸ“…</span><h2>Smart Timetable</h2>
             <div className={styles.cardHeadRight}>
-              <button className={styles.smBtn} onClick={()=>setFullScreenTimetable(true)}>🔲 Full View</button>
-              <button className={styles.smBtn} onClick={()=>exportTimetable("json")}>⬇ JSON</button>
-              <button className={styles.smBtn} onClick={()=>exportTimetable("csv")}>⬇ CSV</button>
-              <button className={`${styles.smBtn} ${styles.smBtnGreen}`} onClick={()=>fileInputRef.current?.click()}>⬆ Import</button>
+              <button className={styles.smBtn} onClick={()=>setFullScreenTimetable(true)}>ðŸ–² Full View</button>
+              <button className={styles.smBtn} onClick={()=>exportTimetable("json")}>â¬‡ JSON</button>
+              <button className={styles.smBtn} onClick={()=>exportTimetable("csv")}>â¬‡ CSV</button>
+              <button className={`${styles.smBtn} ${styles.smBtnGreen}`} onClick={()=>fileInputRef.current?.click()}>â¬† Import</button>
               <input ref={fileInputRef} type="file" accept=".json,.csv" style={{display:"none"}} onChange={importTimetable} />
             </div>
           </div>
@@ -1041,16 +985,16 @@ export default function UltraStudyHub() {
             <button onClick={addCustomSubject} className={styles.smBtn}>+ Subject</button>
             {customSubjects.map(s=>(
               <div key={s} className={styles.subjectChip} style={{background:getSubjectColor(s)}}>
-                {s}<button onClick={()=>deleteCustomSubject(s)} className={styles.chipDel}>✕</button>
+                {s}<button onClick={()=>deleteCustomSubject(s)} className={styles.chipDel}>âœ•</button>
               </div>
             ))}
           </div>
           <div className={styles.filterRow}>
-            <input placeholder="🔍 Search slots..." value={timetableSearch} onChange={e=>setTimetableSearch(e.target.value)} className={styles.searchInput} />
+            <input placeholder="ðŸ” Search slots..." value={timetableSearch} onChange={e=>setTimetableSearch(e.target.value)} className={styles.searchInput} />
             <div className={styles.filterBtns}>
               {["today","week",...DAYS].map(f=>(
                 <button key={f} className={`${styles.filterChip} ${filterDay===f?styles.filterChipActive:""}`} onClick={()=>setFilterDay(f)}>
-                  {f==="today"?"Today":f==="week"?"All Week":f.slice(0,3)}
+                  {f==="today"?"Todayflff":f==="week"?"All Week":f.slice(0,3)}
                 </button>
               ))}
             </div>
@@ -1059,7 +1003,7 @@ export default function UltraStudyHub() {
               {TASK_TYPES.map(t=><option key={t}>{t}</option>)}
             </select>
           </div>
-          <div className={styles.resultCount}>📋 {filteredTasks.length} slots • {[...new Set(filteredTasks.map(t=>t.subject))].length} subjects</div>
+          <div className={styles.resultCount}>ðŸ“‹ {filteredTasks.length} slots â€¢ {[...new Set(filteredTasks.map(t=>t.subject))].length} subjects</div>
           <div className={styles.taskList}>
             {filteredTasks.length===0 ? <p className={styles.emptyState}>No slots found. Add one above!</p> :
               filteredTasks.map(task=>(
@@ -1072,8 +1016,8 @@ export default function UltraStudyHub() {
                       <input type="time" defaultValue={task.endTime} onChange={e=>setEditForm(p=>({...p,endTime:e.target.value}))} className={styles.formInput} />
                       <select defaultValue={task.taskType} onChange={e=>setEditForm(p=>({...p,taskType:e.target.value}))} className={styles.formSelect}>{TASK_TYPES.map(t=><option key={t}>{t}</option>)}</select>
                       <input placeholder="Notes..." defaultValue={task.notes||""} onChange={e=>setEditForm(p=>({...p,notes:e.target.value}))} className={styles.formInput} />
-                      <button onClick={()=>saveEditTask(task.id)} className={styles.smBtn}>✓ Save</button>
-                      <button onClick={()=>setEditingTaskId(null)} className={styles.smBtn}>✕</button>
+                      <button onClick={()=>saveEditTask(task.id)} className={styles.smBtn}>âœ“ Save</button>
+                      <button onClick={()=>setEditingTaskId(null)} className={styles.smBtn}>âœ•</button>
                     </div>
                   ) : (
                     <>
@@ -1081,17 +1025,17 @@ export default function UltraStudyHub() {
                         <div className={styles.taskTop}>
                           <span className={styles.typeBadge}>{task.taskType}</span>
                           <span className={styles.dayBadge}>{task.day}</span>
-                          {isTaskActive(task) && <span className={styles.liveTag}>● LIVE</span>}
+                          {isTaskActive(task) && <span className={styles.liveTag}>â—  LIVE</span>}
                         </div>
                         <h3>{task.subject}</h3>
-                        <p>⏰ {task.startTime} – {task.endTime}</p>
-                        {task.notes && <p className={styles.taskNote}>📌 {task.notes}</p>}
+                        <p>â ±ï¸ {task.startTime} â€“ {task.endTime}</p>
+                        {task.notes && <p className={styles.taskNote}>ðŸ“Œ {task.notes}</p>}
                       </div>
                       <div className={styles.taskActions}>
-                        <button onClick={()=>{setActiveSubject(task.subject);setActiveTab("study");}} className={styles.iconBtnSm}>▶</button>
-                        <button onClick={()=>{setEditingTaskId(task.id);setEditForm({});}} className={styles.iconBtnSm}>✏️</button>
-                        <button onClick={()=>duplicateTask(task)} className={styles.iconBtnSm}>⎘</button>
-                        <button onClick={()=>deleteTask(task.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
+                        <button onClick={()=>{setActiveSubject(task.subject);setActiveTab("study");}} className={styles.iconBtnSm}>â–¹</button>
+                        <button onClick={()=>{setEditingTaskId(task.id);setEditForm({});}} className={styles.iconBtnSm}>âœ ï¸ </button>
+                        <button onClick={()=>duplicateTask(task)} className={styles.iconBtnSm}>â</button>
+                        <button onClick={()=>deleteTask(task.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>ðŸ—’</button>
                       </div>
                     </>
                   )}
@@ -1102,15 +1046,15 @@ export default function UltraStudyHub() {
         </div>
       )}
 
-      {/* ══════ STUDY MODE ══════ */}
+      {/* STUDY MODE */}
       {activeTab==="study" && (
         <div className={styles.studyGrid}>
           <div className={`${styles.card} ${isStudyMode?styles.activeStudyPulse:""}`}>
             <div className={styles.cardHead}>
-              <span>⏱️</span><h2>{isStudyMode?"⚡ LIVE — Session Running":"Study Timer"}</h2>
-              {isStudyMode && <button className={styles.fsBtnInline} onClick={()=>setStudyFullScreen(true)}>⤢ Fullscreen</button>}
+              <span>â ±ï¸ </span><h2>{isStudyMode?"âš¡ LIVE — Session Running":"Study Timer"}</h2>
+              {isStudyMode && <button className={styles.fsBtnInline} onClick={()=>setStudyFullScreen(true)}>â¤¢ Fullscreen</button>}
             </div>
-            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate timer</div>
+            <div className={styles.timerAccuracyNote}>âœ… Background-tab accurate timer</div>
             {!isStudyMode ? (
               <div className={styles.studySetupForm}>
                 <select value={activeSubject} onChange={e=>setActiveSubject(e.target.value)} className={styles.formSelect}>
@@ -1120,8 +1064,8 @@ export default function UltraStudyHub() {
                 <input type="number" placeholder="Target minutes (e.g. 60)" value={targetMinutes} onChange={e=>setTargetMinutes(e.target.value)} className={styles.formInput} />
                 <select value={studyMood} onChange={e=>setStudyMood(e.target.value)} className={styles.formSelect}>{MOODS.map(m=><option key={m}>{m}</option>)}</select>
                 <div className={styles.goalRow}><label>Daily Goal (min):</label><input type="number" value={studyGoalMinutes} onChange={e=>setStudyGoalMinutes(parseInt(e.target.value)||120)} className={styles.formInput} style={{width:80}} /></div>
-                <label className={styles.checkLabel}><input type="checkbox" checked={breakReminder} onChange={e=>setBreakReminder(e.target.checked)} /> ☕ Break reminder every 25 min</label>
-                <button onClick={startStudyMode} className={styles.startModeBtn}>▶ Start Study Session (Fullscreen)</button>
+                <label className={styles.checkLabel}><input type="checkbox" checked={breakReminder} onChange={e=>setBreakReminder(e.target.checked)} /> â˜• Break reminder every 25 min</label>
+                <button onClick={startStudyMode} className={styles.startModeBtn}>â–¹ Start Study Session (Fullscreen)</button>
               </div>
             ) : (
               <div className={styles.liveConsoleArea}>
@@ -1132,15 +1076,15 @@ export default function UltraStudyHub() {
                 <textarea placeholder="Session notes..." value={sessionNote} onChange={e=>setSessionNote(e.target.value)} className={styles.sessionNote} />
                 <input placeholder="Tags (e.g. exam-prep)" value={sessionTags} onChange={e=>setSessionTags(e.target.value)} className={`${styles.formInput} ${styles.tagInput}`} />
                 <div style={{display:"flex",gap:8,marginTop:8}}>
-                  <button onClick={()=>setStudyFullScreen(true)} className={styles.smBtn}>⤢ Fullscreen</button>
-                  <button onClick={stopStudyMode} className={styles.stopModeBtn}>⏹ Stop & Save</button>
+                  <button onClick={()=>setStudyFullScreen(true)} className={styles.smBtn}>â¤¢ Fullscreen</button>
+                  <button onClick={stopStudyMode} className={styles.stopModeBtn}>â–ª Stop & Save</button>
                 </div>
               </div>
             )}
           </div>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>🍅</span><h2>Pomodoro Timer</h2></div>
-            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate</div>
+            <div className={styles.cardHead}><span>ðŸ ¯</span><h2>Pomodoro Timer</h2></div>
+            <div className={styles.timerAccuracyNote}>âœ… Background-tab accurate</div>
             <div className={styles.pomodoroPresets}>
               {POMODORO_PRESETS.map(p=>(
                 <button key={p.label} className={`${styles.presetBtn} ${pomodoroPreset.label===p.label?styles.presetBtnActive:""}`}
@@ -1153,26 +1097,26 @@ export default function UltraStudyHub() {
               <button className={styles.smBtn} onClick={()=>{ const p={label:"Custom",work:customPomWork,short:customPomBreak}; setPomodoroPreset(p); setPomodoroSeconds(p.work*60); pomodoroBaseSeconds.current=p.work*60; setIsPomodoroMode(false); setPomodoroPhase("work"); setPomodoroCount(0); }}>Set Custom</button>
             </div>
             <div className={`${styles.pomodoroDisplay} ${pomodoroPhase==="break"?styles.pomodoroBreak:""}`}>
-              <div className={styles.pomodoroPhaseLabel}>{pomodoroPhase==="work"?"🎯 Focus Time":"☕ Break Time"}</div>
+              <div className={styles.pomodoroPhaseLabel}>{pomodoroPhase==="work"?"ðŸŽ¯ Focus Time":"â˜• Break Time"}</div>
               <div className={styles.pomodoroTime}>{fmtPom(pomodoroSeconds)}</div>
-              <div className={styles.pomodoroCount}>🍅 × {pomodoroCount}</div>
+              <div className={styles.pomodoroCount}>ðŸ ¯ × {pomodoroCount}</div>
               <div className={styles.pomodoroInfo}>{pomodoroPhase==="work"?`${pomodoroPreset.work} min focus`:`${pomodoroPreset.short} min break`}</div>
             </div>
             <div className={styles.pomodoroControls}>
-              <button onClick={()=>setIsPomodoroMode(p=>!p)} className={styles.startModeBtn}>{isPomodoroMode?"⏹ Stop":"▶ Start"}</button>
-              <button onClick={()=>{ setIsPomodoroMode(false); setPomodoroPhase("work"); const ns=pomodoroPreset.work*60; setPomodoroSeconds(ns); pomodoroBaseSeconds.current=ns; setPomodoroCount(0); }} className={styles.smBtn}>↺ Reset</button>
+              <button onClick={()=>setIsPomodoroMode(p=>!p)} className={styles.startModeBtn}>{isPomodoroMode?"â–ª Stop":"â–¹ Start"}</button>
+              <button onClick={()=>{ setIsPomodoroMode(false); setPomodoroPhase("work"); const ns=pomodoroPreset.work*60; setPomodoroSeconds(ns); pomodoroBaseSeconds.current=ns; setPomodoroCount(0); }} className={styles.smBtn}>â†¾ Reset</button>
             </div>
           </div>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>📋</span><h2>Recent Sessions</h2></div>
+            <div className={styles.cardHead}><span>ðŸ“‹</span><h2>Recent Sessions</h2></div>
             <div className={styles.sessionHistoryContainer}>
               {studySessions.length===0 ? <p className={styles.emptyState}>No sessions yet. Start studying!</p> :
                 studySessions.slice(-10).reverse().map(s=>(
                   <div key={s.id} className={styles.historyItemLog}>
                     <div className={styles.historyMetaRow}><strong>{s.subjectName}</strong><span className={s.accuracyPercentage>=80?styles.goodScore:styles.badScore}>{s.accuracyPercentage}%</span></div>
-                    <p>{s.actualTime}min / {s.targetTime}min {s.mood&&`• ${s.mood.split(" ")[0]}`}</p>
-                    {s.notes&&<p className={styles.sessionNoteDisplay}>📝 {s.notes}</p>}
-                    {s.tags&&<p className={styles.sessionTags}>🏷️ {s.tags}</p>}
+                    <p>{s.actualTime}min / {s.targetTime}min {s.mood&&`â€¢ ${s.mood.split(" ")[0]}`}</p>
+                    {s.notes&&<p className={styles.sessionNoteDisplay}>ðŸ“  {s.notes}</p>}
+                    {s.tags&&<p className={styles.sessionTags}>ðŸ   {s.tags}</p>}
                   </div>
                 ))
               }
@@ -1181,20 +1125,26 @@ export default function UltraStudyHub() {
         </div>
       )}
 
-      {/* ══════ SYLLABUS (NEW) ══════ */}
+      {/* SYLLABUS (Exam input is now a Dynamic Dropdown) */}
       {activeTab==="syllabus" && (
         <div className={styles.syllabusGrid}>
-          {/* Add Form */}
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>📚</span><h2>Add Syllabus</h2></div>
+            <div className={styles.cardHead}><span>ðŸ“š</span><h2>Add Syllabus</h2></div>
             <div className={styles.syllabusForm}>
               <div className={styles.syllabusFormRow}>
-                <input
-                  placeholder="Exam Name (e.g. SSC CGL 2025, RPSC RAS)"
-                  value={syllabusExamName}
-                  onChange={e=>setSyllabusExamName(e.target.value)}
-                  className={styles.formInput}
-                />
+                {/* Text input transformed into a dynamic dropdown connecting directly with Exams list */}
+                <select 
+                  value={syllabusExamName} 
+                  onChange={e=>setSyllabusExamName(e.target.value)} 
+                  className={styles.formSelect}
+                  style={{flex: 1}}
+                >
+                  <option value="">-- Select Created Exam --</option>
+                  {createdExamNames.map(exName => (
+                    <option key={exName} value={exName}>{exName}</option>
+                  ))}
+                </select>
+
                 <select value={syllabusSubject} onChange={e=>setSyllabusSubject(e.target.value)} className={styles.formSelect}>
                   <option value="">-- Subject --</option>
                   {allSubjects.map(s=><option key={s}>{s}</option>)}
@@ -1206,7 +1156,7 @@ export default function UltraStudyHub() {
                 onChange={e=>setSyllabusDescription(e.target.value)}
                 className={styles.formInput}
               />
-              <div className={styles.syllabusTopicHint}>📌 Ek topic per line likhein</div>
+              <div className={styles.syllabusTopicHint}>ðŸ“Œ Ek topic per line likhein</div>
               <textarea
                 placeholder={"Chapter 1: Number System\nChapter 2: Algebra\nRatios & Proportions\nSimplification\nTime & Work"}
                 value={syllabusTopicInput}
@@ -1214,24 +1164,23 @@ export default function UltraStudyHub() {
                 className={styles.syllabusTopicTextarea}
                 rows={8}
               />
-              <button onClick={addSyllabus} className={styles.addBtn}>📚 Add Syllabus</button>
+              <button onClick={addSyllabus} className={styles.addBtn}>ðŸ“š Add Syllabus</button>
             </div>
           </div>
 
           {/* Syllabus List */}
           <div className={styles.card}>
             <div className={styles.cardHead}>
-              <span>📖</span><h2>My Syllabi ({syllabusItems.length})</h2>
+              <span>ðŸ“–</span><h2>My Syllabi ({syllabusItems.length})</h2>
             </div>
 
-            {/* Stats row */}
             {syllabusItems.length > 0 && (
               <div className={styles.syllabusStatsRow}>
                 {[
-                  {icon:"📚",num:syllabusItems.length,lbl:"Total Subjects"},
-                  {icon:"📝",num:syllabusItems.reduce((a,s)=>a+(s.topics?.length||0),0),lbl:"Total Topics"},
-                  {icon:"✅",num:syllabusItems.reduce((a,s)=>a+(s.topics?.filter(t=>t.done).length||0),0),lbl:"Done"},
-                  {icon:"⏳",num:syllabusItems.reduce((a,s)=>a+(s.topics?.filter(t=>!t.done).length||0),0),lbl:"Remaining"},
+                  {icon:"ðŸ“š",num:syllabusItems.length,lbl:"Total Subjects"},
+                  {icon:"ðŸ“ ",num:syllabusItems.reduce((a,s)=>a+(s.topics?.length||0),0),lbl:"Total Topics"},
+                  {icon:"âœ…",num:syllabusItems.reduce((a,s)=>a+(s.topics?.filter(t=>t.done).length||0),0),lbl:"Done"},
+                  {icon:"â ³",num:syllabusItems.reduce((a,s)=>a+(s.topics?.filter(t=>!t.done).length||0),0),lbl:"Remaining"},
                 ].map(({icon,num,lbl})=>(
                   <div key={lbl} className={styles.syllabusStat}>
                     <span>{icon}</span><span className={styles.syllabusStatNum}>{num}</span><span className={styles.syllabusStatLbl}>{lbl}</span>
@@ -1241,12 +1190,12 @@ export default function UltraStudyHub() {
             )}
 
             <div className={styles.filterRow}>
-              <input placeholder="🔍 Search..." value={syllabusSearch} onChange={e=>setSyllabusSearch(e.target.value)} className={styles.searchInput} />
+              <input placeholder="ðŸ” Search..." value={syllabusSearch} onChange={e=>setSyllabusSearch(e.target.value)} className={styles.searchInput} />
               <div className={styles.filterBtns}>
                 <button className={`${styles.filterChip} ${syllabusFilter==="all"?styles.filterChipActive:""}`} onClick={()=>setSyllabusFilter("all")}>All</button>
-                {allSyllabusExams.map(ex=>(
+                {allSyllabusExams.map(ex => (
                   <button key={ex} className={`${styles.filterChip} ${syllabusFilter===ex?styles.filterChipActive:""}`} onClick={()=>setSyllabusFilter(ex)}>
-                    {ex.length>18?ex.slice(0,18)+"…":ex}
+                    {ex.length>18?ex.slice(0,18)+"â€¦":ex}
                   </button>
                 ))}
               </div>
@@ -1287,25 +1236,23 @@ export default function UltraStudyHub() {
                           <div className={styles.syllabusCardMeta}>
                             <span className={styles.syllabusTopicCount}>{done}/{total} topics</span>
                             <div className={styles.syllabusActions}>
-                              <button onClick={(e)=>{e.stopPropagation();setExpandedSyllabus(isExpanded?null:syl.id);}} className={styles.iconBtnSm}>{isExpanded?"▲":"▼"}</button>
-                              <button onClick={(e)=>{e.stopPropagation();deleteSyllabus(syl.id);}} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
+                              <button onClick={(e)=>{e.stopPropagation();setExpandedSyllabus(isExpanded?null:syl.id);}} className={styles.iconBtnSm}>{isExpanded?"â–²FL":"â–¼"}</button>
+                              <button onClick={(e)=>{e.stopPropagation();deleteSyllabus(syl.id);}} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>ðŸ—’</button>
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Overall progress bar */}
                       <div className={styles.syllabusProgressBar}>
                         <div className={styles.syllabusProgressFill} style={{width:`${pct}%`, background: pct===100?"#10b981":pct>=50?"linear-gradient(to right,#4361ee,#3a86ff)":"linear-gradient(to right,#f77f00,#ffd166)"}} />
                       </div>
 
-                      {/* Expanded topics */}
                       {isExpanded && (
                         <div className={styles.syllabusTopicList}>
                           {syl.topics?.map((topic, i) => (
                             <div key={i} className={`${styles.syllabusTopicItem} ${topic.done?styles.syllabusTopicDone:""}`}>
                               <button onClick={()=>toggleSyllabusTopic(syl.id,i)} className={styles.syllabusCheckBtn}>
-                                {topic.done ? "✅" : <div className={styles.syllabusUnchecked} />}
+                                {topic.done ? "âœ…" : <div className={styles.syllabusUnchecked} />}
                               </button>
                               <div className={styles.syllabusTopicContent}>
                                 <span className={styles.syllabusTopicName}>{topic.name}</span>
@@ -1318,7 +1265,7 @@ export default function UltraStudyHub() {
                                 />
                               </div>
                               <span className={`${styles.syllabusTopicStatus} ${topic.done?styles.syllabusTopicStatusDone:""}`}>
-                                {topic.done?"Done":"Pending"}
+                                {topic.done?"Doneflff":"Pending"}
                               </span>
                             </div>
                           ))}
@@ -1333,11 +1280,11 @@ export default function UltraStudyHub() {
         </div>
       )}
 
-      {/* ══════ ANALYTICS ══════ */}
+      {/* ANALYTICS */}
       {activeTab==="analytics" && (
         <div className={styles.analyticsGrid}>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>📈</span><h2>7-Day Progress</h2></div>
+            <div className={styles.cardHead}><span>ðŸ“ˆ</span><h2>7-Day Progress</h2></div>
             <div className={styles.chartContainer}>
               {weeklyProgress.map((d,i)=>(
                 <div key={i} className={styles.barChartItem}>
@@ -1350,7 +1297,7 @@ export default function UltraStudyHub() {
             </div>
           </div>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>📅</span><h2>Monthly Overview</h2></div>
+            <div className={styles.cardHead}><span>ðŸ“…</span><h2>Monthly Overview</h2></div>
             {monthlyStats.length===0 ? <p className={styles.emptyState}>No data yet</p> : (
               <div className={styles.monthlyGrid}>
                 {monthlyStats.map((m,i)=>(
@@ -1365,44 +1312,44 @@ export default function UltraStudyHub() {
             )}
           </div>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>📊</span><h2>Subject Performance</h2></div>
+            <div className={styles.cardHead}><span>ðŸ“Š</span><h2>Subject Performance</h2></div>
             <div className={styles.subjectStatsContainer}>
               {Object.entries(subjectStats).length===0 ? <p className={styles.emptyState}>No data yet</p> :
                 Object.entries(subjectStats).sort((a,b)=>b[1].avgAccuracy-a[1].avgAccuracy).map(([sub,st])=>(
                   <div key={sub} className={styles.subjectStatItem}>
                     <div className={styles.subjectStatHeader}><span className={styles.subjectName}>{sub}</span><span className={styles.subjectAccuracy}>{st.avgAccuracy}%</span></div>
                     <div className={styles.subjectStatBar}><div className={styles.subjectStatFill} style={{width:`${st.avgAccuracy}%`,background:st.avgAccuracy>=80?"#0f9d6e":st.avgAccuracy>=50?"#f77f00":"#ef4444"}} /></div>
-                    <div className={styles.subjectStatMeta}>{st.totalTime} min • {st.sessions} sessions</div>
+                    <div className={styles.subjectStatMeta}>{st.totalTime} min â€¢ {st.sessions} sessions</div>
                   </div>
                 ))
               }
             </div>
           </div>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>🧠</span><h2>AI Insights</h2></div>
+            <div className={styles.cardHead}><span>ðŸ§ </span><h2>AI Insights</h2></div>
             <div className={styles.recommendationsContainer}>
               {Object.entries(subjectStats).length>0 ? (
                 <>
-                  <div className={styles.recommendation}><span className={styles.recIcon}>⚠️</span><div><strong>Weak Area</strong><p>Focus more on <mark>{Object.entries(subjectStats).sort((a,b)=>a[1].avgAccuracy-b[1].avgAccuracy)[0]?.[0]}</mark></p></div></div>
-                  <div className={styles.recommendation}><span className={styles.recIcon}>⭐</span><div><strong>Top Subject</strong><p><mark>{Object.entries(subjectStats).sort((a,b)=>b[1].avgAccuracy-a[1].avgAccuracy)[0]?.[0]}</mark> — best performance!</p></div></div>
+                  <div className={styles.recommendation}><span className={styles.recIcon}>âš ï¸ </span><div><strong>Weak Area</strong><p>Focus more on <mark>{Object.entries(subjectStats).sort((a,b)=>a[1].avgAccuracy-b[1].avgAccuracy)[0]?.[0]}</mark></p></div></div>
+                  <div className={styles.recommendation}><span className={styles.recIcon}>â ï¸ </span><div><strong>Top Subject</strong><p><mark>{Object.entries(subjectStats).sort((a,b)=>b[1].avgAccuracy-a[1].avgAccuracy)[0]?.[0]}</mark> â€” best performance!</p></div></div>
                   {Object.entries(subjectStats).filter(([,v])=>{const d=v.lastStudied;return d&&(new Date()-d)>7*86400000;}).slice(0,2).map(([sub])=>(
-                    <div key={sub} className={styles.recommendation}><span className={styles.recIcon}>📅</span><div><strong>Not Studied Recently</strong><p>Revise <mark>{sub}</mark> — it's been over 7 days!</p></div></div>
+                    <div key={sub} className={styles.recommendation}><span className={styles.recIcon}>ðŸ“…</span><div><strong>Not Studied Recently</strong><p>Revise <mark>{sub}</mark> â€” it's been over 7 days!</p></div></div>
                   ))}
                 </>
               ) : <p className={styles.emptyState}>Complete study sessions to see insights</p>}
-              {avgAccuracy<70&&<div className={styles.recommendation}><span className={styles.recIcon}>💡</span><div><strong>Tip</strong><p>Try 25-min Pomodoro sessions to improve focus and accuracy</p></div></div>}
-              {streak>=3&&<div className={styles.recommendation}><span className={styles.recIcon}>🔥</span><div><strong>On Fire!</strong><p>{streak}-day study streak! Keep it going!</p></div></div>}
+              {avgAccuracy<70&&<div className={styles.recommendation}><span className={styles.recIcon}>ðŸ’¡</span><div><strong>Tip</strong><p>Try 25-min Pomodoro sessions to improve focus and accuracy</p></div></div>}
+              {streak>=3&&<div className={styles.recommendation}><span className={styles.recIcon}>ðŸ”¥</span><div><strong>On Fire!</strong><p>{streak}-day study streak! Keep it going!</p></div></div>}
             </div>
           </div>
         </div>
       )}
 
-      {/* ══════ EXAMS ══════ */}
+      {/* EXAMS */}
       {activeTab==="exams" && (
         <div className={styles.card}>
           <div className={styles.cardHead}>
-            <span>🎯</span><h2>Exam Deadlines</h2>
-            {avgExamDays!==null&&(<div className={styles.examAvgBadge}>📊 Avg {avgExamDays} days • {upcomingExams.length} exam{upcomingExams.length>1?"s":""}</div>)}
+            <span>ðŸŽ¯</span><h2>Exam Deadlines</h2>
+            {avgExamDays!==null&&(<div className={styles.examAvgBadge}>ðŸ“Š Avg {avgExamDays} days â€¢ {upcomingExams.length} exam{upcomingExams.length>1?"s":""}</div>)}
           </div>
           <div className={styles.examForm}>
             <input placeholder="Exam name (e.g. SSC CGL, UPSC)" value={examName} onChange={e=>setExamName(e.target.value)} className={styles.formInput} />
@@ -1423,15 +1370,14 @@ export default function UltraStudyHub() {
                       <div className={styles.examHeader}>
                         <h4>{ex.examName}</h4>
                         <span className={`${styles.priorityBadge} ${styles[`priority_${ex.priority?.toLowerCase()}`]}`}>{ex.priority}</span>
-                        {ex.targetScore&&<span className={styles.examTargetScoreBadge}>🎯 {ex.targetScore}</span>}
-                        {/* Link to syllabus */}
+                        {ex.targetScore&&<span className={styles.examTargetScoreBadge}>ðŸŽ¯ {ex.targetScore}</span>}
                         {syllabusItems.some(s=>s.examName===ex.examName)&&(
-                          <button className={styles.examSyllabusLink} onClick={()=>{setSyllabusFilter(ex.examName);setActiveTab("syllabus");}}>📚 View Syllabus</button>
+                          <button className={styles.examSyllabusLink} onClick={()=>{setSyllabusFilter(ex.examName);setActiveTab("syllabus");}}>ðŸ“š View Syllabus</button>
                         )}
                       </div>
-                      {ex.subjects&&<p className={styles.examSubjects}>📚 {ex.subjects}</p>}
-                      {ex.notes&&<p className={styles.examNotes}>📌 {ex.notes}</p>}
-                      {cd.done ? <p className={styles.examCompletedText}>✅ Exam Complete!</p> : (
+                      {ex.subjects&&<p className={styles.examSubjects}>ðŸ“š {ex.subjects}</p>}
+                      {ex.notes&&<p className={styles.examNotes}>ðŸ“Œ {ex.notes}</p>}
+                      {cd.done ? <p className={styles.examCompletedText}>âœ… Exam Complete!</p> : (
                         <div className={styles.countdownGrid}>
                           {[{v:cd.d,l:"Days"},{v:cd.h,l:"Hours"},{v:cd.m,l:"Mins"},{v:cd.s,l:"Secs"}].map(u=>(
                             <div key={u.l} className={styles.countdownUnit}><span className={styles.countdownNumber}>{u.v}</span><span className={styles.countdownLabel}>{u.l}</span></div>
@@ -1439,7 +1385,7 @@ export default function UltraStudyHub() {
                         </div>
                       )}
                     </div>
-                    <button onClick={()=>deleteExam(ex.id)} className={styles.miniDeleteBtn}>🗑</button>
+                    <button onClick={()=>deleteExam(ex.id)} className={styles.miniDeleteBtn}>ðŸ—’</button>
                   </div>
                 );
               })
@@ -1448,23 +1394,23 @@ export default function UltraStudyHub() {
         </div>
       )}
 
-      {/* ══════ NOTES ══════ */}
+      {/* NOTES */}
       {activeTab==="notes" && (
         <div className={styles.notesGrid}>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>📝</span><h2>{editingNoteId?"Edit Note":"New Note"}</h2></div>
+            <div className={styles.cardHead}><span>ðŸ“ </span><h2>{editingNoteId?"Edit Note":"New Note"}</h2></div>
             <input placeholder="Title..." value={noteTitle} onChange={e=>setNoteTitle(e.target.value)} className={`${styles.formInput} ${styles.noteTitleInput}`} />
             <input placeholder="Tag (e.g. Math, Important)" value={noteTag} onChange={e=>setNoteTag(e.target.value)} className={styles.formInput} style={{marginBottom:10}} />
             <textarea placeholder="Write your note here..." value={quickNotes} onChange={e=>setQuickNotes(e.target.value)} className={styles.notesTextarea} />
             <div className={styles.noteActions}>
-              <button onClick={saveNote} className={styles.addBtn}>💾 {editingNoteId?"Update Note":"Save Note"}</button>
-              {editingNoteId&&<button onClick={()=>{setEditingNoteId(null);setQuickNotes("");setNoteTitle("");setNoteTag("");}} className={styles.smBtn}>✕ Cancel</button>}
+              <button onClick={saveNote} className={styles.addBtn}>ðŸ’¾ {editingNoteId?"Update Note":"Save Note"}</button>
+              {editingNoteId&&<button onClick={()=>{setEditingNoteId(null);setQuickNotes("");setNoteTitle("");setNoteTag("");}} className={styles.smBtn}>âœ• Cancel</button>}
             </div>
           </div>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>📚</span><h2>Saved Notes ({savedNotes.length})</h2></div>
+            <div className={styles.cardHead}><span>ðŸ“š</span><h2>Saved Notes ({savedNotes.length})</h2></div>
             <div className={styles.filterRow}>
-              <input placeholder="🔍 Search notes..." value={noteSearch} onChange={e=>setNoteSearch(e.target.value)} className={styles.searchInput} />
+              <input placeholder="ðŸ” Search notes..." value={noteSearch} onChange={e=>setNoteSearch(e.target.value)} className={styles.searchInput} />
               <div className={styles.filterBtns}>
                 <button className={`${styles.filterChip} ${noteTagFilter===""?styles.filterChipActive:""}`} onClick={()=>setNoteTagFilter("")}>All</button>
                 {allNoteTags.map(t=><button key={t} className={`${styles.filterChip} ${noteTagFilter===t?styles.filterChipActive:""}`} onClick={()=>setNoteTagFilter(t)}>{t}</button>)}
@@ -1477,8 +1423,8 @@ export default function UltraStudyHub() {
                     <div className={styles.noteCardHeader}>
                       <div><h4>{n.title}</h4>{n.tag&&<span className={styles.noteTag}>{n.tag}</span>}</div>
                       <div className={styles.noteCardActions}>
-                        <button onClick={()=>editNote(n)} className={styles.iconBtnSm}>✏️</button>
-                        <button onClick={()=>deleteNote(n.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
+                        <button onClick={()=>editNote(n)} className={styles.iconBtnSm}>âœ ï¸ </button>
+                        <button onClick={()=>deleteNote(n.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>ðŸ—’</button>
                       </div>
                     </div>
                     <p>{n.content?.slice(0,130)}{n.content?.length>130?"...":""}</p>
@@ -1490,13 +1436,13 @@ export default function UltraStudyHub() {
         </div>
       )}
 
-      {/* ══════ FLASHCARDS ══════ */}
+      {/* FLASHCARDS */}
       {activeTab==="flashcards" && (
         <div className={styles.flashcardsGrid}>
           {!reviewMode ? (
             <>
               <div className={styles.card}>
-                <div className={styles.cardHead}><span>🗂️</span><h2>Add Flashcard</h2></div>
+                <div className={styles.cardHead}><span>ðŸ—‚ï¸ </span><h2>Add Flashcard</h2></div>
                 <select value={newCardSubject} onChange={e=>setNewCardSubject(e.target.value)} className={styles.formSelect}>
                   <option value="">-- Select Subject --</option>
                   {allSubjects.map(s=><option key={s}>{s}</option>)}
@@ -1508,10 +1454,10 @@ export default function UltraStudyHub() {
               </div>
               <div className={styles.card}>
                 <div className={styles.cardHead}>
-                  <span>📖</span><h2>My Cards ({flashcards.length})</h2>
+                  <span>ðŸ“–</span><h2>My Cards ({flashcards.length})</h2>
                   <div className={styles.cardHeadRight}>
-                    <label className={styles.checkLabel}><input type="checkbox" checked={shuffleCards} onChange={e=>setShuffleCards(e.target.checked)} /> 🔀 Shuffle</label>
-                    <button onClick={()=>startReview(cardSubjectFilter)} className={styles.addBtn} disabled={flashcards.length===0}>▶ Start Review</button>
+                    <label className={styles.checkLabel}><input type="checkbox" checked={shuffleCards} onChange={e=>setShuffleCards(e.target.checked)} /> ðŸ”€ Shuffle</label>
+                    <button onClick={()=>startReview(cardSubjectFilter)} className={styles.addBtn} disabled={flashcards.length===0}>â–¹ Start Review</button>
                   </div>
                 </div>
                 <div className={styles.filterRow}>
@@ -1531,8 +1477,8 @@ export default function UltraStudyHub() {
                         <div className={styles.flashcardContent}><strong>Q:</strong> {f.front}</div>
                         <div className={styles.flashcardAnswer}><strong>A:</strong> {f.back}</div>
                         <div className={styles.flashcardMeta}>
-                          {"⭐".repeat(f.confidence||0)}{"☆".repeat(5-(f.confidence||0))} • {f.reviewCount||0} reviews
-                          <button onClick={()=>deleteFlashcard(f.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
+                          {"â ï¸ ".repeat(f.confidence||0)}{"â˜†".repeat(5-(f.confidence||0))} â€¢ {f.reviewCount||0} reviews
+                          <button onClick={()=>deleteFlashcard(f.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>ðŸ—’</button>
                         </div>
                       </div>
                     ))
@@ -1542,34 +1488,34 @@ export default function UltraStudyHub() {
             </>
           ) : (
             <div className={styles.card} style={{maxWidth:620,margin:"0 auto"}}>
-              <div className={styles.cardHead}><span>🧠</span><h2>Review Mode ({reviewIndex+1}/{reviewCards.length})</h2></div>
+              <div className={styles.cardHead}><span>ðŸ§ </span><h2>Review Mode ({reviewIndex+1}/{reviewCards.length})</h2></div>
               <div className={styles.reviewProgress}><div className={styles.reviewProgressFill} style={{width:`${((reviewIndex+1)/reviewCards.length)*100}%`}} /></div>
               <div className={styles.flashcardReview}>
                 <div className={styles.reviewSubject} style={{background:getSubjectColor(reviewCards[reviewIndex]?.subject)}}>{reviewCards[reviewIndex]?.subject}</div>
                 <div className={styles.reviewQuestion}>{reviewCards[reviewIndex]?.front}</div>
                 {!showAnswer ? (
-                  <button onClick={()=>setShowAnswer(true)} className={styles.showAnswerBtn}>👁️ Show Answer</button>
+                  <button onClick={()=>setShowAnswer(true)} className={styles.showAnswerBtn}>ðŸ‘  Show Answer</button>
                 ) : (
                   <>
                     <div className={styles.reviewAnswer}>{reviewCards[reviewIndex]?.back}</div>
                     <div className={styles.rateButtons}>
-                      {[{r:1,l:"😓 Forgot"},{r:2,l:"😕 Barely"},{r:3,l:"🙂 Okay"},{r:4,l:"😊 Good"},{r:5,l:"🔥 Perfect!"}].map(({r,l})=>(
+                      {[{r:1,l:"ðŸ˜“ Forgot"},{r:2,l:"ðŸ˜• Barely"},{r:3,l:"ðŸ™‚ Okay"},{r:4,l:"ðŸ˜Š Good"},{r:5,l:"ðŸ”¥ Perfect!"}].map(({r,l})=>(
                         <button key={r} onClick={()=>rateCard(reviewCards[reviewIndex].id,r)} className={`${styles.rateBtn} ${styles[`rate${r}`]}`}>{l}</button>
                       ))}
                     </div>
                   </>
                 )}
               </div>
-              <button onClick={()=>setReviewMode(false)} className={styles.smBtn} style={{marginTop:12}}>✕ Exit Review</button>
+              <button onClick={()=>setReviewMode(false)} className={styles.smBtn} style={{marginTop:12}}>âœ• Exit Review</button>
             </div>
           )}
         </div>
       )}
 
-      {/* ══════ TODO ══════ */}
+      {/* TODO */}
       {activeTab==="todo" && (
         <div className={styles.card}>
-          <div className={styles.cardHead}><span>✅</span><h2>Study Todo List</h2></div>
+          <div className={styles.cardHead}><span>âœ…</span><h2>Study Todo List</h2></div>
           <div className={styles.todoForm}>
             <input placeholder="Write a todo..." value={newTodo} onChange={e=>setNewTodo(e.target.value)} onKeyPress={e=>e.key==="Enter"&&addTodo()} className={styles.formInput} />
             <select value={todoSubject} onChange={e=>setTodoSubject(e.target.value)} className={styles.formSelect}>
@@ -1589,23 +1535,23 @@ export default function UltraStudyHub() {
                 </button>
               ))}
             </div>
-            <input placeholder="🔍 Search todos..." value={todoSearch} onChange={e=>setTodoSearch(e.target.value)} className={styles.searchInput} />
+            <input placeholder="ðŸ” Search todos..." value={todoSearch} onChange={e=>setTodoSearch(e.target.value)} className={styles.searchInput} />
           </div>
           <div className={styles.todoList}>
             {filteredTodos.length===0 ? <p className={styles.emptyState}>No todos yet. Add one above!</p> :
               filteredTodos.map(t=>(
                 <div key={t.id} className={`${styles.todoItem} ${t.completed?styles.todoDone:""}`}>
-                  <button onClick={()=>toggleTodo(t.id,t.completed)} className={styles.todoCheck}>{t.completed?"✅":<div className={styles.todoUnchecked} />}</button>
+                  <button onClick={()=>toggleTodo(t.id,t.completed)} className={styles.todoCheck}>{t.completed?"âœ…":<div className={styles.todoUnchecked} />}</button>
                   <div className={styles.todoContent}>
                     <span className={styles.todoText}>{t.text}</span>
                     <div className={styles.todoMeta}>
                       {t.subject&&<span className={styles.todoSubject} style={{background:getSubjectColor(t.subject)}}>{t.subject}</span>}
-                      {t.dueDate&&<span className={`${styles.todoDue} ${new Date(t.dueDate)<new Date()&&!t.completed?styles.todoDueOverdue:""}`}>📅 {new Date(t.dueDate).toLocaleDateString("en-IN")}</span>}
+                      {t.dueDate&&<span className={`${styles.todoDue} ${new Date(t.dueDate)<new Date()&&!t.completed?styles.todoDueOverdue:""}`}>ðŸ“… {new Date(t.dueDate).toLocaleDateString("en-IN")}</span>}
                       <span className={`${styles.todoPriority} ${styles[`priority_${t.priority?.toLowerCase()}`]}`}>{t.priority}</span>
-                      {t.tag&&<span className={styles.todoTagBadge}>🏷️ {t.tag}</span>}
+                      {t.tag&&<span className={styles.todoTagBadge}>ðŸ   {t.tag}</span>}
                     </div>
                   </div>
-                  <button onClick={()=>deleteTodo(t.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
+                  <button onClick={()=>deleteTodo(t.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>ðŸ—’</button>
                 </div>
               ))
             }
@@ -1613,10 +1559,10 @@ export default function UltraStudyHub() {
         </div>
       )}
 
-      {/* ══════ HABITS ══════ */}
+      {/* HABITS */}
       {activeTab==="habits" && (
         <div className={styles.card}>
-          <div className={styles.cardHead}><span>🌱</span><h2>Habit Tracker</h2></div>
+          <div className={styles.cardHead}><span>ðŸŒ±</span><h2>Habit Tracker</h2></div>
           <div className={styles.habitForm}>
             <input placeholder="New habit (e.g. Read for 30 minutes daily)" value={newHabit} onChange={e=>setNewHabit(e.target.value)} onKeyPress={e=>e.key==="Enter"&&addHabit()} className={styles.formInput} />
             <select value={habitFreq} onChange={e=>setHabitFreq(e.target.value)} className={styles.formSelect}><option value="daily">Daily</option><option value="weekly">Weekly</option></select>
@@ -1638,8 +1584,8 @@ export default function UltraStudyHub() {
                       </div>
                     </div>
                     <div className={styles.habitActions}>
-                      <button onClick={()=>toggleHabit(h.id)} className={`${styles.habitCheckBtn} ${doneToday?styles.habitCheckDone:""}`}>{doneToday?"✅ Done":"○ Mark Done"}</button>
-                      <button onClick={()=>deleteHabit(h.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
+                      <button onClick={()=>toggleHabit(h.id)} className={`${styles.habitCheckBtn} ${doneToday?styles.habitCheckDone:""}`}>{doneToday?"âœ… Done":"â—‹ Mark Done"}</button>
+                      <button onClick={()=>deleteHabit(h.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>ðŸ—’</button>
                     </div>
                   </div>
                 );
@@ -1648,122 +1594,10 @@ export default function UltraStudyHub() {
           </div>
           {habits.length>0&&(
             <div className={styles.habitSummary}>
-              <span>📊 Today: {habits.filter(h=>h.completedDates.includes(new Date().toDateString())).length}/{habits.length} habits complete</span>
+              <span>ðŸ“Š Today: {habits.filter(h=>h.completedDates.includes(new Date().toDateString())).length}/{habits.length} habits complete</span>
               <div className={styles.habitProgressBar}><div className={styles.habitProgressFill} style={{width:`${(habits.filter(h=>h.completedDates.includes(new Date().toDateString())).length/habits.length)*100}%`}} /></div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* ══════ HISTORY (NEW) ══════ */}
-      {activeTab==="history" && (
-        <div className={styles.card}>
-          <div className={styles.cardHead}>
-            <span>🕒</span><h2>Activity History</h2>
-            <div className={styles.cardHeadRight}>
-              <span className={styles.historyCount}>{filteredActivity.length} activities</span>
-            </div>
-          </div>
-
-          {/* Summary cards */}
-          <div className={styles.historyStatsRow}>
-            {[
-              {icon:"👁️",num:activityLogs.filter(l=>l.action==="visit").length,lbl:"Total Visits"},
-              {icon:"▶️",num:activityLogs.filter(l=>l.action==="start_study_session").length,lbl:"Sessions Started"},
-              {icon:"📅",num:activityLogs.filter(l=>l.action==="add_task").length,lbl:"Slots Added"},
-              {icon:"🎯",num:activityLogs.filter(l=>l.action==="add_exam").length,lbl:"Exams Added"},
-              {icon:"📝",num:activityLogs.filter(l=>l.action==="add_note").length,lbl:"Notes Created"},
-              {icon:"🌱",num:activityLogs.filter(l=>l.action==="check_habit").length,lbl:"Habits Checked"},
-            ].map(({icon,num,lbl})=>(
-              <div key={lbl} className={styles.historyStatCard}>
-                <span className={styles.historyStatIcon}>{icon}</span>
-                <span className={styles.historyStatNum}>{num}</span>
-                <span className={styles.historyStatLbl}>{lbl}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Filter */}
-          <div className={styles.filterRow}>
-            <div className={styles.filterBtns}>
-              <button className={`${styles.filterChip} ${activityFilter==="all"?styles.filterChipActive:""}`} onClick={()=>{setActivityFilter("all");setActivityPage(1);}}>All</button>
-              {["visit","start_study_session","stop_study_session","add_task","add_exam","add_note","add_flashcard","add_todo","check_habit","add_syllabus"].map(a=>{
-                const meta=ACTIVITY_META[a];
-                return (
-                  <button key={a} className={`${styles.filterChip} ${activityFilter===a?styles.filterChipActive:""}`} onClick={()=>{setActivityFilter(a);setActivityPage(1);}}>
-                    {meta?.icon} {meta?.label||a}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Timeline */}
-          <div className={styles.historyTimeline}>
-            {pagedActivity.length===0 ? (
-              <p className={styles.emptyState}>No activity yet. Start using Study Hub features!</p>
-            ) : (
-              <>
-                {pagedActivity.map((log,i)=>{
-                  const meta=ACTIVITY_META[log.action]||{icon:"⚡",label:log.action,color:"#6366f1"};
-                  const ts=log.timestamp?.toDate?.()||new Date(log.timestamp||0);
-                  const isToday=ts.toDateString()===new Date().toDateString();
-                  const timeStr=ts.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-                  const dateStr=isToday?"Today":ts.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
-
-                  // Show date divider
-                  const prevLog = pagedActivity[i-1];
-                  const prevTs = prevLog?.timestamp?.toDate?.() || new Date(prevLog?.timestamp||0);
-                  const showDivider = i===0 || prevTs.toDateString()!==ts.toDateString();
-
-                  return (
-                    <div key={log.id}>
-                      {showDivider && (
-                        <div className={styles.historyDateDivider}>
-                          <div className={styles.historyDateDividerLine} />
-                          <span className={styles.historyDateDividerLabel}>{dateStr}</span>
-                          <div className={styles.historyDateDividerLine} />
-                        </div>
-                      )}
-                      <div className={styles.historyItem}>
-                        <div className={styles.historyIconCol}>
-                          <div className={styles.historyIconBubble} style={{background:`${meta.color}20`,border:`2px solid ${meta.color}40`}}>
-                            <span className={styles.historyIcon}>{meta.icon}</span>
-                          </div>
-                          {i<pagedActivity.length-1&&<div className={styles.historyConnector} />}
-                        </div>
-                        <div className={styles.historyItemBody}>
-                          <div className={styles.historyItemHeader}>
-                            <span className={styles.historyActionLabel} style={{color:meta.color}}>{meta.label}</span>
-                            <span className={styles.historyTime}>{timeStr}</span>
-                          </div>
-                          {(log.resourceName||log.resourceId)&&(
-                            <div className={styles.historyResource}>
-                              {log.resourceName&&<span className={styles.historyResourceName}>📌 {log.resourceName}</span>}
-                            </div>
-                          )}
-                          {log.metadata&&Object.keys(log.metadata).length>0&&(
-                            <div className={styles.historyMeta}>
-                              {Object.entries(log.metadata).map(([k,v])=>(
-                                <span key={k} className={styles.historyMetaChip}>
-                                  <strong>{k}:</strong> {typeof v==="object"?JSON.stringify(v):String(v)}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {filteredActivity.length>pagedActivity.length&&(
-                  <button className={`${styles.addBtn} ${styles.historyLoadMore}`} onClick={()=>setActivityPage(p=>p+1)}>
-                    Load More ({filteredActivity.length-pagedActivity.length} remaining)
-                  </button>
-                )}
-              </>
-            )}
-          </div>
         </div>
       )}
     </div>
