@@ -66,7 +66,7 @@ export default function UltraStudyHub() {
   const [targetMinutes, setTargetMinutes] = useState("60");
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [breakReminder, setBreakReminder] = useState(true);
-  const [studyGoalMinutes, setStudyGoalMinutes] = useState(120);
+  const [studyGoalMinutes, setStudyGoalMinutes] = useState(500);
   const [sessionNote, setSessionNote] = useState("");
   const [studyMood, setStudyMood] = useState("😊 Happy");
   const [studySessions, setStudySessions] = useState([]);
