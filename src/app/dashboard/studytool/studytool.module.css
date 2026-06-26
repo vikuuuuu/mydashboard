@@ -1,4 +1,4 @@
-/* ─── TOKENS & GLOBAL STYLES ─────────────────────────────────────────────── */
+/* ─── TOKENS ─────────────────────────────────────────────────────────────── */
 :global(:root) {
   --bg:        #f8fbff;
   --bg2:       #eef2ff;
@@ -22,7 +22,6 @@
   --shadow:    0 4px 20px rgba(67,97,238,0.07);
   --shadowMd:  0 8px 32px rgba(67,97,238,0.14);
 }
-
 :global([data-theme="dark"]) {
   --bg:        #0f172a;
   --bg2:       #1e293b;
@@ -40,7 +39,6 @@
   --shadow:    0 4px 20px rgba(0,0,0,0.3);
   --shadowMd:  0 8px 32px rgba(0,0,0,0.4);
 }
-
 :global(*) { margin:0; padding:0; box-sizing:border-box; }
 
 .page {
@@ -255,7 +253,7 @@
 .spanFull { grid-column:1/-1; }
 .resultCount { font-size:12px; color:var(--text3); margin-bottom:12px; padding:6px 10px; background:var(--surface2); border-radius:8px; display:inline-block; }
 
-/* ─── TIMER ACCURACY BADGES & NOTES ──────────────────────────────────────── */
+/* ─── TIMER ACCURACY BADGES (v4.1) ──────────────────────────────────────── */
 .timerAccuracyNote {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 11.5px; color: #10b981; font-weight: 600;
@@ -339,105 +337,7 @@
 .filterChip:hover { border-color:var(--accent); color:var(--accent); }
 .filterChipActive { background:var(--accent); color:#fff !important; border-color:var(--accent); }
 
-/* ─── SYLLABUS GRID & LIST ───────────────────────────────────────────────── */
-.syllabusGrid { display: grid; grid-template-columns: 380px 1fr; gap: 14px; }
-.syllabusForm { display: flex; flex-direction: column; gap: 10px; }
-.syllabusFormRow { display: flex; gap: 8px; }
-.syllabusFormRow .formInput, .syllabusFormRow .formSelect { flex: 1; }
-.syllabusTopicHint { font-size: 11.5px; color: var(--text3); font-weight: 600; background: var(--surface2); border-radius: 7px; padding: 5px 10px; border-left: 3px solid var(--accent); }
-.syllabusTopicTextarea {
-  width: 100%; padding: 11px 13px; border-radius: var(--radiusSm);
-  border: 1px solid var(--border); background: var(--surface2);
-  color: var(--text); font-family: inherit; font-size: 13px;
-  resize: vertical; outline: none; transition: all 0.2s; line-height: 1.7;
-}
-.syllabusTopicTextarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(67,97,238,0.1); }
-.syllabusTopicTextarea::placeholder { color: var(--text3); }
-
-.syllabusStatsRow { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 14px; }
-.syllabusStat {
-  background: var(--surface2); border: 1px solid var(--border); border-radius: 11px;
-  padding: 11px 10px; display: flex; flex-direction: column; align-items: center; gap: 3px; transition: all 0.2s;
-}
-.syllabusStat:hover { transform: translateY(-2px); box-shadow: var(--shadowMd); }
-.syllabusStat span:first-child { font-size: 18px; }
-.syllabusStatNum { font-size: 1.3rem; font-weight: 900; color: var(--accent); line-height: 1; }
-.syllabusStatLbl { font-size: 0.7rem; color: var(--text2); font-weight: 600; text-align: center; }
-
-.syllabusList { display: flex; flex-direction: column; gap: 11px; max-height: 640px; overflow-y: auto; padding-right: 3px; }
-.syllabusList::-webkit-scrollbar { width: 4px; }
-.syllabusList::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 99px; }
-
-.syllabusCard {
-  background: var(--surface2); border: 1px solid var(--border); border-radius: 13px;
-  overflow: hidden; transition: all 0.2s;
-}
-.syllabusCard:hover { border-color: var(--accent); box-shadow: 0 4px 16px rgba(67,97,238,0.1); }
-
-.syllabusCardHeader {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 13px 15px; cursor: pointer; gap: 12px;
-}
-.syllabusCardLeft { display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0; }
-.syllabusSubjectBadge { color: #fff; font-size: 11px; font-weight: 800; padding: 4px 11px; border-radius: 999px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-.syllabusExamName { font-size: 0.9rem; font-weight: 700; color: var(--text); line-height: 1.3; }
-.syllabusDesc { font-size: 0.76rem; color: var(--text2); margin-top: 2px; }
-
-.syllabusCardRight { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-.syllabusProgressCircle { position: relative; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
-.syllabusCirclePct { position: absolute; font-size: 10px; font-weight: 900; color: var(--text); }
-.syllabusCardMeta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.syllabusTopicCount { font-size: 11.5px; color: var(--text2); font-weight: 600; white-space: nowrap; }
-.syllabusActions { display: flex; gap: 5px; }
-
-.syllabusProgressBar { height: 4px; background: var(--surface3); }
-.syllabusProgressFill { height: 100%; border-radius: 0; transition: width 0.5s ease; }
-
-.syllabusTopicList { padding: 6px 14px 14px; display: flex; flex-direction: column; gap: 6px; }
-.syllabusTopicItem {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
-  padding: 9px 12px; transition: all 0.18s;
-}
-.syllabusTopicItem:hover { border-color: var(--accent); background: var(--accentS); }
-.syllabusTopicDone { opacity: 0.6; }
-.syllabusTopicDone .syllabusTopicName { text-decoration: line-through; color: var(--text3); }
-
-.syllabusCheckBtn {
-  width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--accent);
-  background: transparent; cursor: pointer; font-size: 14px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s;
-}
-.syllabusCheckBtn:hover { background: var(--accentS); }
-.syllabusUnchecked { width: 8px; height: 8px; }
-
-.syllabusTopicContent { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.syllabusTopicName { font-size: 0.88rem; color: var(--text); font-weight: 500; }
-.syllabusTopicNote {
-  border: none; outline: none; background: transparent;
-  font-family: inherit; font-size: 11.5px; color: var(--text2);
-  border-bottom: 1px dashed var(--border2); padding: 2px 0;
-  transition: border-color 0.2s; width: 100%;
-}
-.syllabusTopicNote:focus { border-color: var(--accent); }
-.syllabusTopicNote::placeholder { color: var(--text3); }
-
-.syllabusTopicStatus {
-  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
-  background: rgba(245,158,11,0.12); color: #f59e0b; white-space: nowrap; flex-shrink: 0;
-}
-.syllabusTopicStatusDone { background: rgba(16,185,129,0.12); color: #10b981; }
-
-.examSyllabusLink {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 10px; border-radius: 999px; border: 1px solid rgba(67,97,238,0.3);
-  background: rgba(67,97,238,0.08); color: var(--accent);
-  font-family: inherit; font-size: 11px; font-weight: 700;
-  cursor: pointer; transition: all 0.18s; white-space: nowrap;
-}
-.examSyllabusLink:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-/* ─── TIMETABLE & TASKS ──────────────────────────────────────────────────── */
+/* ─── TIMETABLE ──────────────────────────────────────────────────────────── */
 .timetableForm { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
 .timetableForm .formSelect,.timetableForm .formInput { flex:1; min-width:100px; }
 .advancedForm { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
@@ -518,6 +418,7 @@
 }
 .studyFsEsc:hover { background: rgba(255,255,255,0.14); color: #fff; }
 
+/* SVG Ring */
 .studyFsRing {
   position: relative; width: 220px; height: 220px;
   display: flex; align-items: center; justify-content: center;
@@ -534,6 +435,7 @@
 .studyFsTimerLabel { font-size: 0.72rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
 .studyFsPct { font-size: 1rem; font-weight: 800; color: #60a5fa; margin-top: 4px; }
 
+/* Stats Row */
 .studyFsStats { display: flex; gap: 14px; width: 100%; }
 .studyFsStat {
   flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
@@ -543,6 +445,7 @@
 .studyFsStatVal { font-size: 1.6rem; font-weight: 900; color: #60a5fa; line-height: 1; font-variant-numeric: tabular-nums; }
 .studyFsStatLbl { font-size: 0.72rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
+/* Note Area */
 .studyFsNoteArea { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .studyFsNote {
   width: 100%; padding: 12px 14px; border-radius: 12px;
@@ -560,6 +463,7 @@
 .studyFsTagInput::placeholder { color: #475569; }
 .studyFsTagInput:focus { border-color: rgba(96,165,250,0.4); }
 
+/* Actions */
 .studyFsActions { display: flex; gap: 10px; width: 100%; }
 .studyFsStop {
   flex: 1; padding: 14px; border-radius: var(--radiusSm); border: none;
@@ -575,13 +479,15 @@
   font-family: inherit; font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
 }
 .studyFsMin:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+/* Hint Bar */
 .studyFsBreakHint {
   width: 100%; padding: 12px 16px; border-radius: 10px;
   background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2);
   color: #6ee7b7; font-size: 0.82rem; font-weight: 600; text-align: center;
 }
 
-/* ─── STUDY MODE (NORMAL CARD) ───────────────────────────────────────────── */
+/* ─── STUDY MODE (normal card) ───────────────────────────────────────────── */
 .studyGrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
 .studySetupForm { display:flex; flex-direction:column; gap:9px; }
 .studySetupForm .formSelect,.studySetupForm .formInput { width:100%; }
@@ -594,7 +500,6 @@
 .startModeBtn:hover { background:#059669; transform:scale(1.01); }
 .activeStudyPulse { border:2px solid var(--accent2); animation:glow 3s infinite alternate; }
 @keyframes glow { 0%{box-shadow:0 0 8px rgba(58,134,255,0.2)} 100%{box-shadow:0 0 26px rgba(58,134,255,0.4)} }
-
 .liveConsoleArea { text-align:center; }
 .liveConsoleArea h3 { color:var(--text); margin-bottom:8px; font-size:0.95rem; }
 .liveConsoleArea mark { background:var(--accent2); color:#fff; padding:2px 8px; border-radius:5px; font-weight:700; }
@@ -602,7 +507,6 @@
 .liveConsoleArea p { font-size:0.83rem; color:var(--text2); margin-bottom:10px; }
 .liveProgress { height:7px; background:var(--surface2); border-radius:99px; overflow:hidden; margin-bottom:12px; }
 .liveProgressFill { height:100%; background:linear-gradient(to right,#10b981,var(--accent)); border-radius:99px; transition:width 0.5s ease; }
-
 .sessionNote { width:100%; padding:9px 12px; border-radius:var(--radiusSm); border:1px solid var(--border); background:var(--surface2); color:var(--text); font-family:inherit; font-size:12.5px; resize:vertical; min-height:65px; outline:none; margin-bottom:8px; }
 .sessionNote:focus { border-color:var(--accent); }
 .sessionNoteDisplay { font-size:0.78rem; color:var(--text2); font-style:italic; margin-top:2px; }
@@ -625,51 +529,7 @@
 .pomodoroInfo  { font-size:0.78rem; color:var(--text3); margin-top:3px; }
 .pomodoroControls { display:flex; gap:8px; }
 
-/* ─── ACTIVITY & SESSION HISTORY ─────────────────────────────────────────── */
-.historyCount {
-  margin-left: auto; font-size: 12px; color: var(--text2); font-weight: 600;
-  background: var(--surface2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px;
-}
-.historyStatsRow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 14px; }
-.historyStatCard {
-  background: var(--surface2); border: 1px solid var(--border); border-radius: 11px;
-  padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; transition: all 0.2s;
-}
-.historyStatCard:hover { transform: translateY(-2px); box-shadow: var(--shadowMd); border-color: var(--accent); }
-.historyStatIcon { font-size: 18px; }
-.historyStatNum { font-size: 1.25rem; font-weight: 900; color: var(--accent); line-height: 1; }
-.historyStatLbl { font-size: 0.68rem; color: var(--text2); font-weight: 600; text-align: center; }
-
-.historyTimeline { display: flex; flex-direction: column; margin-top: 4px; }
-.historyDateDivider { display: flex; align-items: center; gap: 10px; margin: 14px 0 10px; padding: 0 4px; }
-.historyDateDividerLine { flex: 1; height: 1px; background: var(--border2); }
-.historyDateDividerLabel {
-  font-size: 11px; font-weight: 800; color: var(--text2);
-  background: var(--surface2); border: 1px solid var(--border); border-radius: 999px;
-  padding: 3px 11px; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.4px;
-}
-
-.historyItem { display: flex; gap: 12px; align-items: flex-start; }
-.historyIconCol { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-.historyIconBubble { width: 38px; height: 38px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.historyIcon { font-size: 16px; }
-.historyConnector { width: 2px; flex: 1; min-height: 12px; background: var(--border); margin: 3px 0; }
-
-.historyItemBody {
-  flex: 1; min-width: 0; background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 11px; padding: 10px 13px; margin-bottom: 6px; transition: all 0.18s;
-}
-.historyItemBody:hover { border-color: var(--accent); background: var(--accentS); }
-.historyItemHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; gap: 8px; }
-.historyActionLabel { font-size: 0.88rem; font-weight: 700; }
-.historyTime { font-size: 11px; color: var(--text3); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
-.historyResource { margin-top: 3px; }
-.historyResourceName { font-size: 0.8rem; color: var(--text); font-weight: 500; }
-.historyMeta { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
-.historyMetaChip { font-size: 10.5px; color: var(--text2); background: var(--surface3); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; }
-.historyMetaChip strong { color: var(--text); }
-.historyLoadMore { width: 100%; margin-top: 10px; justify-content: center; }
-
+/* ─── SESSION HISTORY ────────────────────────────────────────────────────── */
 .sessionHistoryContainer { display:flex; flex-direction:column; gap:9px; max-height:370px; overflow-y:auto; }
 .historyItemLog { background:var(--surface2); padding:10px 13px; border-radius:10px; border:1px solid var(--border); transition:all 0.2s; }
 .historyItemLog:hover { transform:translateX(3px); }
@@ -679,7 +539,7 @@
 .goodScore { color:#10b981; font-weight:700; background:rgba(16,185,129,0.1); padding:2px 7px; border-radius:5px; font-size:0.82rem; }
 .badScore  { color:#f59e0b; font-weight:700; background:rgba(245,158,11,0.1); padding:2px 7px; border-radius:5px; font-size:0.82rem; }
 
-/* ─── ANALYTICS & CHARTS ─────────────────────────────────────────────────── */
+/* ─── ANALYTICS ──────────────────────────────────────────────────────────── */
 .analyticsGrid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .chartContainer { display:flex; align-items:flex-end; justify-content:space-between; gap:7px; height:170px; padding:7px 0; }
 .barChartItem { flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; }
@@ -698,26 +558,3 @@
 .subjectStatItem { background:var(--surface2); padding:11px 13px; border-radius:10px; border:1px solid var(--border); }
 .subjectStatHeader { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
 .subjectName     { font-weight:700; color:var(--text); font-size:0.88rem; }
-
-/* ─── RESPONSIVE ADDITIONS ───────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  .syllabusGrid { grid-template-columns: 1fr; }
-  .historyStatsRow { grid-template-columns: repeat(3, 1fr); }
-  .syllabusStatsRow { grid-template-columns: repeat(2, 1fr); }
-  .analyticsGrid { grid-template-columns: 1fr; }
-}
-@media (max-width: 768px) {
-  .syllabusFormRow { flex-direction: column; }
-  .historyStatsRow { grid-template-columns: repeat(2, 1fr); }
-  .syllabusStatsRow { grid-template-columns: repeat(2, 1fr); }
-  .syllabusCardHeader { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .syllabusCardRight { align-self: flex-end; }
-  .studyGrid { grid-template-columns: 1fr; }
-  .studyFsStats { flex-direction: column; }
-}
-@media (max-width: 480px) {
-  .historyStatsRow { grid-template-columns: repeat(2, 1fr); }
-  .historyItemHeader { flex-direction: column; align-items: flex-start; gap: 2px; }
-  .syllabusStatsRow { grid-template-columns: repeat(2, 1fr); }
-  .monthlyGrid { grid-template-columns: 1fr; }
-}
