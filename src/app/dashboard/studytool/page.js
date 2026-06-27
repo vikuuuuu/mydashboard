@@ -67,7 +67,7 @@ export default function UltraStudyHub() {
   const [targetMinutes, setTargetMinutes] = useState("60");
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [breakReminder, setBreakReminder] = useState(true);
-  const [studyGoalMinutes, setStudyGoalMinutes] = useState(120);
+  const [studyGoalMinutes, setStudyGoalMinutes] = useState(500);
   const [sessionNote, setSessionNote] = useState("");
   const [studyMood, setStudyMood] = useState("😊 Happy");
   const [studySessions, setStudySessions] = useState([]);
@@ -1275,7 +1275,7 @@ export default function UltraStudyHub() {
                 <select value={studyMood} onChange={e => setStudyMood(e.target.value)} className={styles.formSelect}>{MOODS.map(m => <option key={m}>{m}</option>)}</select>
                 <div className={styles.goalRow}>
                   <label>Daily Goal (min):</label>
-                  <input type="number" value={studyGoalMinutes} onChange={e => setStudyGoalMinutes(parseInt(e.target.value) || 120)} className={styles.formInput} style={{ width: 80 }} />
+                  <input type="number" value={studyGoalMinutes} onChange={e => setStudyGoalMinutes(parseInt(e.target.value) || 500)} className={styles.formInput} style={{ width: 80 }} />
                 </div>
                 <label className={styles.checkLabel}><input type="checkbox" checked={breakReminder} onChange={e => setBreakReminder(e.target.checked)} /> ☕ Break reminder every 25 min</label>
                 <button onClick={startStudyMode} className={styles.startModeBtn}>▶ Start Study Session (Fullscreen)</button>
