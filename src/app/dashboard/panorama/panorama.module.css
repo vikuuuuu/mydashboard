@@ -276,3 +276,26 @@
   .doneViewer { height:230px; }
   .vidBox { height:240px; }
 }
+
+/* ═══════════════════════════════════════════════════════
+   panorama.module.css — ADDITIONS ONLY
+   Append these to the bottom of your existing CSS file.
+   All other existing styles remain unchanged.
+═══════════════════════════════════════════════════════ */
+
+/* ── Stitch progress bar (determinate, replaces shimmer) ── */
+.stitchFillProg {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ac), var(--ac2));
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.stitchPct {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: var(--tx2);
+  text-align: center;
+  margin-top: 10px;
+  letter-spacing: 0.04em;
+}
