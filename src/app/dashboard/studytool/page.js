@@ -1178,7 +1178,7 @@ export default function UltraStudyHub() {
             <input placeholder="Slot notes (optional)" value={taskNoteInput} onChange={e => setTaskNoteInput(e.target.value)} className={styles.formInput} style={{ flex: 1 }} />
             <div className={styles.repeatRow}>
               <span className={styles.repeatLabel}>Repeat on:</span>
-              {DAYS.slice(1, 6).map(d => (
+               {DAYS.map(d => (
                 <button key={d} className={`${styles.repeatDay} ${repeatDays.includes(d) ? styles.repeatDayActive : ""}`}
                   onClick={() => setRepeatDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])}>
                   {d.slice(0, 3)}
