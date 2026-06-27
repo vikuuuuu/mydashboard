@@ -46,7 +46,7 @@ const DEFAULT_TOOLS = [
   { id: "panorama",         title: "Panorama 360°",       desc: "360 degree panorama capture & view",    icon: "🌐", color: "#4361ee", pinned: false },
   { id: "MusicHub",         title: "My Music Hub",        desc: "Stream YouTube tracks & share playlists",icon: "🎵", color: "#7209b7", pinned: false },
   { id: "link-checker",    title: "Link Checker",         desc: "Check URLs, scan for viruses, domains, vWHOIS, DNS, IP details.",    icon: "🔗",    color: "#7209b7",  pinned: false },
-  { id: "locker",    title: "Locker",         desc: "Save Your Pass And Importance ID's with encrpytion.",    icon: "🔗",    color: "#7209b7",  pinned: false },
+  { id: "locker",  title: "Secure Vault",  desc: "Encrypt and securely store passwords, IDs, bank details, documents, photos & private notes.",  icon: "🔐",  color: "#4f46e5",  pinned: false },
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
