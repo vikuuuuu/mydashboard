@@ -1,22 +1,26 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-// Aapke existing lib folder se db ko import kiya hai
-import { db } from '@/lib/firebase'; 
-import { collection, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
-import { Eye, Lock, Unlock, Key, Plus, RefreshCw, Folder } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { db } from '@/lib/firebase';
+import {
+  collection, addDoc, getDocs, doc,
+  getDoc, setDoc, serverTimestamp
+} from 'firebase/firestore';
+import { Eye, Lock, Unlock, Key, Plus, RefreshCw, Folder, ShieldCheck, ShieldAlert } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
-import styles from './locker.module.css'; // Locker specialized styles
+import styles from './locker.module.css';
 
-/* ─── NATIVE BROWSER CRYPTO UTILS (AES-GCM 256-bit) ─── */
+/* ─────────────────────────────────────────────
+   CRYPTO UTILS  (AES-GCM 256-bit, Web Crypto)
+───────────────────────────────────────────── */
+const SALT = new TextEncoder().encode("MyDashboardLockerSalt_2026_v1");
+
 async function deriveKey(pin) {
-  const enc = new TextEncoder();
-  const salt = enc.encode("LockerDeterministicSalt2026"); 
   const baseKey = await window.crypto.subtle.importKey(
-    "raw", enc.encode(pin), { name: "PBKDF2" }, false, ["deriveKey"]
+    "raw", new TextEncoder().encode(pin), { name: "PBKDF2" }, false, ["deriveKey"]
   );
   return window.crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
+    { name: "PBKDF2", salt: SALT, iterations: 150000, hash: "SHA-256" },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
@@ -24,296 +28,406 @@ async function deriveKey(pin) {
   );
 }
 
-async function encryptData(text, pin) {
-  const enc = new TextEncoder();
+async function encryptText(text, pin) {
   const key = await deriveKey(pin);
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await window.crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv }, key, enc.encode(text)
+  const iv  = window.crypto.getRandomValues(new Uint8Array(12));
+  const enc = await window.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv }, key, new TextEncoder().encode(text)
   );
-  
-  const combined = new Uint8Array(iv.length + encrypted.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(encrypted), iv.length);
+  const combined = new Uint8Array(12 + enc.byteLength);
+  combined.set(iv); combined.set(new Uint8Array(enc), 12);
   return btoa(String.fromCharCode(...combined));
 }
 
-async function decryptData(cipherText, pin) {
-  try {
-    const combined = new Uint8Array(atob(cipherText).split("").map(c => c.charCodeAt(0)));
-    const iv = combined.slice(0, 12);
-    const data = combined.slice(12);
-    const key = await deriveKey(pin);
-    
-    const decrypted = await window.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: iv }, key, data
-    );
-    return new TextDecoder().decode(decrypted);
-  } catch (e) {
-    throw new Error("Mismatched Key Context");
-  }
+async function decryptText(cipher, pin) {
+  const combined = new Uint8Array(atob(cipher).split("").map(c => c.charCodeAt(0)));
+  const key = await deriveKey(pin);
+  const dec = await window.crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: combined.slice(0, 12) }, key, combined.slice(12)
+  );
+  return new TextDecoder().decode(dec);
 }
 
-export default function LockerDashboardPage() {
-  // Master Key Sessions
-  const [masterKey, setMasterKey] = useState('');
-  const [isUnlocked, setIsUnlocked] = useState(false);
-  const [lockerItems, setLockerItems] = useState([]);
+// PIN verification: encrypt a known sentinel, store it; on login re-decrypt to verify
+const SENTINEL = "LOCKER_VERIFIED_2026";
+async function createPinVerifier(pin) {
+  return encryptText(SENTINEL, pin);  // stored in Firestore
+}
+async function verifyPin(pin, storedVerifier) {
+  try {
+    const result = await decryptText(storedVerifier, pin);
+    return result === SENTINEL;
+  } catch { return false; }
+}
+
+/* ─────────────────────────────────────────────
+   HELPERS
+───────────────────────────────────────────── */
+const maskEmail = (email) => {
+  if (!email?.includes('@')) return '••••••';
+  const [user, domain] = email.split('@');
+  return user.length <= 2 ? `**@${domain}` : `${user.slice(0,2)}••••@${domain}`;
+};
+
+/* ─────────────────────────────────────────────
+   AUTH SCREEN COMPONENT
+───────────────────────────────────────────── */
+function AuthScreen({ mode, onSuccess }) {
+  const [pin, setPin]           = useState('');
+  const [confirmPin, setConfirm] = useState('');
+  const [busy, setBusy]         = useState(false);
+  const isSetup = mode === 'setup';
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (pin.length < 6) return toast.error("PIN must be 6 digits.");
+    if (isSetup && pin !== confirmPin) return toast.error("PINs don't match.");
+
+    setBusy(true);
+    try {
+      if (isSetup) {
+        const verifier = await createPinVerifier(pin);
+        await setDoc(doc(db, "locker_config", "auth"), {
+          pinVerifier: verifier,
+          createdAt: serverTimestamp()
+        });
+        toast.success("Vault created! Welcome.");
+        onSuccess(pin);
+      } else {
+        const snap = await getDoc(doc(db, "locker_config", "auth"));
+        if (!snap.exists()) { toast.error("No vault found. Please reload."); return; }
+        const ok = await verifyPin(pin, snap.data().pinVerifier);
+        if (ok) { toast.success("Unlocked!"); onSuccess(pin); }
+        else    { toast.error("Wrong PIN. Try again."); setPin(''); }
+      }
+    } catch (err) {
+      toast.error(err.message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className={styles.authOverlay}>
+      <div className={styles.authCard}>
+        {/* Header */}
+        <div className={styles.authHeader}>
+          <div className={styles.authIconRing}>
+            {isSetup ? <ShieldCheck size={22} /> : <Lock size={22} />}
+          </div>
+          <h2 className={styles.authTitle}>
+            {isSetup ? "Create Your Vault" : "Secure Vault"}
+          </h2>
+          <p className={styles.authSub}>
+            {isSetup
+              ? "Set a 6-digit PIN. This encrypts all your passwords — it is never stored in plain text."
+              : "Enter your 6-digit PIN to unlock your credentials."}
+          </p>
+          {isSetup && (
+            <div className={styles.authWarning}>
+              <ShieldAlert size={13} />
+              <span>If you forget this PIN, your data cannot be recovered.</span>
+            </div>
+          )}
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className={styles.authForm}>
+          <div className={styles.pinField}>
+            <label className={styles.pinLabel}>
+              {isSetup ? "Choose PIN" : "Enter PIN"}
+            </label>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="••••••"
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+              className={styles.pinInput}
+              autoFocus
+            />
+          </div>
+
+          {isSetup && (
+            <div className={styles.pinField}>
+              <label className={styles.pinLabel}>Confirm PIN</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="••••••"
+                value={confirmPin}
+                onChange={e => setConfirm(e.target.value.replace(/\D/g, ''))}
+                className={styles.pinInput}
+              />
+            </div>
+          )}
+
+          <button type="submit" className={styles.authBtn} disabled={busy}>
+            {busy
+              ? <RefreshCw size={15} className={styles.spinner} />
+              : isSetup
+                ? <><ShieldCheck size={15} /> Create Vault</>
+                : <><Unlock size={15} /> Unlock</>
+            }
+          </button>
+        </form>
+
+        {/* PIN strength dots */}
+        <div className={styles.pinDots}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <span
+              key={i}
+              className={`${styles.dot} ${i < pin.length ? styles.dotFilled : ''}`}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   MAIN LOCKER PAGE
+───────────────────────────────────────────── */
+export default function LockerPage() {
+  // Auth state
+  const [authMode, setAuthMode]   = useState(null); // null | 'setup' | 'login'
+  const [masterKey, setMasterKey] = useState(null); // unlocked pin in memory
+
+  // Vault data
+  const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Form Field Component States
+  // Add form
   const [platform, setPlatform] = useState('');
-  const [emailId, setEmailId] = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
 
-  // 10s Reveal Engine Management
-  const [visibleId, setVisibleId] = useState(null);
-  const [revealedData, setRevealedData] = useState({ email: '', pass: '' });
-  const [countdown, setCountdown] = useState(10);
+  // Reveal state
+  const [visibleId, setVisibleId]     = useState(null);
+  const [revealed, setRevealed]       = useState({ email: '', pass: '' });
+  const [countdown, setCountdown]     = useState(10);
 
-  // Masking Function (e.g., vikash@gmail.com -> vi****@gmail.com)
-  const computeMaskedEmail = (email) => {
-    if (!email || !email.includes('@')) return '******';
-    const [user, domain] = email.split('@');
-    if (user.length <= 2) return `**@${domain}`;
-    return `${user.substring(0, 2)}******@${domain}`;
-  };
+  /* ── Bootstrap: check if vault exists ── */
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "locker_config", "auth"));
+        setAuthMode(snap.exists() ? 'login' : 'setup');
+      } catch {
+        setAuthMode('login'); // fallback
+      }
+    })();
+  }, []);
 
-  // Read Encrypted Documents from Firestore
-  const fetchLockerData = async () => {
+  /* ── Fetch vault entries ── */
+  const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const snapshot = await getDocs(collection(db, "crypto_vault_records"));
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setLockerItems(items);
+      const snap = await getDocs(collection(db, "locker_entries"));
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err) {
-      toast.error("Firestore read error: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+      toast.error("Fetch error: " + err.message);
+    } finally { setLoading(false); }
+  }, []);
 
-  const handleUnlockLocker = (e) => {
+  /* ── Auth success ── */
+  const handleAuthSuccess = useCallback((pin) => {
+    setMasterKey(pin);
+    fetchItems();
+  }, [fetchItems]);
+
+  /* ── Add credential ── */
+  const handleAdd = async (e) => {
     e.preventDefault();
-    if (masterKey.length === 6) {
-      setIsUnlocked(true);
-      fetchLockerData();
-      toast.success("Locker decrypted successfully!");
-    } else {
-      toast.error("Please provide a valid 6-digit PIN");
-    }
-  };
-
-  const handleEncryptAndSave = async (e) => {
-    e.preventDefault();
-    if (!platform || !emailId || !password) {
-      return toast.error("Please fill in all layout credentials");
-    }
-
+    if (!platform || !email || !password) return toast.error("Fill all fields.");
     try {
-      // Local client-side isolation encryption
-      const encryptedEmail = await encryptData(emailId, masterKey);
-      const encryptedPassword = await encryptData(password, masterKey);
-      const maskedEmailVersion = computeMaskedEmail(emailId);
-
-      await addDoc(collection(db, "crypto_vault_records"), {
+      const [enc_email, enc_pass] = await Promise.all([
+        encryptText(email, masterKey),
+        encryptText(password, masterKey)
+      ]);
+      await addDoc(collection(db, "locker_entries"), {
         platform,
-        secureEmail: encryptedEmail,
-        securePassword: encryptedPassword,
-        maskedEmail: maskedEmailVersion,
-        timestamp: serverTimestamp()
+        secureEmail: enc_email,
+        securePass:  enc_pass,
+        maskedEmail: maskEmail(email),
+        createdAt:   serverTimestamp()
       });
-
-      toast.success("Credentials locked & committed to Firebase!");
-      setPlatform(''); setEmailId(''); setPassword('');
-      fetchLockerData();
-    } catch (err) {
-      toast.error("Encryption failed: " + err.message);
-    }
+      toast.success("Saved & encrypted!");
+      setPlatform(''); setEmail(''); setPassword('');
+      fetchItems();
+    } catch (err) { toast.error(err.message); }
   };
 
-  const handleRevealRow = async (item) => {
+  /* ── Reveal row ── */
+  const handleReveal = async (item) => {
     try {
-      const clearEmail = await decryptData(item.secureEmail, masterKey);
-      const clearPass = await decryptData(item.securePassword, masterKey);
-
-      setRevealedData({ email: clearEmail, pass: clearPass });
+      const [clearEmail, clearPass] = await Promise.all([
+        decryptText(item.secureEmail, masterKey),
+        decryptText(item.securePass,  masterKey)
+      ]);
+      setRevealed({ email: clearEmail, pass: clearPass });
       setVisibleId(item.id);
       setCountdown(10);
-    } catch (err) {
-      toast.error("Decryption failed! Mismatched 6-digit Master Key context.");
-    }
+    } catch { toast.error("Decryption failed — wrong PIN?"); }
   };
 
-  // Watcher for 10-second automatic field redaction
+  /* ── Auto-redact countdown ── */
   useEffect(() => {
-    let intervalRef;
-    if (visibleId && countdown > 0) {
-      intervalRef = setTimeout(() => setCountdown(prev => prev - 1), 1000);
-    } else if (countdown === 0) {
-      setVisibleId(null);
-      setRevealedData({ email: '', pass: '' });
-    }
-    return () => clearTimeout(intervalRef);
+    if (!visibleId) return;
+    if (countdown <= 0) { setVisibleId(null); setRevealed({ email: '', pass: '' }); return; }
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
   }, [countdown, visibleId]);
 
-  // UI STATE 1: Secure Master Entry Challenge Screen
-  if (!isUnlocked) {
+  /* ── Lock vault ── */
+  const lockVault = () => {
+    setMasterKey(null);
+    setItems([]);
+    setVisibleId(null);
+    setRevealed({ email: '', pass: '' });
+    setAuthMode('login');
+  };
+
+  /* ─── Render: loading ─── */
+  if (authMode === null) {
     return (
       <div className={styles.page}>
-        <Toaster position="top-right" />
-        <div className={styles.dialogOverlay}>
-          <div className={styles.securityDialog}>
-            <div className={styles.securityHeader}>
-              <div className={styles.securityIcon}>
-                <Lock size={24} />
-              </div>
-              <h3>Secure Vault Locker</h3>
-              <p>Provide your private 6-digit master application signature to parse local context</p>
-            </div>
-            <form onSubmit={handleUnlockLocker} className={styles.securityForm}>
-              <div className={styles.pinInputWrap}>
-                <input 
-                  type="password" 
-                  maxLength={6}
-                  placeholder="••••••" 
-                  value={masterKey}
-                  onChange={(e) => setMasterKey(e.target.value.replace(/\D/g, ''))}
-                  className={styles.pinInput}
-                  autoFocus
-                />
-              </div>
-              <button type="submit" className={styles.unlockBtn} style={{ width: '100%', justifyContent: 'center' }}>
-                <Unlock size={16} /> Open Secure Locker
-              </button>
-            </form>
-          </div>
+        <div className={styles.bootLoader}>
+          <RefreshCw size={20} className={styles.spinner} />
+          <span>Initializing vault…</span>
         </div>
       </div>
     );
   }
 
-  // UI STATE 2: Main Production Dashboard Grid
+  /* ─── Render: auth screens ─── */
+  if (!masterKey) {
+    return (
+      <div className={styles.page}>
+        <Toaster position="top-right" toastOptions={{ style: { background: '#1e2235', color: '#e2e8f0', border: '1px solid rgba(67,97,238,0.3)', fontSize: '13px' } }} />
+        <AuthScreen mode={authMode} onSuccess={handleAuthSuccess} />
+      </div>
+    );
+  }
+
+  /* ─── Render: main vault dashboard ─── */
   return (
     <div className={styles.page}>
-      <Toaster position="top-right" />
-      
-      {/* Structural Global Navigation Header */}
-      <div className={styles.topBar}>
+      <Toaster position="top-right" toastOptions={{ style: { background: '#1e2235', color: '#e2e8f0', border: '1px solid rgba(67,97,238,0.3)', fontSize: '13px' } }} />
+
+      {/* Top bar */}
+      <header className={styles.topBar}>
         <div className={styles.appTitle}>
-          <Key size={18} /> <span>Personal Cryptographic Locker Area</span>
+          <Key size={16} />
+          <span>Password Vault</span>
+          <span className={styles.titleBadge}>{items.length} entries</span>
         </div>
-        <div className={styles.topRight}>
-          <button onClick={() => { setIsUnlocked(false); setMasterKey(''); setVisibleId(null); }} className={styles.backBtn}>
-            Lock Locker Instance
-          </button>
-        </div>
-      </div>
+        <button className={styles.lockBtn} onClick={lockVault}>
+          <Lock size={13} /> Lock Vault
+        </button>
+      </header>
 
-      {/* Primary Flex/Grid layout block */}
-      <div className={styles.layout} style={{ gridTemplateColumns: '240px 1fr 1fr', gap: '0px' }}>
-        
-        {/* Navigation/Categorization Segment */}
-        <div className={styles.sidebar}>
-          <div className={styles.sidebarHeader}>
-            <span className={styles.sidebarTitle}>Storage Vaults</span>
-          </div>
-          <div className={`${styles.folderItem} ${styles.folderActive}`}>
-            <Folder size={16} />
-            <span className={styles.folderName}>Encrypted Records</span>
-            <span className={styles.folderCount}>{lockerItems.length}</span>
-          </div>
-        </div>
+      {/* Main grid */}
+      <div className={styles.mainGrid}>
 
-        {/* Mutation Form Layout Panel */}
-        <div className={styles.list} style={{ padding: '20px', gap: '16px' }}>
-          <div className={styles.listHeader} style={{ padding: '0 0 12px 0' }}>
-            <h3 className={styles.listTitle}>Store New Passwords Securely</h3>
+        {/* ── Sidebar ── */}
+        <aside className={styles.sidebar}>
+          <p className={styles.sideLabel}>Storage</p>
+          <div className={styles.folderActive}>
+            <Folder size={14} />
+            <span>All Credentials</span>
+            <span className={styles.badge}>{items.length}</span>
           </div>
-          
-          <form onSubmit={handleEncryptAndSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', color: 'var(--ink2)' }}>Platform / Application Category</label>
-              <input 
-                type="text" 
-                placeholder="e.g., Bank Account, Email ID, Government Pass" 
-                value={platform} 
-                onChange={(e) => setPlatform(e.target.value)}
-                className={styles.quickTitleInput} 
+        </aside>
+
+        {/* ── Add form ── */}
+        <section className={styles.formPane}>
+          <h3 className={styles.paneTitle}>Add Credential</h3>
+          <form onSubmit={handleAdd} className={styles.addForm}>
+            <div className={styles.field}>
+              <label>Platform / Service</label>
+              <input
+                type="text"
+                placeholder="e.g. GitHub, Gmail, HDFC"
+                value={platform}
+                onChange={e => setPlatform(e.target.value)}
+                className={styles.input}
               />
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', color: 'var(--ink2)' }}>Email ID / Username Value</label>
-              <input 
-                type="email" 
-                placeholder="example@mail.com" 
-                value={emailId} 
-                onChange={(e) => setEmailId(e.target.value)}
-                className={styles.quickTitleInput} 
+            <div className={styles.field}>
+              <label>Email / Username</label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className={styles.input}
               />
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', color: 'var(--ink2)' }}>Target Access Password / Code PIN</label>
-              <input 
-                type="password" 
-                placeholder="••••••••••••" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)}
-                className={styles.quickTitleInput} 
+            <div className={styles.field}>
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder="••••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className={styles.input}
               />
             </div>
-            <button type="submit" className={styles.newNoteBtn} style={{ width: '100%', justifyContent: 'center', marginTop: '10px', padding: '12px' }}>
-              <Plus size={16} /> Secure and Push to Cloud Firebase
+            <button type="submit" className={styles.saveBtn}>
+              <Plus size={14} /> Encrypt & Save
             </button>
           </form>
-        </div>
+        </section>
 
-        {/* Read Layout Encrypted Vault Stack */}
-        <div className={styles.editor} style={{ padding: '20px', background: 'var(--surface3)', overflowY: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border2)', paddingBottom: '10px' }}>
-            <h3 style={{ fontFamily: 'Lora, serif', fontWeight: '600' }}>Active Cloud Crypt-Vault Documents</h3>
-            {loading && <RefreshCw size={16} className={styles.aiSpinner} />}
+        {/* ── Vault entries ── */}
+        <section className={styles.vaultPane}>
+          <div className={styles.vaultHeader}>
+            <h3 className={styles.paneTitle}>Stored Credentials</h3>
+            {loading && <RefreshCw size={14} className={styles.spinner} />}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {lockerItems.map((item) => (
-              <div key={item.id} className={styles.statCard} style={{ textAlign: 'left', padding: '16px', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontWeight: '700', fontSize: '14px', color: 'var(--ink)' }}>{item.platform}</span>
-                  {visibleId === item.id ? (
-                    <span className={styles.folderCountRed}>Masking context in {countdown}s</span>
-                  ) : (
-                    <button onClick={() => handleRevealRow(item)} className={styles.iconBtnSmall}>
-                      <Eye size={14} />
-                    </button>
-                  )}
+          <div className={styles.entryList}>
+            {items.map(item => (
+              <div key={item.id} className={`${styles.entryCard} ${visibleId === item.id ? styles.entryCardActive : ''}`}>
+                <div className={styles.entryTop}>
+                  <span className={styles.entryPlatform}>{item.platform}</span>
+                  {visibleId === item.id
+                    ? <span className={styles.countdown}>{countdown}s</span>
+                    : (
+                      <button className={styles.revealBtn} onClick={() => handleReveal(item)}>
+                        <Eye size={13} /> Reveal
+                      </button>
+                    )
+                  }
                 </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontFamily: 'DM Mono, monospace', fontSize: '13px' }}>
-                  <div>
-                    <span style={{ color: 'var(--ink3)' }}>Email ID: </span>
-                    <span style={{ color: visibleId === item.id ? 'var(--success)' : 'var(--ink2)' }}>
-                      {visibleId === item.id ? revealedData.email : item.maskedEmail}
+                <div className={styles.entryFields}>
+                  <div className={styles.entryRow}>
+                    <span className={styles.fieldKey}>Email</span>
+                    <span className={`${styles.fieldVal} ${visibleId === item.id ? styles.fieldValRevealed : ''}`}>
+                      {visibleId === item.id ? revealed.email : item.maskedEmail}
                     </span>
                   </div>
-                  <div>
-                    <span style={{ color: 'var(--ink3)' }}>Password: </span>
-                    <span style={{ color: visibleId === item.id ? 'var(--gold)' : 'var(--ink3)' }}>
-                      {visibleId === item.id ? revealedData.pass : '••••••••'}
+                  <div className={styles.entryRow}>
+                    <span className={styles.fieldKey}>Password</span>
+                    <span className={`${styles.fieldVal} ${visibleId === item.id ? styles.fieldValPassword : ''}`}>
+                      {visibleId === item.id ? revealed.pass : '••••••••'}
                     </span>
                   </div>
                 </div>
               </div>
             ))}
 
-            {lockerItems.length === 0 && !loading && (
+            {items.length === 0 && !loading && (
               <div className={styles.emptyState}>
-                <p>No secure cryptographic primitives inside this repository channel.</p>
+                <Lock size={28} />
+                <p>No credentials stored yet.</p>
+                <span>Add your first entry using the form.</span>
               </div>
             )}
           </div>
-        </div>
-
+        </section>
       </div>
     </div>
   );
