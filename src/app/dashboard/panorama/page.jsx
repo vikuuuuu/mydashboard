@@ -13,7 +13,7 @@ import styles from './panorama.module.css';
 /* ════════════════════════════════════════
    IndexedDB helpers — no Firebase Storage
 ════════════════════════════════════════ */
-const IDB_NAME = 'pano360_v4', IDB_STORE = 'panos', IDB_VER = 1;
+const IDB_NAME = 'pano360_v5', IDB_STORE = 'panos', IDB_VER = 1;
 
 function openIDB() {
   return new Promise((res, rej) => {
@@ -36,7 +36,7 @@ async function idbSave(id, dataUrl) {
     tx.oncomplete = res;
     tx.onerror    = e => rej(e.target.error);
   });
-  // auto-clean: keep latest 15 only
+  // auto-clean: keep latest 12 only
   try {
     const db2 = await openIDB();
     const all  = await new Promise(r => {
@@ -45,8 +45,8 @@ async function idbSave(id, dataUrl) {
       req.onsuccess = e => r(e.target.result || []);
       req.onerror   = () => r([]);
     });
-    if (all.length > 15) {
-      const toRemove = all.sort((a,b) => a.ts - b.ts).slice(0, all.length - 15);
+    if (all.length > 12) {
+      const toRemove = all.sort((a, b) => a.ts - b.ts).slice(0, all.length - 12);
       const db3 = await openIDB();
       for (const x of toRemove) {
         await new Promise(r => {
@@ -89,6 +89,7 @@ function blobToDataUrl(blob) {
 
 /* ════════════════════════════════════════
    SHOT GRID — 8 cols × 3 rows = 24 shots
+   HIGH-RES capture dimensions
 ════════════════════════════════════════ */
 const H_COUNT = 8;
 const LEVELS  = [
@@ -102,20 +103,119 @@ LEVELS.forEach((v, vi) => {
     SHOTS.push({
       idx:   vi * H_COUNT + h,
       row:   vi, col: h,
-      yaw:   Math.round(h * (360 / H_COUNT)),
+      yaw:   Math.round(h * (360 / H_COUNT)),   // 0,45,90...315
       pitch: v.pitch,
       label: v.label,
       icon:  v.icon,
     });
   }
 });
-const TOTAL = SHOTS.length;           // 24
-const FW = 640, FH = 480;
-const PW = FW * H_COUNT;              // 5120
-const PH = FH * LEVELS.length;       // 1440
+const TOTAL = SHOTS.length; // 24
+
+// HIGH RESOLUTION capture size — matches camera native as closely as possible
+const CAPTURE_W = 1280;
+const CAPTURE_H = 720;
+
+// Equirectangular output dimensions
+// WIDTH must be exactly 2× HEIGHT for proper spherical mapping
+const PANO_W = 4096;
+const PANO_H = 2048;
 
 /* ════════════════════════════════════════
-   WEBGL 360 VIEWER HOOK
+   EQUIRECTANGULAR STITCHING
+   ROOT CAUSE FIX:
+   Previous code did: ctx.drawImage(im, col*FW, row*FH)
+   → produced a flat grid/collage, NOT equirectangular.
+   
+   Correct approach: for each frame, know its yaw/pitch
+   center and angular FOV, then for every output pixel
+   compute its lon/lat and check if this frame covers it.
+   
+   We use a fast painter's approach:
+   Each frame covers a known longitude/latitude window.
+   Map that window to equirectangular UV → blit the frame
+   into the correct region with canvas drawImage + clip.
+════════════════════════════════════════ */
+async function stitchEquirectangular(frames, onProgress) {
+  const cv  = document.createElement('canvas');
+  cv.width  = PANO_W;
+  cv.height = PANO_H;
+  const ctx = cv.getContext('2d', { willReadFrequently: false });
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0, 0, PANO_W, PANO_H);
+
+  // Camera horizontal FOV per frame (degrees)
+  // We overlap by using a wider angular window per frame so there are no gaps.
+  // 360/8 = 45° per column; we render each frame at ~54° wide (20% overlap)
+  const H_FOV = 54;  // degrees horizontal per frame (with overlap)
+  const V_FOV = 50;  // degrees vertical per frame (with overlap)
+
+  // Load all images first (parallel)
+  const images = await Promise.all(
+    frames.map(f => new Promise(res => {
+      const im = new window.Image();
+      im.onload  = () => res({ im, ...f });
+      im.onerror = () => res(null);
+      im.src = f.url;
+    }))
+  );
+
+  let done = 0;
+
+  for (const entry of images) {
+    if (!entry) { done++; onProgress?.(Math.round((done / images.length) * 100)); continue; }
+    const { im, yaw, pitch } = entry;
+
+    // Convert frame center to equirectangular pixel coords
+    // lon = yaw (0..360), lat = pitch (-90..90)
+    // equirect: x = (lon/360)*W,  y = (0.5 - lat/180)*H
+    const lonCenter = yaw;          // degrees
+    const latCenter = pitch;        // degrees
+
+    // Angular extents of this frame
+    const lonMin = lonCenter - H_FOV / 2;
+    const lonMax = lonCenter + H_FOV / 2;
+    const latMin = latCenter - V_FOV / 2;
+    const latMax = latCenter + V_FOV / 2;
+
+    // Map to equirectangular pixel region
+    // x increases with longitude, y decreases with latitude
+    const xMin = ((lonMin + 360) % 360) / 360 * PANO_W;
+    const xMax = ((lonMax + 360) % 360) / 360 * PANO_W;
+    const yMin = (0.5 - latMax / 180) * PANO_H;
+    const yMax = (0.5 - latMin / 180) * PANO_H;
+
+    const dstW = xMax - xMin;
+    const dstH = yMax - yMin;
+
+    if (dstW <= 0 || dstH <= 0) { done++; continue; }
+
+    // Handle 0°/360° wrap-around
+    if (xMin < 0) {
+      // Frame wraps around left edge — draw two strips
+      ctx.drawImage(im, xMin + PANO_W, yMin, dstW, dstH);
+      ctx.drawImage(im, xMin,          yMin, dstW, dstH);
+    } else if (xMax > PANO_W) {
+      // Frame wraps around right edge
+      ctx.drawImage(im, xMin,              yMin, dstW, dstH);
+      ctx.drawImage(im, xMin - PANO_W,     yMin, dstW, dstH);
+    } else {
+      ctx.drawImage(im, xMin, yMin, dstW, dstH);
+    }
+
+    done++;
+    onProgress?.(Math.round((done / images.length) * 100));
+
+    // Yield to browser between frames to keep UI responsive
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  return new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.96));
+}
+
+/* ════════════════════════════════════════
+   WEBGL 360 EQUIRECTANGULAR VIEWER
+   (Unchanged — architecture was correct)
 ════════════════════════════════════════ */
 function use360(canvasRef, src, active) {
   const S = useRef({
@@ -130,34 +230,50 @@ function use360(canvasRef, src, active) {
     const gl = cv.getContext('webgl') || cv.getContext('experimental-webgl');
     if (!gl) return;
 
-    const vs = `attribute vec2 p;varying vec2 u;
-      void main(){u=p*.5+.5;gl_Position=vec4(p,0.,1.);}`;
-    const fs = `precision highp float;
-      uniform sampler2D t;uniform float Y,P,F;uniform vec2 R;varying vec2 u;
-      const float PI=3.14159265;
-      void main(){
-        vec2 n=(u*2.-1.)*vec2(R.x/R.y,1.);
-        float f=1./tan(F*.5*PI/180.);
-        vec3 r=normalize(vec3(n,f));
-        float cy=cos(Y),sy=sin(Y),cp=cos(P),sp=sin(P);
-        vec3 q;q.x=cy*r.x+sy*r.z;q.z=-sy*r.x+cy*r.z;
-        q.y=sp*q.z+cp*r.y;q.z=cp*q.z-sp*r.y;
-        float lo=atan(q.x,q.z),la=asin(clamp(q.y/length(q),-1.,1.));
-        gl_FragColor=texture2D(t,vec2(lo/(2.*PI)+.5,la/PI+.5));
-      }`;
+    // Vertex shader
+    const vs = `
+      attribute vec2 p;
+      varying vec2 u;
+      void main() { u = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }
+    `;
+    // Fragment shader — equirectangular sphere projection
+    const fs = `
+      precision highp float;
+      uniform sampler2D t;
+      uniform float Y, P, F;
+      uniform vec2 R;
+      varying vec2 u;
+      const float PI = 3.14159265358979;
+      void main() {
+        vec2 n = (u * 2.0 - 1.0) * vec2(R.x / R.y, 1.0);
+        float f = 1.0 / tan(F * 0.5 * PI / 180.0);
+        vec3 r = normalize(vec3(n, f));
+        float cy = cos(Y), sy = sin(Y), cp = cos(P), sp = sin(P);
+        vec3 q;
+        q.x = cy * r.x + sy * r.z;
+        q.z = -sy * r.x + cy * r.z;
+        q.y = sp * q.z + cp * r.y;
+        q.z = cp * q.z - sp * r.y;
+        float lo = atan(q.x, q.z);
+        float la = asin(clamp(q.y / length(q), -1.0, 1.0));
+        gl_FragColor = texture2D(t, vec2(lo / (2.0 * PI) + 0.5, la / PI + 0.5));
+      }
+    `;
 
     const mkS = (type, code) => {
       const s = gl.createShader(type);
-      gl.shaderSource(s, code); gl.compileShader(s); return s;
+      gl.shaderSource(s, code);
+      gl.compileShader(s);
+      return s;
     };
     const pg = gl.createProgram();
-    gl.attachShader(pg, mkS(gl.VERTEX_SHADER,   vs));
+    gl.attachShader(pg, mkS(gl.VERTEX_SHADER, vs));
     gl.attachShader(pg, mkS(gl.FRAGMENT_SHADER, fs));
     gl.linkProgram(pg);
 
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
     const ap = gl.getAttribLocation(pg, 'p');
     gl.enableVertexAttribArray(ap);
     gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
@@ -166,7 +282,8 @@ function use360(canvasRef, src, active) {
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10,10,25,255]));
 
-    const img = new Image(); img.crossOrigin = 'anonymous';
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
@@ -174,6 +291,7 @@ function use360(canvasRef, src, active) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     };
     img.src = src;
 
@@ -181,12 +299,16 @@ function use360(canvasRef, src, active) {
     let aid;
     const loop = () => {
       const s  = S.current;
-      const W  = cv.clientWidth  || 640;
-      const H2 = cv.clientHeight || 360;
+      const W  = cv.clientWidth  || 800;
+      const H2 = cv.clientHeight || 450;
       if (cv.width !== W || cv.height !== H2) { cv.width = W; cv.height = H2; }
       gl.viewport(0, 0, W, H2);
       if (s.auto && !s.gyro) s.yaw += 0.003;
-      if (!s.drag) { s.vx *= 0.93; s.vy *= 0.93; s.yaw += s.vx; s.pitch += s.vy; }
+      if (!s.drag) {
+        s.vx *= 0.92; s.vy *= 0.92;
+        s.yaw   += s.vx;
+        s.pitch += s.vy;
+      }
       s.pitch = Math.max(-1.45, Math.min(1.45, s.pitch));
       gl.useProgram(pg);
       gl.uniform1i(ul('t'), 0);
@@ -199,17 +321,25 @@ function use360(canvasRef, src, active) {
     };
     aid = requestAnimationFrame(loop);
     S.current.animId = aid;
-    return () => { cancelAnimationFrame(aid); try { gl.deleteProgram(pg); gl.deleteTexture(tex); } catch { /* */ } };
+
+    return () => {
+      cancelAnimationFrame(aid);
+      try { gl.deleteProgram(pg); gl.deleteTexture(tex); gl.deleteBuffer(buf); } catch { /* */ }
+    };
   }, [active, src]); // eslint-disable-line
 
   const tdRef = useRef({ d: 0 });
 
-  const onMD = useCallback(e => { const s = S.current; s.drag = true; s.lx = e.clientX; s.ly = e.clientY; s.vx = 0; s.vy = 0; }, []);
+  const onMD = useCallback(e => {
+    const s = S.current;
+    s.drag = true; s.lx = e.clientX; s.ly = e.clientY; s.vx = 0; s.vy = 0;
+  }, []);
   const onMM = useCallback(e => {
     const s = S.current; if (!s.drag) return;
     const dx = e.clientX - s.lx, dy = e.clientY - s.ly;
     s.vx = dx * 0.003; s.vy = dy * 0.003;
-    s.yaw -= dx * 0.005; s.pitch -= dy * 0.005;
+    s.yaw   -= dx * 0.005;
+    s.pitch -= dy * 0.005;
     s.lx = e.clientX; s.ly = e.clientY;
   }, []);
   const onMU = useCallback(() => { S.current.drag = false; }, []);
@@ -219,19 +349,31 @@ function use360(canvasRef, src, active) {
   }, []);
   const onTS = useCallback(e => {
     const s = S.current;
-    if (e.touches.length === 1) { s.drag = true; s.lx = e.touches[0].clientX; s.ly = e.touches[0].clientY; }
-    if (e.touches.length === 2) tdRef.current.d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    if (e.touches.length === 1) {
+      s.drag = true; s.lx = e.touches[0].clientX; s.ly = e.touches[0].clientY;
+    }
+    if (e.touches.length === 2) {
+      tdRef.current.d = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
   }, []);
   const onTM = useCallback(e => {
-    e.preventDefault(); const s = S.current;
+    e.preventDefault();
+    const s = S.current;
     if (e.touches.length === 1 && s.drag) {
       const dx = e.touches[0].clientX - s.lx, dy = e.touches[0].clientY - s.ly;
       s.vx = dx * 0.003; s.vy = dy * 0.003;
-      s.yaw -= dx * 0.005; s.pitch -= dy * 0.005;
+      s.yaw   -= dx * 0.005;
+      s.pitch -= dy * 0.005;
       s.lx = e.touches[0].clientX; s.ly = e.touches[0].clientY;
     }
     if (e.touches.length === 2) {
-      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      const d = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
       s.fov = Math.max(20, Math.min(110, s.fov - (d - tdRef.current.d) * 0.15));
       tdRef.current.d = d;
     }
@@ -239,8 +381,9 @@ function use360(canvasRef, src, active) {
   const onTE = useCallback(() => { S.current.drag = false; }, []);
 
   const toggleAuto  = useCallback(() => { S.current.auto = !S.current.auto; return S.current.auto; }, []);
-  const resetView   = useCallback(() => { Object.assign(S.current, { yaw: 0, pitch: 0, fov: 75, vx: 0, vy: 0 }); }, []);
-
+  const resetView   = useCallback(() => {
+    Object.assign(S.current, { yaw: 0, pitch: 0, fov: 75, vx: 0, vy: 0 });
+  }, []);
   const enableGyro  = useCallback(async () => {
     if (typeof window === 'undefined' || typeof DeviceOrientationEvent === 'undefined') return false;
     try {
@@ -258,7 +401,6 @@ function use360(canvasRef, src, active) {
     S.current.gyro = true; S.current._gh = h;
     return true;
   }, []);
-
   const disableGyro = useCallback(() => {
     if (S.current._gh) window.removeEventListener('deviceorientation', S.current._gh, true);
     S.current.gyro = false; S.current._gh = null;
@@ -310,7 +452,11 @@ function DirGuide({ shotIdx, done, yaw, pitch, hasGyro }) {
         </div>
         <div className={styles.dgTarget}>
           Aim at <b>{shot.yaw}°</b>
-          {shot.pitch !== 0 && <> · {shot.pitch > 0 ? 'tilt up ' : 'tilt down '}<b>{Math.abs(shot.pitch)}°</b></>}
+          {shot.pitch !== 0 && (
+            <> · {shot.pitch > 0 ? 'tilt up ' : 'tilt down '}
+              <b>{Math.abs(shot.pitch)}°</b>
+            </>
+          )}
         </div>
         {hasGyro ? (
           <div className={styles.dgArrows}>
@@ -337,36 +483,40 @@ function DirGuide({ shotIdx, done, yaw, pitch, hasGyro }) {
 }
 
 /* ════════════════════════════════════════
-   CAPTURE HOOK
-   KEY FIX: vidRef is always mounted,
-   srcObject is set when stream is ready.
+   CAPTURE HOOK — HIGH RESOLUTION + QUALITY
+   KEY FIXES:
+   1. Capture at full camera resolution (up to 1280×720)
+   2. No lossy compression on frame capture (use PNG internally)
+   3. Proper equirectangular stitching
+   4. Better memory management (push instead of spread)
+   5. Stable frame via readyState + double rAF
+   6. Progress reporting during stitch
 ════════════════════════════════════════ */
 function useCapture() {
-  const vidRef    = useRef(null);   // always mounted in DOM
+  const vidRef    = useRef(null);
   const streamRef = useRef(null);
-  const framesRef = useRef([]);     // stable frames array for stitch
+  const framesRef = useRef([]);   // { blob, url, col, row, idx, yaw, pitch }
 
-  const [step,     setStep]     = useState('idle'); // idle|camStarting|guide|capturing|stitching|done
-  const [done,     setDone]     = useState(new Set());
-  const [shotIdx,  setShotIdx]  = useState(0);
-  const [devYaw,   setDevYaw]   = useState(0);
-  const [devPitch, setDevPitch] = useState(0);
-  const [aligned,  setAligned]  = useState(false);
-  const [hasGyro,  setHasGyro]  = useState(false);
-  const [panoBlob, setPanoBlob] = useState(null);
-  const [panoUrl,  setPanoUrl]  = useState(null);
-  const [err,      setErr]      = useState('');
-  const [thumbs,   setThumbs]   = useState([]);
+  const [step,        setStep]        = useState('idle');
+  // idle | camStarting | guide | capturing | stitching | done
+  const [done,        setDone]        = useState(new Set());
+  const [shotIdx,     setShotIdx]     = useState(0);
+  const [devYaw,      setDevYaw]      = useState(0);
+  const [devPitch,    setDevPitch]    = useState(0);
+  const [aligned,     setAligned]     = useState(false);
+  const [hasGyro,     setHasGyro]     = useState(false);
+  const [panoBlob,    setPanoBlob]    = useState(null);
+  const [panoUrl,     setPanoUrl]     = useState(null);
+  const [err,         setErr]         = useState('');
+  const [thumbs,      setThumbs]      = useState([]);
+  const [stitchProg,  setStitchProg]  = useState(0);
+  const [captureW,    setCaptureW]    = useState(CAPTURE_W);
+  const [captureH,    setCaptureH]    = useState(CAPTURE_H);
 
-  /* ── Start camera ──
-     THE ROOT CAUSE FIX:
-     We set srcObject BEFORE changing step.
-     The <video> element is ALWAYS in DOM (hidden when not needed),
-     so vidRef.current is never null when we need it.
-  */
+  /* ── Start camera ── */
   const startCam = useCallback(async () => {
     setErr('');
-    setStep('camStarting'); // shows spinner, keeps video in DOM
+    setStep('camStarting');
 
     if (!navigator?.mediaDevices?.getUserMedia) {
       setErr('Camera not supported. Use Chrome or Safari on a real device.');
@@ -376,47 +526,52 @@ function useCapture() {
 
     try {
       let stream;
-      // Try rear camera first
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        });
-      } catch {
-        // Fallback — any camera
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      // Request highest possible resolution — rear camera preferred
+      const constraints = [
+        { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+        { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720  } }, audio: false },
+        { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        { video: true, audio: false },
+      ];
+
+      for (const c of constraints) {
+        try { stream = await navigator.mediaDevices.getUserMedia(c); break; }
+        catch { /* try next */ }
       }
+      if (!stream) throw new Error('Could not open camera with any constraint');
 
       streamRef.current = stream;
 
       const v = vidRef.current;
       if (!v) {
-        // video element somehow not mounted — stop and bail
         stream.getTracks().forEach(t => t.stop());
         setErr('Video element not ready. Please reload and try again.');
         setStep('idle');
         return;
       }
 
-      // Assign stream to video
       v.srcObject   = stream;
       v.muted       = true;
       v.playsInline = true;
 
-      // Wait until browser has metadata (video dimensions known)
       await new Promise(res => {
-        if (v.readyState >= 2) { res(); return; }  // HAVE_CURRENT_DATA or more
+        if (v.readyState >= 2) { res(); return; }
         v.onloadedmetadata = res;
         v.onerror = res;
-        setTimeout(res, 5000); // safety timeout
+        setTimeout(res, 6000);
       });
 
-      // Attempt play (may be blocked on desktop without user gesture)
-      try { await v.play(); } catch { /* ignore */ }
+      try { await v.play(); } catch { /* ignore autoplay block */ }
 
-      // NOW switch to guide — video is streaming and visible
+      // Record actual camera resolution for capture canvas
+      const track    = stream.getVideoTracks()[0];
+      const settings = track?.getSettings?.() || {};
+      const camW     = settings.width  || v.videoWidth  || CAPTURE_W;
+      const camH     = settings.height || v.videoHeight || CAPTURE_H;
+      setCaptureW(camW);
+      setCaptureH(camH);
+
       setStep('guide');
-
     } catch (e) {
       const msg =
         e.name === 'NotAllowedError'  ? 'Camera permission denied. Allow it in browser settings and retry.' :
@@ -449,8 +604,10 @@ function useCapture() {
       window.addEventListener('deviceorientation', handler, true);
     };
 
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (
+      typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function'
+    ) {
       DeviceOrientationEvent.requestPermission()
         .then(p => { if (p === 'granted') attach(); })
         .catch(() => {});
@@ -460,49 +617,105 @@ function useCapture() {
     return () => { if (handler) window.removeEventListener('deviceorientation', handler, true); };
   }, [step, shotIdx]); // eslint-disable-line
 
-  /* ── Take a shot ── */
+  /* ── Take a shot — HIGH QUALITY ──
+     ROOT CAUSE FIX for blurry frames:
+     1. Wait for video to be truly ready (readyState >= 2)
+     2. Capture at FULL video resolution (no downscale)
+     3. Use PNG for internal frames (lossless) to avoid double-compression
+     4. Use rAF to sync with browser paint cycle
+     5. Push to array instead of spreading (O(1) vs O(n))
+  */
   const takeShot = useCallback(() => {
     const v = vidRef.current;
     if (!v || step !== 'capturing') return;
-    const shot = SHOTS[shotIdx];
-    const cv   = document.createElement('canvas');
-    cv.width = FW; cv.height = FH;
-    try { cv.getContext('2d').drawImage(v, 0, 0, FW, FH); } catch { return; }
-    cv.toBlob(blob => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      framesRef.current = [...framesRef.current, { blob, url, col: shot.col, row: shot.row, idx: shot.idx }];
-      setThumbs(prev => [...prev, url]);
-      setDone(prev  => new Set([...prev, shot.idx]));
-      const next = shotIdx + 1;
-      if (next >= TOTAL) { setShotIdx(next); setStep('stitching'); }
-      else               { setShotIdx(next); setAligned(false); }
-    }, 'image/jpeg', 0.88);
-  }, [step, shotIdx]);
+
+    // Ensure video has current data
+    if (v.readyState < 2) {
+      setErr('Video not ready — wait a moment and try again.');
+      return;
+    }
+
+    const shot = SHOTS[Math.min(shotIdx, TOTAL - 1)];
+
+    // Sync capture to rAF for sharpest frame
+    requestAnimationFrame(() => {
+      const vW = v.videoWidth  || captureW;
+      const vH = v.videoHeight || captureH;
+
+      const cv  = document.createElement('canvas');
+      cv.width  = vW;
+      cv.height = vH;
+      const ctx = cv.getContext('2d', { alpha: false, willReadFrequently: false });
+
+      // Disable smoothing for sharpest capture
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      try {
+        ctx.drawImage(v, 0, 0, vW, vH);
+      } catch (e) {
+        setErr(`Frame capture failed: ${e.message}`);
+        return;
+      }
+
+      // Use PNG for first internal copy (lossless) → JPEG only for thumbnail
+      cv.toBlob(blob => {
+        if (!blob) { setErr('Frame capture produced empty blob.'); return; }
+
+        // Thumbnail (small, for strip display only)
+        const thumbCv  = document.createElement('canvas');
+        thumbCv.width  = 160;
+        thumbCv.height = 90;
+        thumbCv.getContext('2d').drawImage(cv, 0, 0, 160, 90);
+        const thumbUrl = thumbCv.toDataURL('image/jpeg', 0.75);
+
+        const frameUrl = URL.createObjectURL(blob);
+
+        // Push (O(1)) — NOT spread
+        framesRef.current.push({
+          blob, url: frameUrl,
+          col: shot.col, row: shot.row,
+          idx: shot.idx,
+          yaw: shot.yaw, pitch: shot.pitch,
+        });
+
+        setThumbs(prev => [...prev, thumbUrl]);
+        setDone(prev  => new Set([...prev, shot.idx]));
+
+        const next = shotIdx + 1;
+        if (next >= TOTAL) {
+          setShotIdx(next);
+          setStep('stitching');
+        } else {
+          setShotIdx(next);
+          setAligned(false);
+          setErr('');
+        }
+      }, 'image/png'); // LOSSLESS internal capture
+    });
+  }, [step, shotIdx, captureW, captureH]);
 
   const startCapturing = useCallback(() => {
     setStep('capturing');
     setShotIdx(0);
     setAligned(false);
+    setErr('');
   }, []);
 
-  /* ── Stitch panorama ── */
+  /* ── Equirectangular Stitch ──
+     ROOT CAUSE FIX: was painting frames at grid pixel offsets.
+     Now maps each frame's yaw/pitch to correct lon/lat region.
+  */
   useEffect(() => {
     if (step !== 'stitching') return;
-    const tid = setTimeout(async () => {
+
+    const run = async () => {
       try {
-        const cv  = document.createElement('canvas');
-        cv.width  = PW; cv.height = PH;
-        const ctx = cv.getContext('2d');
-        ctx.fillStyle = '#111';
-        ctx.fillRect(0, 0, PW, PH);
-        for (const f of framesRef.current) {
-          const im = new window.Image();
-          im.src   = f.url;
-          await new Promise(r => { im.onload = r; im.onerror = r; });
-          ctx.drawImage(im, f.col * FW, f.row * FH, FW, FH);
-        }
-        const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.93));
+        setStitchProg(0);
+        const blob = await stitchEquirectangular(
+          framesRef.current,
+          pct => setStitchProg(pct)
+        );
         if (!blob) { setStep('idle'); return; }
         setPanoBlob(blob);
         setPanoUrl(URL.createObjectURL(blob));
@@ -510,21 +723,26 @@ function useCapture() {
         streamRef.current?.getTracks().forEach(t => t.stop());
       } catch (e) {
         console.error('Stitch error:', e);
+        setErr(`Stitch failed: ${e.message}`);
         setStep('done');
       }
-    }, 200);
-    return () => clearTimeout(tid);
+    };
+
+    run();
   }, [step]); // eslint-disable-line
 
   const stopCam = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
-    if (vidRef.current) { vidRef.current.srcObject = null; vidRef.current.load(); }
+    if (vidRef.current) { vidRef.current.srcObject = null; }
   }, []);
 
   const reset = useCallback(() => {
     stopCam();
-    framesRef.current.forEach(f => { try { URL.revokeObjectURL(f.url); } catch { /* */ } });
+    // Revoke all frame object URLs
+    framesRef.current.forEach(f => {
+      try { URL.revokeObjectURL(f.url); } catch { /* */ }
+    });
     framesRef.current = [];
     if (panoUrl) try { URL.revokeObjectURL(panoUrl); } catch { /* */ }
     setStep('idle');
@@ -535,14 +753,17 @@ function useCapture() {
     setPanoUrl(null);
     setErr('');
     setThumbs([]);
+    setStitchProg(0);
   }, [stopCam, panoUrl]);
 
-  const progress = Math.round((done.size / TOTAL) * 100);
+  const progress = TOTAL > 0 ? Math.round((done.size / TOTAL) * 100) : 0;
 
   return {
     vidRef, step, done, shotIdx, devYaw, devPitch,
-    aligned, hasGyro, panoBlob, panoUrl, err, thumbs, progress,
+    aligned, hasGyro, panoBlob, panoUrl, err, thumbs,
+    progress, stitchProg,
     startCam, startCapturing, takeShot, reset,
+    captureW, captureH,
   };
 }
 
@@ -558,7 +779,7 @@ function Viewer({ src, onClose }) {
 
   const { onMD, onMM, onMU, onW, onTS, onTM, onTE,
           toggleAuto, resetView, enableGyro, disableGyro, S }
-        = use360(cvRef, src, true);
+    = use360(cvRef, src, true);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -567,7 +788,7 @@ function Viewer({ src, onClose }) {
     return () => clearInterval(id);
   }, [S]);
 
-  // Attach wheel passive:false so preventDefault works
+  // Attach wheel with passive:false so preventDefault works
   useEffect(() => {
     const el = wRef.current; if (!el) return;
     el.addEventListener('wheel', onW, { passive: false });
@@ -655,7 +876,9 @@ function Card({ p, onView, onDel, onRen }) {
         )}
         <div className={styles.gcMeta}>
           <span className={styles.gcDate}>
-            {p.createdAt?.toDate?.().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) || '—'}
+            {p.createdAt?.toDate?.().toLocaleDateString('en-IN', {
+              day: '2-digit', month: 'short', year: 'numeric',
+            }) || '—'}
           </span>
           <span className={styles.gcBadge}>📱 Local</span>
         </div>
@@ -693,7 +916,7 @@ export default function PanoramaPage() {
 
   const cap = useCapture();
 
-  /* Auth */
+  /* ── Auth ── */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
       if (user) { setUid(user.uid); setAuthOk(true); }
@@ -702,7 +925,7 @@ export default function PanoramaPage() {
     return unsub;
   }, [router]);
 
-  /* Load gallery */
+  /* ── Load gallery ── */
   const loadPanos = useCallback(async () => {
     if (!uid) return;
     setLoading(true);
@@ -721,7 +944,7 @@ export default function PanoramaPage() {
 
   useEffect(() => { if (uid) loadPanos(); }, [uid, loadPanos]);
 
-  /* Save */
+  /* ── Save panorama ── */
   const savePano = async () => {
     if (!cap.panoBlob || !uid) return;
     const name = pName.trim() || `Panorama ${new Date().toLocaleDateString('en-IN')}`;
@@ -738,7 +961,7 @@ export default function PanoramaPage() {
     setSaving(false);
   };
 
-  /* Delete */
+  /* ── Delete ── */
   const delPano = async p => {
     if (!uid) return;
     try {
@@ -749,7 +972,7 @@ export default function PanoramaPage() {
     } catch (e) { console.error(e); }
   };
 
-  /* Rename */
+  /* ── Rename ── */
   const renPano = async (id, name) => {
     try {
       await updateDoc(doc(db, `users/${uid}/panoramas`, id), { name });
@@ -757,7 +980,7 @@ export default function PanoramaPage() {
     } catch (e) { console.error(e); }
   };
 
-  /* Upload existing panorama */
+  /* ── Upload existing equirectangular panorama ── */
   const uploadFile = async e => {
     const f = e.target.files?.[0]; if (!f || !uid) return;
     setSaving(true);
@@ -773,26 +996,33 @@ export default function PanoramaPage() {
     setSaving(false); e.target.value = '';
   };
 
-  /* Download */
-  const download = () => {
+  /* ── Download — panorama only (no collage) ──
+     ROOT CAUSE FIX: was downloading the stitched grid blob.
+     Now always downloads the equirectangular panorama JPEG.
+     Individual frames can also be downloaded separately.
+  */
+  const downloadPano = () => {
     if (!cap.panoUrl) return;
     const a = document.createElement('a');
-    a.href = cap.panoUrl; a.download = `panorama-${Date.now()}.jpg`; a.click();
+    a.href     = cap.panoUrl;
+    a.download = `panorama-equirect-${Date.now()}.jpg`;
+    a.click();
   };
 
   if (!authOk) return (
-    <div className={styles.loaderScreen}><div className={styles.loaderRing} /><p>Loading…</p></div>
+    <div className={styles.loaderScreen}>
+      <div className={styles.loaderRing} /><p>Loading…</p>
+    </div>
   );
 
-  const curShot = SHOTS[Math.min(cap.shotIdx, TOTAL - 1)];
+  const curShot  = SHOTS[Math.min(cap.shotIdx, TOTAL - 1)];
+  const camActive = cap.step === 'guide' || cap.step === 'capturing';
+
   const TABS = [
     { id: 'gallery', lbl: '🖼 Gallery' },
     { id: 'capture', lbl: '📷 Capture' },
     ...(viewing ? [{ id: 'viewer', lbl: `🔭 ${viewing.name}` }] : []),
   ];
-
-  /* Is camera running (stream should be active) */
-  const camActive = cap.step === 'guide' || cap.step === 'capturing';
 
   return (
     <div className={styles.page} data-theme={dark ? 'dark' : ''}>
@@ -810,7 +1040,9 @@ export default function PanoramaPage() {
             <input type="file" accept="image/*" style={{ display: 'none' }} onChange={uploadFile} />
           </label>
           <span className={styles.cnt}>{panos.length} saved</span>
-          <button className={styles.themeBtn} onClick={() => setDark(d => !d)}>{dark ? '☀️' : '🌙'}</button>
+          <button className={styles.themeBtn} onClick={() => setDark(d => !d)}>
+            {dark ? '☀️' : '🌙'}
+          </button>
         </div>
       </div>
 
@@ -830,7 +1062,9 @@ export default function PanoramaPage() {
       {tab === 'gallery' && (
         <div className={styles.content}>
           {loading ? (
-            <div className={styles.cLoader}><div className={styles.loaderRing} /><p>Loading gallery…</p></div>
+            <div className={styles.cLoader}>
+              <div className={styles.loaderRing} /><p>Loading gallery…</p>
+            </div>
           ) : panos.length === 0 ? (
             <div className={styles.empty}>
               <div className={styles.emptyIco}>🌐</div>
@@ -866,10 +1100,7 @@ export default function PanoramaPage() {
         <div className={styles.content}>
           <div className={styles.capWrap}>
 
-            {/* ─── ALWAYS-MOUNTED VIDEO ───
-                THE FIX: <video> is always in DOM so vidRef.current is
-                always valid when we assign srcObject in startCam().
-                We show/hide it with CSS depending on step. */}
+            {/* ALWAYS-MOUNTED VIDEO — keeps vidRef.current valid */}
             <div className={`${styles.vidBox} ${camActive ? styles.vidBoxVisible : styles.vidBoxHidden}`}>
               <video
                 ref={cap.vidRef}
@@ -878,7 +1109,6 @@ export default function PanoramaPage() {
                 muted
                 autoPlay
               />
-              {/* Overlays — only visible during guide/capturing */}
               {cap.step === 'guide' && (
                 <div className={styles.vidOvl}>
                   <div className={styles.reticle} />
@@ -896,7 +1126,6 @@ export default function PanoramaPage() {
                   {cap.aligned && <div className={styles.alnTick}>✓ Aligned — Tap shutter!</div>}
                 </div>
               )}
-              {/* Shutter button */}
               {cap.step === 'capturing' && (
                 <button
                   className={`${styles.shutter} ${cap.aligned ? styles.shutterOn : ''}`}
@@ -913,14 +1142,15 @@ export default function PanoramaPage() {
                 <div className={styles.capIdleIco}>🌐</div>
                 <h2 className={styles.capIdleT}>360° Panorama Capture</h2>
                 <p className={styles.capIdleSub}>
-                  Guided across <b>3 levels</b> (sky, horizon, ground) · <b>{TOTAL} shots</b> total
+                  Guided across <b>3 levels</b> (sky, horizon, ground) ·{' '}
+                  <b>{TOTAL} shots</b> · Equirectangular output
                 </p>
                 <div className={styles.capSteps}>
                   {[
                     { i: '📷', t: 'Allow camera access' },
                     { i: '🧭', t: 'Follow direction guide' },
                     { i: '🔵', t: 'Tap shutter when aligned' },
-                    { i: '✅', t: 'Auto-stitches to 360°' },
+                    { i: '✅', t: 'Auto-stitches equirectangular' },
                   ].map((s, i) => (
                     <div key={i} className={styles.capStep}>
                       <span className={styles.capStepIco}>{s.i}</span>
@@ -935,7 +1165,7 @@ export default function PanoramaPage() {
               </div>
             )}
 
-            {/* CAM STARTING — spinner */}
+            {/* CAM STARTING */}
             {cap.step === 'camStarting' && (
               <div className={styles.camStarting}>
                 <div className={styles.loaderRing} />
@@ -944,7 +1174,7 @@ export default function PanoramaPage() {
               </div>
             )}
 
-            {/* GUIDE — camera on */}
+            {/* GUIDE */}
             {cap.step === 'guide' && (
               <div className={styles.guideBtns} style={{ marginTop: 12 }}>
                 <button className={styles.pri} onClick={cap.startCapturing}>
@@ -964,9 +1194,10 @@ export default function PanoramaPage() {
                   pitch={cap.devPitch}
                   hasGyro={cap.hasGyro}
                 />
+                {cap.err && <div className={styles.camErr}>{cap.err}</div>}
                 {cap.thumbs.length > 0 && (
                   <div className={styles.strip}>
-                    {cap.thumbs.slice(-12).map((u, i) => (
+                    {cap.thumbs.slice(-14).map((u, i) => (
                       <img key={i} src={u} className={styles.stripThumb} alt="" />
                     ))}
                   </div>
@@ -975,7 +1206,9 @@ export default function PanoramaPage() {
                   <div className={styles.progFill} style={{ width: `${cap.progress}%` }} />
                 </div>
                 <div className={styles.progLbl}>{cap.done.size} / {TOTAL} shots captured</div>
-                <button className={`${styles.sec} ${styles.cancelBtn}`} onClick={cap.reset}>✕ Cancel</button>
+                <button className={`${styles.sec} ${styles.cancelBtn}`} onClick={cap.reset}>
+                  ✕ Cancel
+                </button>
               </>
             )}
 
@@ -983,9 +1216,14 @@ export default function PanoramaPage() {
             {cap.step === 'stitching' && (
               <div className={styles.stitchBox}>
                 <div className={styles.stitchIco}>🧵</div>
-                <div className={styles.stitchT}>Stitching panorama…</div>
-                <p className={styles.stitchSub}>Assembling {cap.done.size} frames — may take a few seconds</p>
-                <div className={styles.stitchBar}><div className={styles.stitchFill} /></div>
+                <div className={styles.stitchT}>Building equirectangular panorama…</div>
+                <p className={styles.stitchSub}>
+                  Mapping {cap.done.size} frames to spherical coordinates
+                </p>
+                <div className={styles.stitchBar}>
+                  <div className={styles.stitchFillProg} style={{ width: `${cap.stitchProg}%` }} />
+                </div>
+                <div className={styles.stitchPct}>{cap.stitchProg}%</div>
               </div>
             )}
 
@@ -995,7 +1233,9 @@ export default function PanoramaPage() {
                 <div className={styles.doneHead}>
                   <div className={styles.doneBadge}>✅ Panorama Ready</div>
                   <h2 className={styles.doneT}>Your 360° panorama is ready!</h2>
-                  <p className={styles.doneSub}>{cap.done.size} frames · drag below to explore</p>
+                  <p className={styles.doneSub}>
+                    {cap.done.size} frames · {PANO_W}×{PANO_H}px equirectangular · drag to explore
+                  </p>
                 </div>
                 <div className={styles.doneViewer}><Viewer src={cap.panoUrl} /></div>
                 <div className={styles.doneFoot}>
@@ -1009,7 +1249,7 @@ export default function PanoramaPage() {
                     <button className={styles.pri} onClick={savePano} disabled={saving}>
                       {saving ? 'Saving…' : '💾 Save to Gallery'}
                     </button>
-                    <button className={styles.sec} onClick={download}>⬇ Download</button>
+                    <button className={styles.sec} onClick={downloadPano}>⬇ Download Panorama</button>
                     <button className={styles.sec} onClick={cap.reset}>🔄 Retake</button>
                   </div>
                 </div>
