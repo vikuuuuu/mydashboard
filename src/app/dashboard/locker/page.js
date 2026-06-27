@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';   // ← auth bhi import karo
 import {
   collection, addDoc, getDocs, doc,
-  getDoc, setDoc, serverTimestamp
+  getDoc, setDoc, serverTimestamp, query, where
 } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Eye, Lock, Unlock, Key, Plus, RefreshCw, Folder, ShieldCheck, ShieldAlert } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import styles from './locker.module.css';
@@ -48,11 +49,12 @@ async function decryptText(cipher, pin) {
   return new TextDecoder().decode(dec);
 }
 
-// PIN verification: encrypt a known sentinel, store it; on login re-decrypt to verify
 const SENTINEL = "LOCKER_VERIFIED_2026";
+
 async function createPinVerifier(pin) {
-  return encryptText(SENTINEL, pin);  // stored in Firestore
+  return encryptText(SENTINEL, pin);
 }
+
 async function verifyPin(pin, storedVerifier) {
   try {
     const result = await decryptText(storedVerifier, pin);
@@ -61,21 +63,21 @@ async function verifyPin(pin, storedVerifier) {
 }
 
 /* ─────────────────────────────────────────────
-   HELPERS
+   HELPER
 ───────────────────────────────────────────── */
 const maskEmail = (email) => {
   if (!email?.includes('@')) return '••••••';
   const [user, domain] = email.split('@');
-  return user.length <= 2 ? `**@${domain}` : `${user.slice(0,2)}••••@${domain}`;
+  return user.length <= 2 ? `**@${domain}` : `${user.slice(0, 2)}••••@${domain}`;
 };
 
 /* ─────────────────────────────────────────────
    AUTH SCREEN COMPONENT
 ───────────────────────────────────────────── */
-function AuthScreen({ mode, onSuccess }) {
-  const [pin, setPin]           = useState('');
+function AuthScreen({ mode, uid, onSuccess }) {
+  const [pin, setPin]            = useState('');
   const [confirmPin, setConfirm] = useState('');
-  const [busy, setBusy]         = useState(false);
+  const [busy, setBusy]          = useState(false);
   const isSetup = mode === 'setup';
 
   const handleSubmit = async (e) => {
@@ -87,28 +89,37 @@ function AuthScreen({ mode, onSuccess }) {
     try {
       if (isSetup) {
         const verifier = await createPinVerifier(pin);
-        await setDoc(doc(db, "locker_config", "auth"), {
+        await setDoc(doc(db, "locker_config", uid), {   // FIX #1
           pinVerifier: verifier,
           createdAt: serverTimestamp()
         });
         toast.success("Vault created! Welcome.");
         onSuccess(pin);
       } else {
-        const snap = await getDoc(doc(db, "locker_config", "auth"));
-        if (!snap.exists()) { toast.error("No vault found. Please reload."); return; }
+        const snap = await getDoc(doc(db, "locker_config", uid));  // FIX #1
+        if (!snap.exists()) {
+          toast.error("No vault found. Please reload.");
+          return;
+        }
         const ok = await verifyPin(pin, snap.data().pinVerifier);
-        if (ok) { toast.success("Unlocked!"); onSuccess(pin); }
-        else    { toast.error("Wrong PIN. Try again."); setPin(''); }
+        if (ok) {
+          toast.success("Unlocked!");
+          onSuccess(pin);
+        } else {
+          toast.error("Wrong PIN. Try again.");
+          setPin('');
+        }
       }
     } catch (err) {
-      toast.error(err.message);
-    } finally { setBusy(false); }
+      toast.error("Error: " + err.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div className={styles.authOverlay}>
       <div className={styles.authCard}>
-        {/* Header */}
         <div className={styles.authHeader}>
           <div className={styles.authIconRing}>
             {isSetup ? <ShieldCheck size={22} /> : <Lock size={22} />}
@@ -129,7 +140,6 @@ function AuthScreen({ mode, onSuccess }) {
           )}
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className={styles.authForm}>
           <div className={styles.pinField}>
             <label className={styles.pinLabel}>
@@ -172,7 +182,6 @@ function AuthScreen({ mode, onSuccess }) {
           </button>
         </form>
 
-        {/* PIN strength dots */}
         <div className={styles.pinDots}>
           {Array.from({ length: 6 }).map((_, i) => (
             <span
@@ -190,54 +199,73 @@ function AuthScreen({ mode, onSuccess }) {
    MAIN LOCKER PAGE
 ───────────────────────────────────────────── */
 export default function LockerPage() {
-  // Auth state
-  const [authMode, setAuthMode]   = useState(null); // null | 'setup' | 'login'
-  const [masterKey, setMasterKey] = useState(null); // unlocked pin in memory
+  const [uid, setUid]             = useState(null);
+  const [authReady, setAuthReady] = useState(false);  // FIX #2
+  const [authMode, setAuthMode]   = useState(null);
+  const [masterKey, setMasterKey] = useState(null);
 
-  // Vault data
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Add form
   const [platform, setPlatform] = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
 
-  // Reveal state
-  const [visibleId, setVisibleId]     = useState(null);
-  const [revealed, setRevealed]       = useState({ email: '', pass: '' });
-  const [countdown, setCountdown]     = useState(10);
+  const [visibleId, setVisibleId] = useState(null);
+  const [revealed, setRevealed]   = useState({ email: '', pass: '' });
+  const [countdown, setCountdown] = useState(10);
 
-  /* ── Bootstrap: check if vault exists ── */
+  /* ── FIX #2: Wait for Firebase Auth, THEN check Firestore ── */
   useEffect(() => {
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, "locker_config", "auth"));
-        setAuthMode(snap.exists() ? 'login' : 'setup');
-      } catch {
-        setAuthMode('login'); // fallback
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setAuthReady(true);
+        setAuthMode('login');
+        return;
       }
-    })();
+
+      setUid(user.uid);
+
+      try {
+        // FIX #1: uid-based path instead of hardcoded "auth"
+        const snap = await getDoc(doc(db, "locker_config", user.uid));
+        setAuthMode(snap.exists() ? 'login' : 'setup');
+      } catch (err) {
+        // permission-denied = document doesn't exist for this user = first time setup
+        console.warn("locker_config:", err.code);
+        setAuthMode(err.code === 'permission-denied' ? 'setup' : 'login');
+      } finally {
+        setAuthReady(true);
+      }
+    });
+
+    return () => unsub();
   }, []);
 
-  /* ── Fetch vault entries ── */
-  const fetchItems = useCallback(async () => {
+  /* ── Fetch vault entries — FIX #3: filter by userId ── */
+  const fetchItems = useCallback(async (currentUid) => {
     setLoading(true);
     try {
-      const snap = await getDocs(collection(db, "locker_entries"));
+      const q = query(
+        collection(db, "locker_entries"),
+        where("userId", "==", currentUid)   // FIX #3
+      );
+      const snap = await getDocs(q);
       setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err) {
       toast.error("Fetch error: " + err.message);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   /* ── Auth success ── */
   const handleAuthSuccess = useCallback((pin) => {
     setMasterKey(pin);
-    fetchItems();
-  }, [fetchItems]);
+    fetchItems(uid);
+  }, [fetchItems, uid]);
 
-  /* ── Add credential ── */
+  /* ── Add credential — FIX #4: include userId ── */
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!platform || !email || !password) return toast.error("Fill all fields.");
@@ -251,12 +279,15 @@ export default function LockerPage() {
         secureEmail: enc_email,
         securePass:  enc_pass,
         maskedEmail: maskEmail(email),
+        userId:      uid,              // FIX #4
         createdAt:   serverTimestamp()
       });
       toast.success("Saved & encrypted!");
       setPlatform(''); setEmail(''); setPassword('');
-      fetchItems();
-    } catch (err) { toast.error(err.message); }
+      fetchItems(uid);
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
   /* ── Reveal row ── */
@@ -264,18 +295,24 @@ export default function LockerPage() {
     try {
       const [clearEmail, clearPass] = await Promise.all([
         decryptText(item.secureEmail, masterKey),
-        decryptText(item.securePass,  masterKey)
+        decryptText(item.securePass, masterKey)
       ]);
       setRevealed({ email: clearEmail, pass: clearPass });
       setVisibleId(item.id);
       setCountdown(10);
-    } catch { toast.error("Decryption failed — wrong PIN?"); }
+    } catch {
+      toast.error("Decryption failed — wrong PIN?");
+    }
   };
 
   /* ── Auto-redact countdown ── */
   useEffect(() => {
     if (!visibleId) return;
-    if (countdown <= 0) { setVisibleId(null); setRevealed({ email: '', pass: '' }); return; }
+    if (countdown <= 0) {
+      setVisibleId(null);
+      setRevealed({ email: '', pass: '' });
+      return;
+    }
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [countdown, visibleId]);
@@ -289,8 +326,8 @@ export default function LockerPage() {
     setAuthMode('login');
   };
 
-  /* ─── Render: loading ─── */
-  if (authMode === null) {
+  /* ─── Loading: Firebase Auth + authMode resolve hone tak ─── */
+  if (!authReady || authMode === null) {
     return (
       <div className={styles.page}>
         <div className={styles.bootLoader}>
@@ -301,22 +338,30 @@ export default function LockerPage() {
     );
   }
 
-  /* ─── Render: auth screens ─── */
+  const toastStyle = {
+    style: {
+      background: '#1e2235',
+      color: '#e2e8f0',
+      border: '1px solid rgba(67,97,238,0.3)',
+      fontSize: '13px'
+    }
+  };
+
+  /* ─── Auth screens ─── */
   if (!masterKey) {
     return (
       <div className={styles.page}>
-        <Toaster position="top-right" toastOptions={{ style: { background: '#1e2235', color: '#e2e8f0', border: '1px solid rgba(67,97,238,0.3)', fontSize: '13px' } }} />
-        <AuthScreen mode={authMode} onSuccess={handleAuthSuccess} />
+        <Toaster position="top-right" toastOptions={toastStyle} />
+        <AuthScreen mode={authMode} uid={uid} onSuccess={handleAuthSuccess} />
       </div>
     );
   }
 
-  /* ─── Render: main vault dashboard ─── */
+  /* ─── Main vault dashboard ─── */
   return (
     <div className={styles.page}>
-      <Toaster position="top-right" toastOptions={{ style: { background: '#1e2235', color: '#e2e8f0', border: '1px solid rgba(67,97,238,0.3)', fontSize: '13px' } }} />
+      <Toaster position="top-right" toastOptions={toastStyle} />
 
-      {/* Top bar */}
       <header className={styles.topBar}>
         <div className={styles.appTitle}>
           <Key size={16} />
@@ -328,10 +373,8 @@ export default function LockerPage() {
         </button>
       </header>
 
-      {/* Main grid */}
       <div className={styles.mainGrid}>
 
-        {/* ── Sidebar ── */}
         <aside className={styles.sidebar}>
           <p className={styles.sideLabel}>Storage</p>
           <div className={styles.folderActive}>
@@ -341,7 +384,6 @@ export default function LockerPage() {
           </div>
         </aside>
 
-        {/* ── Add form ── */}
         <section className={styles.formPane}>
           <h3 className={styles.paneTitle}>Add Credential</h3>
           <form onSubmit={handleAdd} className={styles.addForm}>
@@ -381,7 +423,6 @@ export default function LockerPage() {
           </form>
         </section>
 
-        {/* ── Vault entries ── */}
         <section className={styles.vaultPane}>
           <div className={styles.vaultHeader}>
             <h3 className={styles.paneTitle}>Stored Credentials</h3>
@@ -390,7 +431,10 @@ export default function LockerPage() {
 
           <div className={styles.entryList}>
             {items.map(item => (
-              <div key={item.id} className={`${styles.entryCard} ${visibleId === item.id ? styles.entryCardActive : ''}`}>
+              <div
+                key={item.id}
+                className={`${styles.entryCard} ${visibleId === item.id ? styles.entryCardActive : ''}`}
+              >
                 <div className={styles.entryTop}>
                   <span className={styles.entryPlatform}>{item.platform}</span>
                   {visibleId === item.id
