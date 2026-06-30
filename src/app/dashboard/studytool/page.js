@@ -22,6 +22,18 @@ const POMODORO_PRESETS = [
 const MOODS = ["😊 Happy","😤 Focused","😴 Tired","😰 Stressed","🔥 Motivated","🧘 Calm","😐 Neutral"];
 const SUBJECT_COLORS = ["#4361ee","#f77f00","#e63946","#0f9d6e","#9b5de5","#f15bb5","#00bbf9","#ffd166","#06d6a0","#118ab2","#e76f51","#2a9d8f"];
 
+const ACHIEVEMENTS_LIST = [
+  { id: "first_session", icon: "🎉", title: "First Step",        description: "Complete your first study session", check: (s) => s.totalSessions >= 1 },
+  { id: "streak_3",      icon: "🔥", title: "3-Day Streak",      description: "Study 3 days in a row",              check: (s) => s.streak >= 3 },
+  { id: "streak_7",      icon: "🚀", title: "Week Warrior",      description: "Study 7 days in a row",              check: (s) => s.streak >= 7 },
+  { id: "streak_30",     icon: "👑", title: "Monthly Master",    description: "Study 30 days in a row",             check: (s) => s.streak >= 30 },
+  { id: "hours_10",      icon: "⏱️", title: "10 Hours Logged",   description: "Study for a total of 10 hours",      check: (s) => s.totalMins >= 600 },
+  { id: "hours_50",      icon: "📚", title: "50 Hours Logged",   description: "Study for a total of 50 hours",      check: (s) => s.totalMins >= 3000 },
+  { id: "hours_100",     icon: "🏅", title: "Century Club",      description: "Study for a total of 100 hours",     check: (s) => s.totalMins >= 6000 },
+  { id: "sessions_25",   icon: "📈", title: "Consistent Learner",description: "Complete 25 study sessions",         check: (s) => s.totalSessions >= 25 },
+  { id: "accuracy_90",   icon: "🎯", title: "Sharp Shooter",     description: "Maintain 90%+ avg accuracy (5+ sessions)", check: (s) => s.totalSessions >= 5 && s.avgAccuracy >= 90 },
+];
+
 // ─── AUTO NEXT-YEAR TARGET ────────────────────────────────────────────────────
 const getNextYearTarget = () => {
   const now = new Date();
@@ -157,6 +169,7 @@ export default function UltraStudyHub() {
   const [habitFreq, setHabitFreq] = useState("daily");
 
   const fileInputRef = useRef(null);
+  const achievementsRef = useRef([]);
 
   const currentDayName = DAYS[new Date().getDay()];
   const allSubjects = [...DEFAULT_SUBJECTS, ...customSubjects];
@@ -225,7 +238,7 @@ export default function UltraStudyHub() {
     listenCol("study_achievements", setAchievements);
     listenCol("study_notes", setSavedNotes);
     listenCol("study_habits", setHabits);
-    listenCol("study_syllabus", setSyllabusItems);   // ← NEW
+    listenCol("study_syllabus", setSyllabusItems);
     const qSess = query(collection(db, "study_sessions"), where("userId", "==", uid));
     unsubs.push(onSnapshot(qSess, snap => {
       const sessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -234,6 +247,10 @@ export default function UltraStudyHub() {
     }));
     return () => unsubs.forEach(u => u());
   }, [user]);
+
+  useEffect(() => {
+    achievementsRef.current = achievements;
+  }, [achievements]);
 
   useEffect(() => {
     const check = () => {
@@ -538,6 +555,27 @@ export default function UltraStudyHub() {
     setSecondsElapsed(0); setSessionNote(""); setSessionTags("");
   };
 
+  const checkAchievements = async (stats) => {
+    if (!user) return;
+    for (const a of ACHIEVEMENTS_LIST) {
+      if (!a.check(stats)) continue;
+      const alreadyUnlocked = achievementsRef.current.some(ex => ex.achievementId === a.id);
+      if (alreadyUnlocked) continue;
+      try {
+        await addDoc(collection(db, "study_achievements"), {
+          userId: user.uid,
+          achievementId: a.id,
+          icon: a.icon,
+          title: a.title,
+          description: a.description,
+          createdAt: serverTimestamp(),
+        });
+        showToast(`🏆 Achievement Unlocked: ${a.title}!`);
+        await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "unlock_achievement", resourceName: a.title });
+      } catch (e) { console.error(e); }
+    }
+  };
+
   const calculateStats = (sessions) => {
     const today = new Date();
     const last7 = [];
@@ -574,18 +612,38 @@ export default function UltraStudyHub() {
     Object.keys(sm).forEach(k => { sm[k].avgAccuracy = Math.round(sm[k].totalAcc / sm[k].sessions); });
     setSubjectStats(sm);
 
+    // ─── STREAK + ACHIEVEMENTS (FIXED) ──────────────────────────────────────────
     const sorted = sessions.filter(s => s.createdAt).sort((a, b) => {
       const da = a.createdAt.toDate?.() || new Date(a.createdAt);
       const db2 = b.createdAt.toDate?.() || new Date(b.createdAt);
       return db2 - da;
     });
-    if (!sorted.length) { setStreak(0); return; }
-    let st = 1, last = sorted[0].createdAt.toDate?.() || new Date(sorted[0].createdAt);
-    for (let i = 1; i < sorted.length; i++) {
-      const cur = sorted[i].createdAt.toDate?.() || new Date(sorted[i].createdAt);
-      if (Math.floor((last - cur) / 86400000) === 1) { st++; last = cur; } else break;
+
+    let finalStreak = 0;
+    if (sorted.length) {
+      const oneDay = 86400000;
+      const uniqueDayTimestamps = [...new Set(sorted.map(s => {
+        const d = s.createdAt.toDate?.() || new Date(s.createdAt);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      }))].sort((a, b) => b - a);
+
+      const todayMid = new Date();
+      todayMid.setHours(0, 0, 0, 0);
+      const todayTime = todayMid.getTime();
+
+      if (uniqueDayTimestamps[0] === todayTime || uniqueDayTimestamps[0] === todayTime - oneDay) {
+        finalStreak = 1;
+        for (let i = 1; i < uniqueDayTimestamps.length; i++) {
+          if (uniqueDayTimestamps[i - 1] - uniqueDayTimestamps[i] === oneDay) finalStreak++;
+          else break;
+        }
+      }
     }
-    setStreak(st);
+    setStreak(finalStreak);
+
+    const totalMins = sessions.reduce((a, s) => a + (s.actualTime || 0), 0);
+    const avgAcc = sessions.length ? Math.round(sessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / sessions.length) : 0;
+    checkAchievements({ streak: finalStreak, totalMins, totalSessions: sessions.length, avgAccuracy: avgAcc });
   };
 
   // ─── EXAM CRUD ────────────────────────────────────────────────────────────
@@ -1696,7 +1754,6 @@ export default function UltraStudyHub() {
                       key={item.id}
                       className={`${styles.syllabusChapterCard} ${item.status === "done" ? styles.scDone : ""} ${item.status === "in_progress" ? styles.scInProgress : ""}`}
                     >
-                      {/* Cycle status on click */}
                       <button
                         className={styles.scStatusBtn}
                         title="Click to cycle: Pending → In Progress → Done → Pending"
