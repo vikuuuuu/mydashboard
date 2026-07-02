@@ -1033,7 +1033,7 @@ export default function UltraStudyHub() {
       const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
       return d >= startOfWeek;
     }).reduce((a, s) => a + (s.actualTime || 0), 0);
-    const target = 300;
+    const target = 3500;
     return {
       target,
       current: minsThisWeek,
