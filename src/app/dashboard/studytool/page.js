@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./studytool.module.css";
 import {
   addDoc, collection, deleteDoc, doc, onSnapshot,
   query, serverTimestamp, where, updateDoc, getDocs,
+  setDoc, writeBatch, increment,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { logToolUsage } from "@/lib/firestore";
@@ -22,23 +23,82 @@ const POMODORO_PRESETS = [
 const MOODS = ["😊 Happy","😤 Focused","😴 Tired","😰 Stressed","🔥 Motivated","🧘 Calm","😐 Neutral"];
 const SUBJECT_COLORS = ["#4361ee","#f77f00","#e63946","#0f9d6e","#9b5de5","#f15bb5","#00bbf9","#ffd166","#06d6a0","#118ab2","#e76f51","#2a9d8f"];
 
+// ─── ACHIEVEMENTS (expanded with new tiers) ───────────────────────────────
+// NOTE: `check(s)` receives a combined stats object — see `combinedStats` useMemo below.
+// Unlocking now writes to a DETERMINISTIC Firestore doc id (`${uid}_${achievementId}`),
+// which makes the whole system idempotent — even if this function runs twice in a race
+// (e.g. Firestore's optimistic local snapshot firing before the achievements listener
+// catches up), the second write just overwrites the same doc instead of creating a duplicate.
 const ACHIEVEMENTS_LIST = [
-  { id: "first_session", icon: "🎉", title: "First Step",        description: "Complete your first study session", check: (s) => s.totalSessions >= 1 },
-  { id: "streak_3",      icon: "🔥", title: "3-Day Streak",      description: "Study 3 days in a row",              check: (s) => s.streak >= 3 },
-  { id: "streak_7",      icon: "🚀", title: "Week Warrior",      description: "Study 7 days in a row",              check: (s) => s.streak >= 7 },
-  { id: "streak_30",     icon: "👑", title: "Monthly Master",    description: "Study 30 days in a row",             check: (s) => s.streak >= 30 },
-  { id: "hours_10",      icon: "⏱️", title: "10 Hours Logged",   description: "Study for a total of 10 hours",      check: (s) => s.totalMins >= 600 },
-  { id: "hours_50",      icon: "📚", title: "50 Hours Logged",   description: "Study for a total of 50 hours",      check: (s) => s.totalMins >= 3000 },
-  { id: "hours_100",     icon: "🏅", title: "Century Club",      description: "Study for a total of 100 hours",     check: (s) => s.totalMins >= 6000 },
-  { id: "sessions_25",   icon: "📈", title: "Consistent Learner",description: "Complete 25 study sessions",         check: (s) => s.totalSessions >= 25 },
-  { id: "accuracy_90",   icon: "🎯", title: "Sharp Shooter",     description: "Maintain 90%+ avg accuracy (5+ sessions)", check: (s) => s.totalSessions >= 5 && s.avgAccuracy >= 90 },
+  { id: "first_session", icon: "🎉", title: "First Step",         description: "Complete your first study session",        check: (s) => s.totalSessions >= 1 },
+  { id: "streak_3",      icon: "🔥", title: "3-Day Streak",       description: "Study 3 days in a row",                    check: (s) => s.streak >= 3 },
+  { id: "streak_7",      icon: "🚀", title: "Week Warrior",       description: "Study 7 days in a row",                    check: (s) => s.streak >= 7 },
+  { id: "streak_30",     icon: "👑", title: "Monthly Master",     description: "Study 30 days in a row",                   check: (s) => s.streak >= 30 },
+  { id: "streak_60",     icon: "💎", title: "Unstoppable",        description: "Study 60 days in a row",                   check: (s) => s.streak >= 60 },
+  { id: "hours_10",      icon: "⏱️", title: "10 Hours Logged",    description: "Study for a total of 10 hours",            check: (s) => s.totalMins >= 600 },
+  { id: "hours_50",      icon: "📚", title: "50 Hours Logged",    description: "Study for a total of 50 hours",            check: (s) => s.totalMins >= 3000 },
+  { id: "hours_100",     icon: "🏅", title: "Century Club",       description: "Study for a total of 100 hours",           check: (s) => s.totalMins >= 6000 },
+  { id: "hours_200",     icon: "🌟", title: "200 Club",           description: "Study for a total of 200 hours",           check: (s) => s.totalMins >= 12000 },
+  { id: "sessions_25",   icon: "📈", title: "Consistent Learner", description: "Complete 25 study sessions",               check: (s) => s.totalSessions >= 25 },
+  { id: "sessions_100",  icon: "💯", title: "Session Century",    description: "Complete 100 study sessions",              check: (s) => s.totalSessions >= 100 },
+  { id: "accuracy_90",   icon: "🎯", title: "Sharp Shooter",      description: "Maintain 90%+ avg accuracy (5+ sessions)", check: (s) => s.totalSessions >= 5 && s.avgAccuracy >= 90 },
+  { id: "pomodoro_10",   icon: "🍅", title: "Pomodoro Starter",   description: "Complete 10 Pomodoro focus cycles",        check: (s) => s.pomodoroTotal >= 10 },
+  { id: "pomodoro_50",   icon: "🍅", title: "Pomodoro Pro",       description: "Complete 50 Pomodoro focus cycles",        check: (s) => s.pomodoroTotal >= 50 },
+  { id: "syllabus_10",   icon: "📘", title: "Chapter Crusher",    description: "Complete 10 syllabus chapters",            check: (s) => s.syllabusDone >= 10 },
+  { id: "syllabus_50",   icon: "📗", title: "Syllabus Slayer",    description: "Complete 50 syllabus chapters",            check: (s) => s.syllabusDone >= 50 },
+  { id: "todo_50",       icon: "✅", title: "Task Titan",         description: "Complete 50 todos",                        check: (s) => s.todosDone >= 50 },
+  { id: "habit_30",      icon: "🌱", title: "Habit Builder",      description: "Log 30 habit check-ins",                   check: (s) => s.habitCheckins >= 30 },
+  { id: "early_bird",    icon: "🌅", title: "Early Bird",         description: "Complete a study session before 6 AM",     check: (s) => s.earlyBird },
+  { id: "night_owl",     icon: "🦉", title: "Night Owl",          description: "Complete a study session after 11 PM",     check: (s) => s.nightOwl },
 ];
+
+// Maps achievement id -> [currentValue, targetValue] using combinedStats, used to render
+// progress bars for the "Up Next" milestone roadmap.
+const ACHIEVEMENT_PROGRESS = {
+  first_session: (s) => [s.totalSessions, 1],
+  streak_3:      (s) => [s.streak, 3],
+  streak_7:      (s) => [s.streak, 7],
+  streak_30:     (s) => [s.streak, 30],
+  streak_60:     (s) => [s.streak, 60],
+  hours_10:      (s) => [s.totalMins, 600],
+  hours_50:      (s) => [s.totalMins, 3000],
+  hours_100:     (s) => [s.totalMins, 6000],
+  hours_200:     (s) => [s.totalMins, 12000],
+  sessions_25:   (s) => [s.totalSessions, 25],
+  sessions_100:  (s) => [s.totalSessions, 100],
+  accuracy_90:   (s) => [s.avgAccuracy, 90],
+  pomodoro_10:   (s) => [s.pomodoroTotal, 10],
+  pomodoro_50:   (s) => [s.pomodoroTotal, 50],
+  syllabus_10:   (s) => [s.syllabusDone, 10],
+  syllabus_50:   (s) => [s.syllabusDone, 50],
+  todo_50:       (s) => [s.todosDone, 50],
+  habit_30:      (s) => [s.habitCheckins, 30],
+  early_bird:    (s) => [s.earlyBird ? 1 : 0, 1],
+  night_owl:     (s) => [s.nightOwl ? 1 : 0, 1],
+};
+
+// ─── XP / LEVEL SYSTEM ─────────────────────────────────────────────────────
+const LEVEL_THRESHOLDS = [0, 100, 250, 500, 900, 1400, 2000, 2800, 3800, 5000];
+const LEVEL_TITLES = ["Novice", "Learner", "Scholar", "Achiever", "Focused Mind", "Consistent Grinder", "Knowledge Seeker", "Study Master", "Elite Learner", "Legend"];
+const LEVEL_STEP_AFTER_MAX = 1500;
 
 // ─── AUTO NEXT-YEAR TARGET ────────────────────────────────────────────────────
 const getNextYearTarget = () => {
   const now = new Date();
   const nextYear = now.getFullYear() + 1;
   return new Date(`${nextYear}-01-01T00:00:00`);
+};
+
+const getStartOfWeek = (d = new Date()) => {
+  const s = new Date(d);
+  s.setDate(s.getDate() - s.getDay());
+  s.setHours(0, 0, 0, 0);
+  return s;
+};
+
+const getWeekKey = (d = new Date()) => {
+  const start = getStartOfWeek(d);
+  return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
 };
 
 export default function UltraStudyHub() {
@@ -96,6 +156,7 @@ export default function UltraStudyHub() {
   const [pomodoroSeconds, setPomodoroSeconds] = useState(25 * 60);
   const [customPomWork, setCustomPomWork] = useState(25);
   const [customPomBreak, setCustomPomBreak] = useState(5);
+  const [pomodoroTotal, setPomodoroTotal] = useState(0); // lifetime completed cycles, persisted in Firestore
 
   const pomodoroStartTimestamp = useRef(null);
   const pomodoroBaseSeconds = useRef(25 * 60);
@@ -170,9 +231,10 @@ export default function UltraStudyHub() {
 
   const fileInputRef = useRef(null);
   const achievementsRef = useRef([]);
+  const unlockingRef = useRef(new Set()); // in-flight guard to prevent duplicate toasts during race windows
 
   const currentDayName = DAYS[new Date().getDay()];
-  const allSubjects = [...DEFAULT_SUBJECTS, ...customSubjects];
+  const allSubjects = useMemo(() => [...DEFAULT_SUBJECTS, ...customSubjects], [customSubjects]);
 
   const showToast = useCallback((msg, type = "success") => {
     setToastMsg({ msg, type });
@@ -208,7 +270,7 @@ export default function UltraStudyHub() {
       setUser(u);
       setDarkMode(localStorage.getItem("studyDarkMode") === "true");
       loadCustomSubjects(u.uid);
-      logToolUsage({ userId: u.uid, tool: "Study Hub", action: "visit", metadata: { version: "4.2" } });
+      logToolUsage({ userId: u.uid, tool: "Study Hub", action: "visit", metadata: { version: "5.0" } });
     });
     return () => unsub();
   }, [router]);
@@ -244,6 +306,10 @@ export default function UltraStudyHub() {
       const sessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setStudySessions(sessions);
       calculateStats(sessions);
+    }));
+    // Lifetime pomodoro cycle counter — single doc per user, not a collection.
+    unsubs.push(onSnapshot(doc(db, "study_pomodoro_stats", uid), snap => {
+      setPomodoroTotal(snap.exists() ? (snap.data().totalCompleted || 0) : 0);
     }));
     return () => unsubs.forEach(u => u());
   }, [user]);
@@ -300,7 +366,17 @@ export default function UltraStudyHub() {
         if (remaining <= 0) {
           const next = pomodoroPhase === "work" ? "break" : "work";
           setPomodoroPhase(next);
-          if (next === "break") setPomodoroCount(c => c + 1);
+          if (next === "break") {
+            setPomodoroCount(c => c + 1);
+            // Persist lifetime pomodoro completions for the Pomodoro achievements.
+            if (user) {
+              setDoc(
+                doc(db, "study_pomodoro_stats", user.uid),
+                { userId: user.uid, totalCompleted: increment(1), updatedAt: serverTimestamp() },
+                { merge: true }
+              ).catch(() => {});
+            }
+          }
           showToast(
             next === "break" ? `☕ Break time! ${pomodoroPreset.short} min` : "🎯 Focus time! Let's go!",
             next === "break" ? "info" : "success"
@@ -318,7 +394,7 @@ export default function UltraStudyHub() {
       pomodoroBaseSeconds.current = pomodoroSeconds;
     }
     return () => clearInterval(pomodoroRef.current);
-  }, [isPomodoroMode, pomodoroPhase, pomodoroPreset, showToast]);
+  }, [isPomodoroMode, pomodoroPhase, pomodoroPreset, showToast, user]);
 
   // ─── Page Visibility API ──────────────────────────────────────────────────
   useEffect(() => {
@@ -382,11 +458,11 @@ export default function UltraStudyHub() {
     setCustomSubjects(updated); saveCustomSubjects(updated);
   };
 
-  const getSubjectColor = (sub) => {
+  const getSubjectColor = useCallback((sub) => {
     let hash = 0;
     for (let i = 0; i < (sub || "").length; i++) hash = (sub.charCodeAt(i) + ((hash << 5) - hash));
     return SUBJECT_COLORS[Math.abs(hash) % SUBJECT_COLORS.length];
-  };
+  }, []);
 
   const isTaskActive = useCallback((task) => {
     const now = new Date();
@@ -424,12 +500,12 @@ export default function UltraStudyHub() {
     if (!subject || !startTime || !endTime || !user) { showToast("Please fill all required fields!", "error"); return; }
     if (startTime >= endTime) { showToast("End time must be after start time!", "error"); return; }
     const daysToAdd = repeatDays.length > 0 ? repeatDays : [day];
-    for (const d of daysToAdd) {
-      await addDoc(collection(db, "study_tasks"), {
-        userId: user.uid, subject, startTime, endTime, taskType, day: d,
-        color: taskColorInput || getSubjectColor(subject), notes: taskNoteInput, createdAt: serverTimestamp(),
-      });
-    }
+    // Fire the writes in parallel instead of sequentially awaiting each addDoc — same
+    // Firestore cost, noticeably faster when repeating a slot across many days.
+    await Promise.all(daysToAdd.map(d => addDoc(collection(db, "study_tasks"), {
+      userId: user.uid, subject, startTime, endTime, taskType, day: d,
+      color: taskColorInput || getSubjectColor(subject), notes: taskNoteInput, createdAt: serverTimestamp(),
+    })));
     await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_task", resourceName: subject, metadata: { days: daysToAdd, taskType } });
     setSubject(""); setStartTime(""); setEndTime(""); setTaskNoteInput(""); setRepeatDays([]);
     showToast(`Slot added${daysToAdd.length > 1 ? ` for ${daysToAdd.length} days` : ""} ✅`);
@@ -459,7 +535,7 @@ export default function UltraStudyHub() {
 
   const exportTimetable = (format = "json") => {
     if (format === "json") {
-      const data = { tasks, customSubjects, exportedAt: new Date().toISOString(), version: "4.2" };
+      const data = { tasks, customSubjects, exportedAt: new Date().toISOString(), version: "5.0" };
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
       a.download = `timetable-${new Date().toISOString().split("T")[0]}.json`;
@@ -476,45 +552,61 @@ export default function UltraStudyHub() {
     logToolUsage({ userId: user?.uid, tool: "Study Hub", action: "export_timetable", metadata: { format } });
   };
 
+  // Firestore batched writes have a 500-operation limit per batch — chunk larger imports.
+  const BATCH_CHUNK_SIZE = 400;
+  const commitTaskBatch = async (taskDocs) => {
+    let count = 0;
+    for (let i = 0; i < taskDocs.length; i += BATCH_CHUNK_SIZE) {
+      const chunk = taskDocs.slice(i, i + BATCH_CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(data => {
+        const ref = doc(collection(db, "study_tasks"));
+        batch.set(ref, data);
+      });
+      await batch.commit();
+      count += chunk.length;
+    }
+    return count;
+  };
+
   const importTimetable = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const isCSV = file.name.endsWith(".csv");
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      let count = 0;
       try {
+        const taskDocs = [];
         if (isCSV) {
           const lines = ev.target.result.split("\n").slice(1);
           for (const line of lines) {
             const parts = line.split(",").map(s => s?.replace(/"/g, "").trim());
             const [d, sub, st, et, tt, col, notes] = parts;
             if (!d || !sub || !st || !et) continue;
-            await addDoc(collection(db, "study_tasks"), {
+            taskDocs.push({
               userId: user.uid, subject: sub, startTime: st, endTime: et,
               taskType: tt || "Class", day: d, color: col || getSubjectColor(sub),
               notes: notes || "", createdAt: serverTimestamp(),
             });
-            count++;
           }
         } else {
           const data = JSON.parse(ev.target.result);
           if (!data.tasks) { showToast("Invalid file format!", "error"); return; }
           for (const t of data.tasks) {
-            await addDoc(collection(db, "study_tasks"), {
+            taskDocs.push({
               userId: user.uid, subject: t.subject || "Untitled",
               startTime: t.startTime || "09:00", endTime: t.endTime || "10:00",
               taskType: t.taskType || "Class", day: t.day || "Monday",
               color: t.color || getSubjectColor(t.subject || ""),
               notes: t.notes || "", createdAt: serverTimestamp(),
             });
-            count++;
           }
           if (data.customSubjects?.length) {
             const merged = [...new Set([...customSubjects, ...data.customSubjects])];
             setCustomSubjects(merged); saveCustomSubjects(merged);
           }
         }
+        const count = await commitTaskBatch(taskDocs);
         await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "import_timetable", metadata: { count, format: isCSV ? "csv" : "json" } });
         showToast(`✅ ${count} slots imported!`);
       } catch (err) { showToast("❌ Import failed!", "error"); }
@@ -555,24 +647,39 @@ export default function UltraStudyHub() {
     setSecondsElapsed(0); setSessionNote(""); setSessionTags("");
   };
 
+  // ─── ACHIEVEMENT UNLOCKING (dedupe-safe) ──────────────────────────────────
+  // Deterministic doc ID = idempotent write. Even if this fires twice in a race window
+  // (Firestore's local-then-server onSnapshot double-fire), both writes target the same
+  // document, so the collection can never end up with two rows for the same achievement.
+  // `unlockingRef` additionally prevents a duplicate toast/log while the first write is in flight.
+  const unlockAchievement = async (a, extra = {}) => {
+    if (!user) return;
+    const alreadyUnlocked = achievementsRef.current.some(ex => ex.achievementId === a.id);
+    if (alreadyUnlocked || unlockingRef.current.has(a.id)) return;
+    unlockingRef.current.add(a.id);
+    try {
+      await setDoc(doc(db, "study_achievements", `${user.uid}_${a.id}`), {
+        userId: user.uid,
+        achievementId: a.id,
+        icon: a.icon,
+        title: a.title,
+        description: a.description,
+        createdAt: serverTimestamp(),
+        ...extra,
+      });
+      showToast(`🏆 Achievement Unlocked: ${a.title}!`);
+      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "unlock_achievement", resourceName: a.title });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      unlockingRef.current.delete(a.id);
+    }
+  };
+
   const checkAchievements = async (stats) => {
     if (!user) return;
     for (const a of ACHIEVEMENTS_LIST) {
-      if (!a.check(stats)) continue;
-      const alreadyUnlocked = achievementsRef.current.some(ex => ex.achievementId === a.id);
-      if (alreadyUnlocked) continue;
-      try {
-        await addDoc(collection(db, "study_achievements"), {
-          userId: user.uid,
-          achievementId: a.id,
-          icon: a.icon,
-          title: a.title,
-          description: a.description,
-          createdAt: serverTimestamp(),
-        });
-        showToast(`🏆 Achievement Unlocked: ${a.title}!`);
-        await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "unlock_achievement", resourceName: a.title });
-      } catch (e) { console.error(e); }
+      if (a.check(stats)) await unlockAchievement(a);
     }
   };
 
@@ -612,7 +719,7 @@ export default function UltraStudyHub() {
     Object.keys(sm).forEach(k => { sm[k].avgAccuracy = Math.round(sm[k].totalAcc / sm[k].sessions); });
     setSubjectStats(sm);
 
-    // ─── STREAK + ACHIEVEMENTS (FIXED) ──────────────────────────────────────────
+    // ─── STREAK ──────────────────────────────────────────────────────────
     const sorted = sessions.filter(s => s.createdAt).sort((a, b) => {
       const da = a.createdAt.toDate?.() || new Date(a.createdAt);
       const db2 = b.createdAt.toDate?.() || new Date(b.createdAt);
@@ -640,10 +747,9 @@ export default function UltraStudyHub() {
       }
     }
     setStreak(finalStreak);
-
-    const totalMins = sessions.reduce((a, s) => a + (s.actualTime || 0), 0);
-    const avgAcc = sessions.length ? Math.round(sessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / sessions.length) : 0;
-    checkAchievements({ streak: finalStreak, totalMins, totalSessions: sessions.length, avgAccuracy: avgAcc });
+    // NOTE: achievement checking has been moved OUT of here — it now runs from a single
+    // `combinedStats` useEffect below, so it reacts consistently to sessions, todos,
+    // syllabus, habits AND pomodoro data together instead of only sessions.
   };
 
   // ─── EXAM CRUD ────────────────────────────────────────────────────────────
@@ -833,50 +939,198 @@ export default function UltraStudyHub() {
     } catch (e) { showToast("Error deleting habit", "error"); }
   };
 
-  // ─── COMPUTED VALUES ──────────────────────────────────────────────────────
-  const totalStudiedMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
-  const avgAccuracy = studySessions.length ? Math.round(studySessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / studySessions.length) : 0;
-  const todayStudied = studySessions.filter(s => {
+  // ══════════════════════════════════════════════════════════════════════
+  // ─── GAMIFICATION ENGINE: combined stats, XP/Level, heatmap, weekly challenge ───
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Single source of truth for achievement checks — combines ALL relevant collections,
+  // not just study_sessions, so achievements from todos/syllabus/habits/pomodoro all work.
+  const combinedStats = useMemo(() => {
+    const totalMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
+    const avgAccuracy = studySessions.length
+      ? Math.round(studySessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / studySessions.length)
+      : 0;
+    const syllabusDone = syllabusItems.filter(s => s.status === "done").length;
+    const todosDone = todos.filter(t => t.completed).length;
+    const habitCheckins = habits.reduce((a, h) => a + (h.completedDates?.length || 0), 0);
+    const earlyBird = studySessions.some(s => {
+      const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
+      return d.getHours() < 6;
+    });
+    const nightOwl = studySessions.some(s => {
+      const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
+      return d.getHours() >= 23;
+    });
+    return {
+      streak, totalMins, totalSessions: studySessions.length, avgAccuracy,
+      syllabusDone, todosDone, habitCheckins, pomodoroTotal, earlyBird, nightOwl,
+    };
+  }, [studySessions, syllabusItems, todos, habits, streak, pomodoroTotal]);
+
+  useEffect(() => {
+    if (!user) return;
+    checkAchievements(combinedStats);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combinedStats, user]);
+
+  // XP: minutes studied + weighted bonuses for completed todos/chapters/habits/achievements.
+  const totalXP = useMemo(() => {
+    const totalStudiedMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
+    const studyXP = totalStudiedMins * 1;
+    const todoXP = todos.filter(t => t.completed).length * 5;
+    const syllabusXP = syllabusItems.filter(s => s.status === "done").length * 15;
+    const habitXP = habits.reduce((a, h) => a + (h.completedDates?.length || 0), 0) * 2;
+    const achievementXP = achievements.length * 25;
+    return studyXP + todoXP + syllabusXP + habitXP + achievementXP;
+  }, [studySessions, todos, syllabusItems, habits, achievements]);
+
+  const levelInfo = useMemo(() => {
+    let level = 1;
+    for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
+      if (totalXP >= LEVEL_THRESHOLDS[i]) level = i + 1;
+    }
+    const extraLevels = totalXP > 5000 ? Math.floor((totalXP - 5000) / LEVEL_STEP_AFTER_MAX) : 0;
+    level += extraLevels;
+    const currentThreshold = level <= LEVEL_THRESHOLDS.length
+      ? LEVEL_THRESHOLDS[level - 1]
+      : 5000 + (level - LEVEL_THRESHOLDS.length) * LEVEL_STEP_AFTER_MAX;
+    const nextThreshold = level < LEVEL_THRESHOLDS.length ? LEVEL_THRESHOLDS[level] : currentThreshold + LEVEL_STEP_AFTER_MAX;
+    const pct = nextThreshold > currentThreshold
+      ? Math.min(Math.round(((totalXP - currentThreshold) / (nextThreshold - currentThreshold)) * 100), 100)
+      : 100;
+    const title = level <= LEVEL_TITLES.length ? LEVEL_TITLES[level - 1] : `Legend +${level - LEVEL_TITLES.length}`;
+    return { level, title, pct, xpToNext: Math.max(nextThreshold - totalXP, 0), currentThreshold, nextThreshold };
+  }, [totalXP]);
+
+  // Last 12 weeks of daily study minutes, GitHub-style.
+  const heatmapData = useMemo(() => {
+    const days = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    for (let i = 83; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const ds = d.toDateString();
+      const mins = studySessions.filter(s => {
+        const sd = s.createdAt?.toDate?.() || new Date(s.createdAt);
+        return sd.toDateString() === ds;
+      }).reduce((a, s) => a + (s.actualTime || 0), 0);
+      days.push({ date: d, mins });
+    }
+    return days;
+  }, [studySessions]);
+
+  const heatColor = (mins) => {
+    if (mins <= 0) return "rgba(120,120,140,0.14)";
+    if (mins < 30) return "#a7f3d0";
+    if (mins < 60) return "#34d399";
+    if (mins < 120) return "#10b981";
+    return "#047857";
+  };
+
+  // Auto-tracked weekly challenge: study 300+ min this week.
+  const weeklyChallenge = useMemo(() => {
+    const startOfWeek = getStartOfWeek();
+    const minsThisWeek = studySessions.filter(s => {
+      const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
+      return d >= startOfWeek;
+    }).reduce((a, s) => a + (s.actualTime || 0), 0);
+    const target = 300;
+    return {
+      target,
+      current: minsThisWeek,
+      pct: Math.min(Math.round((minsThisWeek / target) * 100), 100),
+      weekKey: getWeekKey(),
+      completed: minsThisWeek >= target,
+    };
+  }, [studySessions]);
+
+  useEffect(() => {
+    if (!user || !weeklyChallenge.completed) return;
+    const achievementId = `weekly_${weeklyChallenge.weekKey}`;
+    const already = achievementsRef.current.some(a => a.achievementId === achievementId) || unlockingRef.current.has(achievementId);
+    if (already) return;
+    unlockingRef.current.add(achievementId);
+    (async () => {
+      try {
+        await setDoc(doc(db, "study_achievements", `${user.uid}_${achievementId}`), {
+          userId: user.uid,
+          achievementId,
+          icon: "🏁",
+          title: "Weekly Challenge Complete",
+          description: `Studied ${weeklyChallenge.target}+ minutes this week`,
+          createdAt: serverTimestamp(),
+        });
+        showToast("🏁 Weekly Challenge Complete! Bonus XP earned!");
+      } catch (e) {
+        console.error(e);
+      } finally {
+        unlockingRef.current.delete(achievementId);
+      }
+    })();
+  }, [weeklyChallenge.completed, weeklyChallenge.weekKey, user]);
+
+  // "Up Next" milestone roadmap — nearest incomplete achievements with live progress bars.
+  const upNextAchievements = useMemo(() => {
+    const unlockedIds = new Set(achievements.map(a => a.achievementId));
+    return ACHIEVEMENTS_LIST
+      .filter(a => !unlockedIds.has(a.id))
+      .map(a => {
+        const progressFn = ACHIEVEMENT_PROGRESS[a.id];
+        const [current, target] = progressFn ? progressFn(combinedStats) : [0, 1];
+        return { ...a, current, target, pct: Math.min(Math.round((current / target) * 100), 99) };
+      })
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 4);
+  }, [achievements, combinedStats]);
+
+  // ─── COMPUTED VALUES (memoized — these previously recalculated on every 500ms timer tick) ──
+  const totalStudiedMins = useMemo(() => studySessions.reduce((a, s) => a + (s.actualTime || 0), 0), [studySessions]);
+  const avgAccuracy = useMemo(() => (
+    studySessions.length ? Math.round(studySessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / studySessions.length) : 0
+  ), [studySessions]);
+  const todayStudied = useMemo(() => studySessions.filter(s => {
     const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
     return d.toDateString() === new Date().toDateString();
-  }).reduce((a, s) => a + (s.actualTime || 0), 0);
+  }).reduce((a, s) => a + (s.actualTime || 0), 0), [studySessions]);
 
-  const filteredTasks = tasks.filter(t => {
+  const filteredTasks = useMemo(() => tasks.filter(t => {
     const matchDay = filterDay === "today" ? t.day === currentDayName : filterDay === "week" ? true : t.day === filterDay;
     const matchSearch = !timetableSearch || t.subject.toLowerCase().includes(timetableSearch.toLowerCase());
     const matchType = timetableTypeFilter === "all" || t.taskType === timetableTypeFilter;
     return matchDay && matchSearch && matchType;
-  }).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }).sort((a, b) => a.startTime.localeCompare(b.startTime)), [tasks, filterDay, timetableSearch, timetableTypeFilter, currentDayName]);
 
-  const filteredNotes = savedNotes.filter(n => {
+  const filteredNotes = useMemo(() => savedNotes.filter(n => {
     const matchSearch = !noteSearch || n.title?.toLowerCase().includes(noteSearch.toLowerCase()) || n.content?.toLowerCase().includes(noteSearch.toLowerCase());
     const matchTag = !noteTagFilter || n.tag === noteTagFilter;
     return matchSearch && matchTag;
-  });
+  }), [savedNotes, noteSearch, noteTagFilter]);
 
-  const filteredTodos = todos.filter(t => {
+  const filteredTodos = useMemo(() => todos.filter(t => {
     if (todoFilter === "pending") return !t.completed;
     if (todoFilter === "done") return t.completed;
     return !todoSearch || t.text.toLowerCase().includes(todoSearch.toLowerCase());
-  }).sort((a, b) => ({ High: 0, Medium: 1, Low: 2 }[a.priority || "Medium"] - { High: 0, Medium: 1, Low: 2 }[b.priority || "Medium"]));
+  }).sort((a, b) => ({ High: 0, Medium: 1, Low: 2 }[a.priority || "Medium"] - { High: 0, Medium: 1, Low: 2 }[b.priority || "Medium"])),
+  [todos, todoFilter, todoSearch]);
 
-  const allNoteTags = [...new Set(savedNotes.map(n => n.tag).filter(Boolean))];
-  const allCardSubjects = [...new Set(flashcards.map(f => f.subject).filter(Boolean))];
-  const filteredFlashcards = cardSubjectFilter === "all" ? flashcards : flashcards.filter(f => f.subject === cardSubjectFilter);
-  const avgExamDays = getExamAvgDaysRemaining();
-  const upcomingExams = exams.filter(e => new Date(e.examDate) > new Date());
+  const allNoteTags = useMemo(() => [...new Set(savedNotes.map(n => n.tag).filter(Boolean))], [savedNotes]);
+  const allCardSubjects = useMemo(() => [...new Set(flashcards.map(f => f.subject).filter(Boolean))], [flashcards]);
+  const filteredFlashcards = useMemo(() => (
+    cardSubjectFilter === "all" ? flashcards : flashcards.filter(f => f.subject === cardSubjectFilter)
+  ), [flashcards, cardSubjectFilter]);
+  const avgExamDays = useMemo(() => getExamAvgDaysRemaining(), [exams, currentTime]);
+  const upcomingExams = useMemo(() => exams.filter(e => new Date(e.examDate) > new Date()), [exams, currentTime]);
 
   // ─── SYLLABUS COMPUTED ────────────────────────────────────────────────────
-  const filteredSyllabus = syllabusItems.filter(s => {
+  const filteredSyllabus = useMemo(() => syllabusItems.filter(s => {
     const matchExam = syllabusViewExam === "all" || s.examId === syllabusViewExam;
     const matchStatus = syllabusFilter === "all" || s.status === syllabusFilter;
     const matchSearch = !syllabusSearch ||
       s.chapter.toLowerCase().includes(syllabusSearch.toLowerCase()) ||
       (s.subject || "").toLowerCase().includes(syllabusSearch.toLowerCase());
     return matchExam && matchStatus && matchSearch;
-  });
+  }), [syllabusItems, syllabusViewExam, syllabusFilter, syllabusSearch]);
 
-  const syllabusStatsByExam = (examId) => {
+  const syllabusStatsByExam = useCallback((examId) => {
     const items = syllabusItems.filter(s => s.examId === examId);
     const done = items.filter(s => s.status === "done").length;
     const inProg = items.filter(s => s.status === "in_progress").length;
@@ -886,7 +1140,7 @@ export default function UltraStudyHub() {
       inProg,
       pct: items.length ? Math.round((done / items.length) * 100) : 0,
     };
-  };
+  }, [syllabusItems]);
 
   // ─── YEAR PROGRESS ────────────────────────────────────────────────────────
   const currentYear = currentTime.getFullYear();
@@ -1069,8 +1323,38 @@ export default function UltraStudyHub() {
           )}
         </div>
         <div className={styles.titleArea}>
-          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v4.2</span></h1>
+          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v5.0</span></h1>
           <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} • {currentDayName}, {currentTime.toLocaleDateString("en-IN")}</p>
+        </div>
+      </div>
+
+      {/* ── LEVEL / XP BANNER ── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 16, padding: "14px 18px", borderRadius: 14,
+        background: "linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)", color: "#fff", margin: "0 0 14px",
+        flexWrap: "wrap",
+      }}>
+        <div style={{
+          width: 54, height: 54, borderRadius: "50%", background: "rgba(255,255,255,0.15)",
+          display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "1.1rem",
+          border: "2px solid rgba(255,255,255,0.4)", flexShrink: 0,
+        }}>
+          Lv{levelInfo.level}
+        </div>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginBottom: 4, opacity: 0.95 }}>
+            <strong>{levelInfo.title}</strong>
+            <span>{totalXP} XP{levelInfo.pct < 100 ? ` • ${levelInfo.xpToNext} to next level` : ""}</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 5, background: "rgba(255,255,255,0.25)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${levelInfo.pct}%`, background: "#ffd166", borderRadius: 5, transition: "width 0.4s ease" }} />
+          </div>
+        </div>
+        <div style={{ fontSize: "0.8rem", textAlign: "right", opacity: 0.95, flexShrink: 0 }}>
+          🏁 Weekly: {weeklyChallenge.current}/{weeklyChallenge.target} min
+          <div style={{ width: 90, height: 6, borderRadius: 4, background: "rgba(255,255,255,0.25)", marginTop: 4, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${weeklyChallenge.pct}%`, background: weeklyChallenge.completed ? "#06d6a0" : "#fff" }} />
+          </div>
         </div>
       </div>
 
@@ -1356,7 +1640,7 @@ export default function UltraStudyHub() {
 
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🍅</span><h2>Pomodoro Timer</h2></div>
-            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate — tab switch karo, timer sahi rahega</div>
+            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate — tab switch karo, timer sahi rahega • Lifetime cycles: {pomodoroTotal}</div>
             <div className={styles.pomodoroPresets}>
               {POMODORO_PRESETS.map(p => (
                 <button key={p.label}
@@ -1436,6 +1720,32 @@ export default function UltraStudyHub() {
               ))}
             </div>
           </div>
+
+          {/* ── STUDY HEATMAP (new) ── */}
+          <div className={styles.card}>
+            <div className={styles.cardHead}><span>🗓️</span><h2>Study Heatmap (12 weeks)</h2></div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 4, padding: "6px 2px" }}>
+              {heatmapData.map((d, i) => (
+                <div
+                  key={i}
+                  title={`${d.date.toLocaleDateString("en-IN")} — ${d.mins} min`}
+                  style={{
+                    width: "100%", aspectRatio: "1", borderRadius: 3,
+                    background: heatColor(d.mins),
+                    outline: d.date.toDateString() === new Date().toDateString() ? "2px solid #4361ee" : "none",
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: "0.75rem", color: "var(--text2, #6b7280)" }}>
+              Less
+              {[0, 15, 45, 90, 150].map(m => (
+                <div key={m} style={{ width: 12, height: 12, borderRadius: 2, background: heatColor(m) }} />
+              ))}
+              More
+            </div>
+          </div>
+
           <div className={styles.card}>
             <div className={styles.cardHead}><span>📅</span><h2>Monthly Overview</h2></div>
             {monthlyStats.length === 0 ? <p className={styles.emptyState}>No data yet</p> : (
@@ -1465,6 +1775,30 @@ export default function UltraStudyHub() {
               }
             </div>
           </div>
+
+          {/* ── UP NEXT MILESTONE ROADMAP (new) ── */}
+          <div className={styles.card}>
+            <div className={styles.cardHead}><span>🧗</span><h2>Up Next — Milestones</h2></div>
+            {upNextAchievements.length === 0 ? (
+              <p className={styles.emptyState}>🎉 You've unlocked every achievement!</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {upNextAchievements.map(a => (
+                  <div key={a.id} style={{ padding: "10px 12px", borderRadius: 10, background: "var(--bg, #f6f8ff)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", marginBottom: 4 }}>
+                      <span><span style={{ marginRight: 6 }}>{a.icon}</span><strong>{a.title}</strong></span>
+                      <span style={{ color: "var(--text2, #6b7280)" }}>{a.current}/{a.target}</span>
+                    </div>
+                    <div style={{ height: 6, borderRadius: 4, background: "rgba(67,97,238,0.12)", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${a.pct}%`, background: "#4361ee", borderRadius: 4 }} />
+                    </div>
+                    <p style={{ fontSize: "0.76rem", color: "var(--text2, #6b7280)", margin: "4px 0 0" }}>{a.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🧠</span><h2>AI Insights</h2></div>
             <div className={styles.recommendationsContainer}>
