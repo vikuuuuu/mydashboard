@@ -222,21 +222,21 @@ Thank you for your business!`
           <span className={styles.statIcon}>📊</span>
           <div>
             <span className={styles.statValue}>{averageFatQuality} %</span>
-            <span className={styles.statLabel">Mean Fat Index</span>
+            <span className={styles.statLabel}>Mean Fat Index</span>
           </div>
         </div>
         <div className={styles.statCard}>
-          <span className={styles.statIcon">💸</span>
+          <span className={styles.statIcon}>💸</span>
           <div>
             <span className={styles.statValue}>Rs {totalPayoutGenerated.toFixed(2)}</span>
-            <span className={styles.statLabel">Net Disbursed Funds</span>
+            <span className={styles.statLabel}>Net Disbursed Funds</span>
           </div>
         </div>
         <div className={styles.statCard}>
           <span className={styles.statIcon">👥</span>
           <div>
             <span className={styles.statValue}>{customers.length}</span>
-            <span className={styles.statLabel">Active Registered Producers</span>
+            <span className={styles.statLabel}>Active Registered Producers</span>
           </div>
         </div>
       </div>
