@@ -215,7 +215,7 @@ Thank you for your business!`
           <span className={styles.statIcon}>🥛</span>
           <div>
             <span className={styles.statValue}>{totalLitersCollected.toFixed(2)} L</span>
-            <span className={styles.statLabel">Total Volume Collected</span>
+            <span className={styles.statLabel}>Total Volume Collected</span>
           </div>
         </div>
         <div className={styles.statCard}>
