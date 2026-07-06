@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-// Replace this import with your actual firebase initialized reference file path
-// import { db } from "@/lib/firebaseConfig"; 
-// import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
+// Firebase Firestore References
+import { db } from "@/lib/firebaseConfig"; 
+import { collection, addDoc, getDocs, query, orderBy, onSnapshot } from "firebase/firestore";
 
 export default function MilkDairyManagement() {
   // UI Tabs & Functional States
@@ -11,14 +11,9 @@ export default function MilkDairyManagement() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // System Database Simulation fallbacks (in case config isn't linked yet)
-  const [customers, setCustomers] = useState([
-    { id: "153", name: "Bhuli devi", phone: "9116591816", village: "Dhambiwal" },
-    { id: "102", name: "Ramesh Kumar", phone: "9876543210", village: "Jaipur" }
-  ]);
-  const [entries, setEntries] = useState([
-    { id: "e1", name: "Bhuli devi", customerId: "153", date: "2026-05-25", shift: "E", fat: 3.80, snf: 8.50, liters: 4.00, rate: 40.25, total: 161.0, cmFund: 20.0, finalAmount: 141.0 }
-  ]);
+  // Database States
+  const [customers, setCustomers] = useState([]);
+  const [entries, setEntries] = useState([]);
 
   // Form State: Collection Entries
   const [entryForm, setEntryForm] = useState({
@@ -27,7 +22,7 @@ export default function MilkDairyManagement() {
     shift: "M",
     liters: "",
     fat: "",
-    snf: "8.50", // Standard baseline
+    snf: "8.50", 
     cmFund: "20.0"
   });
 
@@ -39,7 +34,33 @@ export default function MilkDairyManagement() {
     village: ""
   });
 
-  // Derived Analytics Data
+  // Real-time Database Synchronization Listeners
+  useEffect(() => {
+    // 1. Listen to Customers
+    const customersQuery = query(collection(db, "customers"), orderBy("name", "asc"));
+    const unsubscribeCustomers = onSnapshot(customersQuery, (snapshot) => {
+      const customersList = snapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
+      setCustomers(customersList);
+    }, (error) => {
+      console.error("Error fetching customers:", error);
+    });
+
+    // 2. Listen to Milk Entries
+    const entriesQuery = query(collection(db, "milk_entries"), orderBy("timestamp", "desc"));
+    const unsubscribeEntries = onSnapshot(entriesQuery, (snapshot) => {
+      const entriesList = snapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
+      setEntries(entriesList);
+    }, (error) => {
+      console.error("Error fetching entries:", error);
+    });
+
+    return () => {
+      unsubscribeCustomers();
+      unsubscribeEntries();
+    };
+  }, []);
+
+  // Derived Analytics Data from Live DB State
   const totalLitersCollected = entries.reduce((acc, curr) => acc + parseFloat(curr.liters || 0), 0);
   const totalPayoutGenerated = entries.reduce((acc, curr) => acc + parseFloat(curr.finalAmount || 0), 0);
   const averageFatQuality = entries.length ? (entries.reduce((acc, curr) => acc + parseFloat(curr.fat || 0), 0) / entries.length).toFixed(2) : "0.00";
@@ -53,7 +74,6 @@ export default function MilkDairyManagement() {
   // Feature: Calculate Milk Valuation Metrics
   const calculateRateAndTotal = (fat, snf, liters) => {
     const f = parseFloat(fat) || 0;
-    const s = parseFloat(snf) || 0;
     const l = parseFloat(liters) || 0;
     
     // Baseline configuration setup based on structural fat measurements
@@ -67,7 +87,7 @@ export default function MilkDairyManagement() {
   const handleAddEntry = async (e) => {
     e.preventDefault();
     if (!entryForm.customerId || !entryForm.liters || !entryForm.fat) {
-      showToast("Please fill all mandatory configuration fields.", "error");
+      showToast("Please fill all mandatory fields.", "error");
       return;
     }
 
@@ -93,12 +113,9 @@ export default function MilkDairyManagement() {
     };
 
     try {
-      // Firebase Database Integration Execution Node:
-      // const docRef = await addDoc(collection(db, "milk_entries"), itemPayload);
-      
-      // Reactive local state tracking deployment verification
-      setEntries([ { id: Math.random().toString(), ...itemPayload }, ...entries]);
-      showToast("Collection Record committed to ledger!");
+      // Firebase Database Integration Execution
+      await addDoc(collection(db, "milk_entries"), itemPayload);
+      showToast("Collection Record committed to database!");
 
       // Execute WhatsApp Integration Message Trigger
       if (selectedCustomer && selectedCustomer.phone) {
@@ -117,7 +134,7 @@ export default function MilkDairyManagement() {
       });
     } catch (err) {
       console.error("Firebase Execution Error: ", err);
-      showToast("Database synchronization verification failed.", "error");
+      showToast("Database synchronization failed.", "error");
     } finally {
       setLoading(false);
     }
@@ -127,19 +144,17 @@ export default function MilkDairyManagement() {
   const handleRegisterCustomer = async (e) => {
     e.preventDefault();
     if (!customerForm.id || !customerForm.name || !customerForm.phone) {
-      showToast("Please verify primary details are correctly provided.", "error");
+      showToast("Please verify details are correctly provided.", "error");
       return;
     }
 
     setLoading(true);
     try {
-      // Firebase Database Integration Execution Node:
-      // await addDoc(collection(db, "customers"), customerForm);
-
-      setCustomers([...customers, customerForm]);
-      showToast(`Customer account profile [${customerForm.name}] generated successfully.`);
+      // Firebase Database Integration
+      await addDoc(collection(db, "customers"), customerForm);
+      showToast(`Customer [${customerForm.name}] created successfully.`);
       setCustomerForm({ id: "", name: "", phone: "", village: "" });
-      setActiveTab("entries"); // Shift layout view context back to operations
+      setActiveTab("entries"); 
     } catch (err) {
       console.error("Firebase Registration Error: ", err);
       showToast("Customer configuration sync faulted.", "error");
@@ -148,7 +163,7 @@ export default function MilkDairyManagement() {
     }
   };
 
-  // Feature: Automated WhatsApp Direct Notification Despatch Routing
+  // Feature: Automated WhatsApp Direct Notification
   const triggerWhatsAppNotification = (customer, data) => {
     const formattedMessage = encodeURIComponent(
 `*Dhambiwalo Ki Dhani Dairy Ledger*
@@ -166,7 +181,6 @@ export default function MilkDairyManagement() {
 Thank you for your business!`
     );
 
-    // Standard country format validation configuration check mapping
     let activePhone = customer.phone.trim();
     if (!activePhone.startsWith("91") && activePhone.length === 10) {
       activePhone = "91" + activePhone;
@@ -178,14 +192,14 @@ Thank you for your business!`
 
   return (
     <div className="page">
-      {/* Toast Alert View Node element template wrapper */}
+      {/* Toast Alert Element */}
       {toast.show && (
         <div className={`toast toast_${toast.type}`}>
           {toast.message}
         </div>
       )}
 
-      {/* Top Header Grid Interface Section Layout configuration */}
+      {/* Top Header Grid Section */}
       <div className="topBar">
         <div className="titleArea">
           <h1 className="title">
@@ -200,7 +214,7 @@ Thank you for your business!`
         </div>
       </div>
 
-      {/* Operational Dashboard Core Summary Layout Metric Panel Widgets */}
+      {/* Operational Dashboard Stats Grid */}
       <div className="statsGrid">
         <div className="statCard">
           <span className="statIcon">🥛</span>
@@ -232,7 +246,7 @@ Thank you for your business!`
         </div>
       </div>
 
-      {/* Main Tab Management Navigation Interface Selector */}
+      {/* Main Tab Management Navigation Selector */}
       <div className="tabNav">
         <button className={`tabBtn ${activeTab === "entries" ? "tabActive" : ""}`} onClick={() => setActiveTab("entries")}>
           📥 Log Supply Delivery
@@ -245,7 +259,7 @@ Thank you for your business!`
         </button>
       </div>
 
-      {/* Content Rendering Evaluation Block Router switches */}
+      {/* Content Rendering Block */}
       {activeTab === "entries" && (
         <div className="notesGrid">
           <div className="card">
@@ -333,7 +347,7 @@ Thank you for your business!`
             </form>
           </div>
 
-          {/* Real-time Dynamic Context preview matching receipt analysis design metrics */}
+          {/* Real-Time Live Preview Voucher Card */}
           <div className="card activeStudyPulse">
             <div className="cardHead">
               <span>🧾</span>
@@ -363,7 +377,7 @@ Thank you for your business!`
                   );
                 })()}
               </div>
-              <p className="sessionNoteDisplay">Voucher recalculates instantaneously relative to baseline modifications change loops.</p>
+              <p className="sessionNoteDisplay">Voucher recalculates instantaneously relative to input adjustments.</p>
             </div>
           </div>
         </div>
@@ -397,7 +411,7 @@ Thank you for your business!`
             <div className="advancedForm">
               <input 
                 type="text" 
-                placeholder="WhatsApp Phone Number (with Country Code e.g. 91...)" 
+                placeholder="WhatsApp Phone Number (e.g. 9116591816)" 
                 className="formInput"
                 value={customerForm.phone}
                 onChange={(e) => setCustomerForm({...customerForm, phone: e.target.value})}
@@ -428,7 +442,7 @@ Thank you for your business!`
           </div>
           <div className="taskList">
             {entries.map((item) => (
-              <div key={item.id} className="taskCard">
+              <div key={item.docId} className="taskCard">
                 <div className="taskInfo">
                   <div className="taskTop">
                     <span className="typeBadge">Shift: {item.shift}</span>
