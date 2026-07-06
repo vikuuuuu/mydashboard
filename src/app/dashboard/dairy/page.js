@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-// Firebase Firestore References
-import { db } from "@/lib/firebaseConfig"; 
-import { collection, addDoc, getDocs, query, orderBy, onSnapshot } from "firebase/firestore";
+// Exact structural imports based on your /src/lib folder structure
+import { db } from "../../../lib/firestore"; 
+import { collection, addDoc, query, orderBy, onSnapshot } from "firebase/firestore";
+import styles from "./page.module.css";
 
 export default function MilkDairyManagement() {
   // UI Tabs & Functional States
@@ -36,6 +37,8 @@ export default function MilkDairyManagement() {
 
   // Real-time Database Synchronization Listeners
   useEffect(() => {
+    if (!db) return;
+
     // 1. Listen to Customers
     const customersQuery = query(collection(db, "customers"), orderBy("name", "asc"));
     const unsubscribeCustomers = onSnapshot(customersQuery, (snapshot) => {
@@ -76,7 +79,6 @@ export default function MilkDairyManagement() {
     const f = parseFloat(fat) || 0;
     const l = parseFloat(liters) || 0;
     
-    // Baseline configuration setup based on structural fat measurements
     const baseRatePerFat = 10.592; 
     const calculatedRate = parseFloat((f * baseRatePerFat).toFixed(2));
     const rawTotal = parseFloat((calculatedRate * l).toFixed(2));
@@ -113,16 +115,13 @@ export default function MilkDairyManagement() {
     };
 
     try {
-      // Firebase Database Integration Execution
       await addDoc(collection(db, "milk_entries"), itemPayload);
       showToast("Collection Record committed to database!");
 
-      // Execute WhatsApp Integration Message Trigger
       if (selectedCustomer && selectedCustomer.phone) {
         triggerWhatsAppNotification(selectedCustomer, itemPayload);
       }
 
-      // Form reset execution layout
       setEntryForm({
         customerId: "",
         date: new Date().toISOString().split('T')[0],
@@ -150,7 +149,6 @@ export default function MilkDairyManagement() {
 
     setLoading(true);
     try {
-      // Firebase Database Integration
       await addDoc(collection(db, "customers"), customerForm);
       showToast(`Customer [${customerForm.name}] created successfully.`);
       setCustomerForm({ id: "", name: "", phone: "", village: "" });
@@ -191,89 +189,84 @@ Thank you for your business!`
   };
 
   return (
-    <div className="page">
-      {/* Toast Alert Element */}
+    <div className={styles.page}>
       {toast.show && (
-        <div className={`toast toast_${toast.type}`}>
+        <div className={`${styles.toast} ${toast.type === "success" ? styles.toast_success : styles.toast_error}`}>
           {toast.message}
         </div>
       )}
 
-      {/* Top Header Grid Section */}
-      <div className="topBar">
-        <div className="titleArea">
-          <h1 className="title">
-            Dairy Management Ledger <span className="vBadge">v2.4 Live</span>
+      <div className={styles.topBar}>
+        <div className={styles.titleArea}>
+          <h1 className={styles.title}>
+            Dairy Management Ledger <span className={styles.vBadge}>v2.4 Live</span>
           </h1>
-          <p className="subtitle">Real-time automation matrix for supply optimization logistics tracking.</p>
+          <p className={styles.subtitle}>Real-time automation matrix for supply optimization logistics tracking.</p>
         </div>
-        <div className="leftControls">
-          <button className="controlBtnLive">
-            <span className="pulseIcon">●</span> SYSTEM ONLINE
+        <div className={styles.leftControls}>
+          <button className={styles.controlBtnLive}>
+            <span className={styles.pulseIcon}>●</span> SYSTEM ONLINE
           </button>
         </div>
       </div>
 
-      {/* Operational Dashboard Stats Grid */}
-      <div className="statsGrid">
-        <div className="statCard">
-          <span className="statIcon">🥛</span>
+      <div className={styles.statsGrid}>
+        <div className={styles.statCard}>
+          <span className={styles.statIcon}>🥛</span>
           <div>
-            <span className="statValue">{totalLitersCollected.toFixed(2)} L</span>
-            <span className="statLabel">Total Volume Collected</span>
+            <span className={styles.statValue}>{totalLitersCollected.toFixed(2)} L</span>
+            <span className={styles.statLabel">Total Volume Collected</span>
           </div>
         </div>
-        <div className="statCard">
-          <span className="statIcon">📊</span>
+        <div className={styles.statCard}>
+          <span className={styles.statIcon}>📊</span>
           <div>
-            <span className="statValue">{averageFatQuality} %</span>
-            <span className="statLabel">Mean Fat Index</span>
+            <span className={styles.statValue}>{averageFatQuality} %</span>
+            <span className={styles.statLabel">Mean Fat Index</span>
           </div>
         </div>
-        <div className="statCard">
-          <span className="statIcon">💸</span>
+        <div className={styles.statCard}>
+          <span className={styles.statIcon">💸</span>
           <div>
-            <span className="statValue">Rs {totalPayoutGenerated.toFixed(2)}</span>
-            <span className="statLabel">Net Disbursed Funds</span>
+            <span className={styles.statValue}>Rs {totalPayoutGenerated.toFixed(2)}</span>
+            <span className={styles.statLabel">Net Disbursed Funds</span>
           </div>
         </div>
-        <div className="statCard">
-          <span className="statIcon">👥</span>
+        <div className={styles.statCard}>
+          <span className={styles.statIcon">👥</span>
           <div>
-            <span className="statValue">{customers.length}</span>
-            <span className="statLabel">Active Registered Producers</span>
+            <span className={styles.statValue}>{customers.length}</span>
+            <span className={styles.statLabel">Active Registered Producers</span>
           </div>
         </div>
       </div>
 
-      {/* Main Tab Management Navigation Selector */}
-      <div className="tabNav">
-        <button className={`tabBtn ${activeTab === "entries" ? "tabActive" : ""}`} onClick={() => setActiveTab("entries")}>
+      <div className={styles.tabNav}>
+        <button className={`${styles.tabBtn} ${activeTab === "entries" ? styles.tabActive : ""}`} onClick={() => setActiveTab("entries")}>
           📥 Log Supply Delivery
         </button>
-        <button className={`tabBtn ${activeTab === "register" ? "tabActive" : ""}`} onClick={() => setActiveTab("register")}>
+        <button className={`${styles.tabBtn} ${activeTab === "register" ? styles.tabActive : ""}`} onClick={() => setActiveTab("register")}>
           👤 Provision New Account
         </button>
-        <button className={`tabBtn ${activeTab === "records" ? "tabActive" : ""}`} onClick={() => setActiveTab("records")}>
+        <button className={`${styles.tabBtn} ${activeTab === "records" ? styles.tabActive : ""}`} onClick={() => setActiveTab("records")}>
           📋 Historic Delivery Matrices
         </button>
       </div>
 
-      {/* Content Rendering Block */}
       {activeTab === "entries" && (
-        <div className="notesGrid">
-          <div className="card">
-            <div className="cardHead">
+        <div className={styles.notesGrid}>
+          <div className={styles.card}>
+            <div className={styles.cardHead}>
               <span>📝</span>
               <h2>Log Inbound Yield Delivery</h2>
             </div>
             
-            <form onSubmit={handleAddEntry} className="studySetupForm">
-              <div className="advancedForm">
+            <form onSubmit={handleAddEntry} className={styles.studySetupForm}>
+              <div className={styles.advancedForm}>
                 <div style={{ flex: 1, minWidth: "200px" }}>
-                  <label className="repeatLabel">Select Producer Account Profile</label>
+                  <label className={styles.repeatLabel}>Select Producer Account Profile</label>
                   <select 
-                    className="formSelect" 
+                    className={styles.formSelect} 
                     value={entryForm.customerId} 
                     onChange={(e) => setEntryForm({...entryForm, customerId: e.target.value})}
                   >
@@ -285,9 +278,9 @@ Thank you for your business!`
                 </div>
 
                 <div>
-                  <label className="repeatLabel">Shift Window</label>
+                  <label className={styles.repeatLabel}>Shift Window</label>
                   <select 
-                    className="formSelect"
+                    className={styles.formSelect}
                     value={entryForm.shift}
                     onChange={(e) => setEntryForm({...entryForm, shift: e.target.value})}
                   >
@@ -297,10 +290,10 @@ Thank you for your business!`
                 </div>
               </div>
 
-              <div className="timetableForm">
+              <div className={styles.timetableForm}>
                 <input 
                   type="date" 
-                  className="formInput" 
+                  className={styles.formInput} 
                   value={entryForm.date} 
                   onChange={(e) => setEntryForm({...entryForm, date: e.target.value})} 
                 />
@@ -308,7 +301,7 @@ Thank you for your business!`
                   type="number" 
                   step="0.01" 
                   placeholder="Quantity (Liters)" 
-                  className="formInput"
+                  className={styles.formInput}
                   value={entryForm.liters}
                   onChange={(e) => setEntryForm({...entryForm, liters: e.target.value})}
                 />
@@ -316,18 +309,18 @@ Thank you for your business!`
                   type="number" 
                   step="0.01" 
                   placeholder="Fat Content %" 
-                  className="formInput"
+                  className={styles.formInput}
                   value={entryForm.fat}
                   onChange={(e) => setEntryForm({...entryForm, fat: e.target.value})}
                 />
               </div>
 
-              <div className="timetableForm">
+              <div className={styles.timetableForm}>
                 <input 
                   type="number" 
                   step="0.01" 
                   placeholder="SNF Baseline %" 
-                  className="formInput"
+                  className={styles.formInput}
                   value={entryForm.snf}
                   onChange={(e) => setEntryForm({...entryForm, snf: e.target.value})}
                 />
@@ -335,25 +328,24 @@ Thank you for your business!`
                   type="number" 
                   step="0.01" 
                   placeholder="CM Fund Charge" 
-                  className="formInput"
+                  className={styles.formInput}
                   value={entryForm.cmFund}
                   onChange={(e) => setEntryForm({...entryForm, cmFund: e.target.value})}
                 />
               </div>
 
-              <button type="submit" className="startModeBtn" disabled={loading}>
+              <button type="submit" className={styles.startModeBtn} disabled={loading}>
                 🚀 Commit Entry & Send WhatsApp Notification
               </button>
             </form>
           </div>
 
-          {/* Real-Time Live Preview Voucher Card */}
-          <div className="card activeStudyPulse">
-            <div className="cardHead">
+          <div className={`${styles.card} ${styles.activeStudyPulse}`}>
+            <div className={styles.cardHead}>
               <span>🧾</span>
               <h2>Real-Time Live Voucher Preview</h2>
             </div>
-            <div className="liveConsoleArea">
+            <div className={styles.liveConsoleArea}>
               <h3>Dhambiwalo Ki Dhani Dairy Ledger</h3>
               <div style={{ background: "var(--surface3)", padding: "16px", borderRadius: "10px", margin: "14px 0", fontFamily: "monospace", textAlign: "left" }}>
                 <p><strong>Producer ID:</strong> {entryForm.customerId || "---"}</p>
@@ -377,56 +369,56 @@ Thank you for your business!`
                   );
                 })()}
               </div>
-              <p className="sessionNoteDisplay">Voucher recalculates instantaneously relative to input adjustments.</p>
+              <p className={styles.sessionNoteDisplay}>Voucher recalculates instantaneously relative to input adjustments.</p>
             </div>
           </div>
         </div>
       )}
 
       {activeTab === "register" && (
-        <div className="card" style={{ maxWidth: "600px", margin: "0 auto" }}>
-          <div className="cardHead">
+        <div className={styles.card} style={{ maxWidth: "600px", margin: "0 auto" }}>
+          <div className={styles.cardHead}>
             <span>👤</span>
             <h2>Register New Dairy Producer Account</h2>
           </div>
-          <form onSubmit={handleRegisterCustomer} className="studySetupForm">
-            <div className="advancedForm">
+          <form onSubmit={handleRegisterCustomer} className={styles.studySetupForm}>
+            <div className={styles.advancedForm}>
               <input 
                 type="text" 
                 placeholder="Unique Account Code / Card ID (e.g., 153)" 
-                className="formInput"
+                className={styles.formInput}
                 value={customerForm.id}
                 onChange={(e) => setCustomerForm({...customerForm, id: e.target.value})}
               />
             </div>
-            <div className="advancedForm">
+            <div className={styles.advancedForm}>
               <input 
                 type="text" 
                 placeholder="Producer's Full Legal Name" 
-                className="formInput"
+                className={styles.formInput}
                 value={customerForm.name}
                 onChange={(e) => setCustomerForm({...customerForm, name: e.target.value})}
               />
             </div>
-            <div className="advancedForm">
+            <div className={styles.advancedForm}>
               <input 
                 type="text" 
                 placeholder="WhatsApp Phone Number (e.g. 9116591816)" 
-                className="formInput"
+                className={styles.formInput}
                 value={customerForm.phone}
                 onChange={(e) => setCustomerForm({...customerForm, phone: e.target.value})}
               />
             </div>
-            <div className="advancedForm">
+            <div className={styles.advancedForm}>
               <input 
                 type="text" 
                 placeholder="Village / Collection Center Locale" 
-                className="formInput"
+                className={styles.formInput}
                 value={customerForm.village}
                 onChange={(e) => setCustomerForm({...customerForm, village: e.target.value})}
               />
             </div>
-            <button type="submit" className="addBtn" style={{ width: "100%", padding: "12px" }} disabled={loading}>
+            <button type="submit" className={styles.addBtn} style={{ width: "100%", padding: "12px" }} disabled={loading}>
               🔒 Authorize Ledger Allocation Profile
             </button>
           </form>
@@ -434,36 +426,36 @@ Thank you for your business!`
       )}
 
       {activeTab === "records" && (
-        <div className="card">
-          <div className="cardHead">
+        <div className={styles.card}>
+          <div className={styles.cardHead}>
             <span>📋</span>
             <h2>Historic Transaction Ledger Database Logs</h2>
-            <div className="resultCount">{entries.length} Transaction Records committed</div>
+            <div className={styles.resultCount}>{entries.length} Transaction Records committed</div>
           </div>
-          <div className="taskList">
+          <div className={styles.taskList}>
             {entries.map((item) => (
-              <div key={item.docId} className="taskCard">
-                <div className="taskInfo">
-                  <div className="taskTop">
-                    <span className="typeBadge">Shift: {item.shift}</span>
-                    <span className="dayBadge">{item.date}</span>
-                    <span className="liveTag" style={{ background: "var(--accent)" }}>ID: {item.customerId}</span>
+              <div key={item.docId} className={styles.taskCard}>
+                <div className={styles.taskInfo}>
+                  <div className={styles.taskTop}>
+                    <span className={styles.typeBadge}>Shift: {item.shift}</span>
+                    <span className={styles.dayBadge}>{item.date}</span>
+                    <span className={styles.liveTag} style={{ background: "var(--accent)" }}>ID: {item.customerId}</span>
                   </div>
                   <h3>{item.name}</h3>
                   <p>
                     Volume Delivery: <strong>{item.liters} Liters</strong> | Fat Level: {item.fat}% | SNF: {item.snf}%
                   </p>
-                  <p className="taskNote">
+                  <p className={styles.taskNote}>
                     Gross Calculation base: Rs {item.rate}/L → Total: Rs {item.total} [CM Fund Deduction: Rs {item.cmFund}]
                   </p>
                 </div>
-                <div className="taskActions">
-                  <span className="goodScore">Rs {item.finalAmount}</span>
+                <div className={styles.taskActions}>
+                  <span className={styles.goodScore}>Rs {item.finalAmount}</span>
                 </div>
               </div>
             ))}
             {entries.length === 0 && (
-              <div className="emptyState">No record entries committed to target Firebase reference nodes.</div>
+              <div className={styles.emptyState}>No record entries committed to target database.</div>
             )}
           </div>
         </div>
