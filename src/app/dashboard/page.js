@@ -47,6 +47,14 @@ const DEFAULT_TOOLS = [
   { id: "MusicHub",         title: "My Music Hub",        desc: "Stream YouTube tracks & share playlists",icon: "🎵", color: "#7209b7", pinned: false },
   { id: "link-checker",    title: "Link Checker",         desc: "Check URLs, scan for viruses, domains, vWHOIS, DNS, IP details.",    icon: "🔗",    color: "#7209b7",  pinned: false },
   { id: "locker",  title: "Secure Vault",  desc: "Encrypt and securely store passwords, IDs, bank details, documents, photos & private notes.",  icon: "🔐",  color: "#4f46e5",  pinned: false },
+  {
+  id: "dairy",
+  title: "Milk Dairy Record",
+  desc: "Manage milk collection, customer records, payments & daily dairy transactions.",
+  icon: "🥛",
+  color: "#4f46e5",
+  pinned: false,
+},
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
