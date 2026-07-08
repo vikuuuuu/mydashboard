@@ -28,24 +28,29 @@ export function buildEntryMessage({
   liters,
   fat,
   rate,
+  totalRs,
+  cmFundRs,
   amount,
   dairyName = "Dairy",
 }) {
   const shiftLabel = shift === "morning" ? "Subah (Morning)" : "Shaam (Evening)";
-  return [
+  const lines = [
     `Namaste ${customerName} ji,`,
     `Aapki doodh entry ho gayi hai:`,
     ``,
     `Date: ${date}`,
     `Shift: ${shiftLabel}`,
-    `Liters: ${liters} L`,
     `Fat: ${fat}%`,
-    `Rate: Rs.${rate}/L`,
-    `Total Amount: Rs.${amount}`,
-    ``,
-    `Dhanyawad!`,
-    `- ${dairyName}`,
-  ].join("\n");
+    `Liters: ${liters} L`,
+    `Rate/Ltr: Rs.${rate}`,
+  ];
+
+  if (totalRs !== undefined) lines.push(`Total RS: Rs.${totalRs}`);
+  if (cmFundRs !== undefined && Number(cmFundRs) > 0) lines.push(`CMFund RS: -Rs.${cmFundRs}`);
+
+  lines.push(`Final Amount: Rs.${amount}`, ``, `Dhanyawad!`, `- ${dairyName}`);
+
+  return lines.join("\n");
 }
 
 // Opens WhatsApp with the message pre-filled. Returns the URL used (useful for logging).
