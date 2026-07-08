@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import {
   collection,
   addDoc,
@@ -50,10 +51,10 @@ const EMPTY_ENTRY_FORM = {
   date: todayISO(),
   time: nowTime(),
   shift: currentShiftGuess(),
-  liters: "",
   fat: "",
+  liters: "",
   rate: "",
-  amount: "",
+  cmFundRs: "0",
   note: "",
 };
 
@@ -84,8 +85,6 @@ export default function DairyPage() {
   const [entrySearch, setEntrySearch] = useState("");
   const [shiftFilter, setShiftFilter] = useState("all");
   const [customerSearch, setCustomerSearch] = useState("");
-
-  const amountTouchedRef = useRef(false);
 
   /* ─── Firestore subscriptions ─── */
   useEffect(() => {
@@ -126,19 +125,22 @@ export default function DairyPage() {
     return m;
   }, [customers]);
 
-  /* ─── Auto-calc amount = liters × rate, unless user typed a custom amount ─── */
-  useEffect(() => {
-    if (amountTouchedRef.current) return;
+  /* ─── Derived totals: Total RS = Liters × Rate, Amount = Total RS − CMFund RS ─── */
+  const totalRs = useMemo(() => {
     const liters = parseFloat(entryForm.liters);
     const rate = parseFloat(entryForm.rate);
-    if (!isNaN(liters) && !isNaN(rate)) {
-      const computed = Math.round(liters * rate * 100) / 100;
-      setEntryForm((f) => ({ ...f, amount: String(computed) }));
-    } else {
-      setEntryForm((f) => ({ ...f, amount: "" }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (isNaN(liters) || isNaN(rate)) return 0;
+    return Math.round(liters * rate * 100) / 100;
   }, [entryForm.liters, entryForm.rate]);
+
+  const cmFundValue = useMemo(() => {
+    const v = parseFloat(entryForm.cmFundRs);
+    return isNaN(v) ? 0 : v;
+  }, [entryForm.cmFundRs]);
+
+  const finalAmount = useMemo(() => {
+    return Math.round((totalRs - cmFundValue) * 100) / 100;
+  }, [totalRs, cmFundValue]);
 
   /* ─── Today stats ─── */
   const todayStats = useMemo(() => {
@@ -153,10 +155,8 @@ export default function DairyPage() {
 
   /* ─── Entry form handlers ─── */
   function handleEntryFieldChange(field, value) {
-    if (field === "amount") amountTouchedRef.current = true;
     if (field === "customerId") {
       const c = customerMap.get(value);
-      amountTouchedRef.current = false;
       setEntryForm((f) => ({ ...f, customerId: value, rate: c?.rate ? String(c.rate) : f.rate }));
       return;
     }
@@ -164,20 +164,21 @@ export default function DairyPage() {
   }
 
   function resetEntryForm() {
-    amountTouchedRef.current = false;
     setEntryForm(EMPTY_ENTRY_FORM);
     setEditingEntryId(null);
   }
 
   async function handleEntrySubmit(e) {
     e.preventDefault();
-    const { customerId, date, time, shift, liters, fat, rate, amount, note } = entryForm;
+    const { customerId, date, time, shift, fat, liters, rate, note } = entryForm;
     const customer = customerMap.get(customerId);
 
-    if (!customer) return showToast("Select a customer first", "error");
-    if (!liters || Number(liters) <= 0) return showToast("Enter valid liters", "error");
-    if (fat === "" || Number(fat) < 0) return showToast("Enter fat %", "error");
-    if (!rate || Number(rate) <= 0) return showToast("Enter rate per liter", "error");
+    if (!customer) return showToast("Select a customer (Name) first", "error");
+    if (!liters || Number(liters) <= 0) return showToast("Enter valid Liters", "error");
+    if (fat === "" || Number(fat) < 0) return showToast("Enter Fat %", "error");
+    if (!rate || Number(rate) <= 0) return showToast("Enter Rate/Ltr", "error");
+    if (cmFundValue < 0) return showToast("CMFund RS can't be negative", "error");
+    if (finalAmount < 0) return showToast("CMFund RS is larger than Total RS — check values", "error");
 
     setSavingEntry(true);
     try {
@@ -188,10 +189,12 @@ export default function DairyPage() {
         date,
         time,
         shift,
-        liters: Number(liters),
         fat: Number(fat),
+        liters: Number(liters),
         rate: Number(rate),
-        amount: Number(amount) || Number(liters) * Number(rate),
+        totalRs,
+        cmFundRs: cmFundValue,
+        amount: finalAmount,
         note: note || "",
       };
 
@@ -215,6 +218,8 @@ export default function DairyPage() {
             liters: payload.liters,
             fat: payload.fat,
             rate: payload.rate,
+            totalRs: payload.totalRs,
+            cmFundRs: payload.cmFundRs,
             amount: payload.amount,
             dairyName: DAIRY_NAME,
           });
@@ -235,17 +240,16 @@ export default function DairyPage() {
   }
 
   function startEditEntry(entry) {
-    amountTouchedRef.current = true;
     setEditingEntryId(entry.id);
     setEntryForm({
       customerId: entry.customerId,
       date: entry.date,
       time: entry.time || nowTime(),
       shift: entry.shift,
-      liters: String(entry.liters),
       fat: String(entry.fat),
+      liters: String(entry.liters),
       rate: String(entry.rate),
-      amount: String(entry.amount),
+      cmFundRs: String(entry.cmFundRs ?? 0),
       note: entry.note || "",
     });
     setActiveTab("entries");
@@ -273,6 +277,8 @@ export default function DairyPage() {
       liters: entry.liters,
       fat: entry.fat,
       rate: entry.rate,
+      totalRs: entry.totalRs ?? entry.liters * entry.rate,
+      cmFundRs: entry.cmFundRs ?? 0,
       amount: entry.amount,
       dairyName: DAIRY_NAME,
     });
@@ -376,6 +382,9 @@ export default function DairyPage() {
 
       {/* TOP BAR */}
       <div className={styles.topBar}>
+        <Link href="/dashboard" className={styles.backBtn}>
+          ← Back
+        </Link>
         <div className={styles.titleArea}>
           <div className={styles.title}>
             🥛 Dairy Manager <span className={styles.vBadge}>v1.0</span>
@@ -458,7 +467,7 @@ export default function DairyPage() {
             <form onSubmit={handleEntrySubmit}>
               <div className={styles.entryForm}>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Customer</label>
+                  <label className={styles.formLabel}>Name</label>
                   <select
                     className={styles.formSelect}
                     value={entryForm.customerId}
@@ -517,21 +526,7 @@ export default function DairyPage() {
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Total Liters</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="e.g. 5.5"
-                    className={styles.formInput}
-                    value={entryForm.liters}
-                    onChange={(e) => handleEntryFieldChange("liters", e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Fat Content (%)</label>
+                  <label className={styles.formLabel}>Fat (%)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -545,7 +540,21 @@ export default function DairyPage() {
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Rate (₹ / Liter)</label>
+                  <label className={styles.formLabel}>Liters</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="e.g. 5.5"
+                    className={styles.formInput}
+                    value={entryForm.liters}
+                    onChange={(e) => handleEntryFieldChange("liters", e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Rate/Ltr (₹)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -559,16 +568,15 @@ export default function DairyPage() {
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Fund Amount (₹)</label>
+                  <label className={styles.formLabel}>CMFund RS (₹)</label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    placeholder="Auto-calculated"
+                    placeholder="e.g. 2"
                     className={styles.formInput}
-                    value={entryForm.amount}
-                    onChange={(e) => handleEntryFieldChange("amount", e.target.value)}
-                    required
+                    value={entryForm.cmFundRs}
+                    onChange={(e) => handleEntryFieldChange("cmFundRs", e.target.value)}
                   />
                 </div>
 
@@ -583,10 +591,31 @@ export default function DairyPage() {
                   />
                 </div>
 
+                {/* Live calculation: Total RS = Liters × Rate/Ltr, Amount = Total RS − CMFund RS */}
+                <div className={styles.breakdownRow}>
+                  <div className={styles.breakdownItem}>
+                    <span className={styles.breakdownLabel}>Total RS</span>
+                    <span className={styles.breakdownValue}>₹{totalRs.toFixed(2)}</span>
+                  </div>
+                  <div className={styles.breakdownOp}>−</div>
+                  <div className={styles.breakdownItem}>
+                    <span className={styles.breakdownLabel}>CMFund RS</span>
+                    <span className={`${styles.breakdownValue} ${styles.breakdownValueMinus}`}>
+                      ₹{cmFundValue.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className={styles.breakdownOp}>=</div>
+                  <div className={styles.breakdownItem}>
+                    <span className={styles.breakdownLabel}>Final Amount</span>
+                    <span className={`${styles.breakdownValue} ${styles.breakdownValueFinal}`}>
+                      ₹{finalAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
                 <div className={styles.autoCalcNote}>
                   <span>
-                    Amount = Liters × Rate ={" "}
-                    <span className={styles.autoCalcAmount}>₹{entryForm.amount || "0.00"}</span>
+                    Total RS = Liters × Rate/Ltr &nbsp;|&nbsp; Amount = Total RS − CMFund RS
                   </span>
                   <span className={styles.waHint}>
                     {editingEntryId ? "Saving won't resend WhatsApp" : "📲 WhatsApp opens automatically after saving"}
@@ -664,6 +693,10 @@ export default function DairyPage() {
                     </div>
                     <div>
                       <div className={styles.entryAmount}>₹{Number(entry.amount).toFixed(2)}</div>
+                      <div className={styles.entryAmountSub}>
+                        Total ₹{Number(entry.totalRs ?? entry.liters * entry.rate).toFixed(2)} − CMFund ₹
+                        {Number(entry.cmFundRs ?? 0).toFixed(2)}
+                      </div>
                       <button
                         className={styles.waSentBadge}
                         style={{ border: "none", cursor: "pointer" }}
