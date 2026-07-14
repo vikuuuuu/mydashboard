@@ -107,6 +107,35 @@
 }
 .subtitle { color:var(--text2); font-size:0.85rem; margin-top:2px; }
 
+/* ─── XP / LEVEL BANNER (was inline, now themed) ─────────────────────────── */
+.xpBanner {
+  display: flex; align-items: center; gap: 16px; padding: 14px 18px;
+  border-radius: var(--radius); margin: 0 0 14px; flex-wrap: wrap;
+  background: linear-gradient(135deg, var(--accent) 0%, #3a0ca3 100%);
+  color: #fff; box-shadow: var(--shadowMd);
+  position: relative; overflow: hidden;
+}
+:global([data-theme="dark"]) .xpBanner { background: linear-gradient(135deg, #1e3a8a 0%, #312e81 100%); }
+.xpBanner::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  animation: shimmer 5s infinite;
+}
+.xpAvatar {
+  width: 54px; height: 54px; border-radius: 50%;
+  background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.4);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 1.1rem; flex-shrink: 0; z-index: 1;
+}
+.xpInfo { flex: 1; min-width: 200px; z-index: 1; }
+.xpTitleRow { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; opacity: 0.95; gap: 8px; flex-wrap: wrap; }
+.xpBarTrack { height: 8px; border-radius: 5px; background: rgba(255,255,255,0.25); overflow: hidden; }
+.xpBarFill { height: 100%; background: #ffd166; border-radius: 5px; transition: width 0.4s ease; }
+.xpWeekly { font-size: 0.8rem; text-align: right; opacity: 0.95; flex-shrink: 0; z-index: 1; }
+.xpWeeklyBar { width: 90px; height: 6px; border-radius: 4px; background: rgba(255,255,255,0.25); margin-top: 4px; overflow: hidden; }
+.xpWeeklyFill { height: 100%; border-radius: 4px; background: #fff; }
+.xpWeeklyFillComplete { background: #06d6a0; }
+
 /* ─── YEAR COUNTDOWN BANNER ──────────────────────────────────────────────── */
 .yearCountdownBanner {
   display:flex; align-items:center; gap:20px;
@@ -554,6 +583,83 @@
 .achievementCard h4 { color:var(--text); font-size:0.83rem; margin-bottom:3px; }
 .achievementCard p  { color:var(--text2); font-size:0.74rem; }
 
+/* ─── WEEK-OVER-WEEK COMPARISON (new) ────────────────────────────────────── */
+.weekCompareGrid { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.weekCompareCol { text-align: center; flex: 1; min-width: 100px; }
+.weekCompareValue { font-size: 1.6rem; font-weight: 900; color: var(--accent); line-height: 1; }
+.weekCompareValueMuted { font-size: 1.6rem; font-weight: 900; color: var(--text2); line-height: 1; }
+.weekCompareLabel { font-size: 0.75rem; color: var(--text2); font-weight: 600; margin-top: 4px; }
+.weekCompareDeltaBox { text-align: center; flex: 1; min-width: 100px; padding: 8px 12px; border-radius: 10px; transition: all 0.2s; }
+.weekCompareDeltaUp { background: rgba(16,185,129,0.1); }
+.weekCompareDeltaDown { background: rgba(239,68,68,0.1); }
+.weekCompareDeltaValue { font-size: 1.4rem; font-weight: 900; line-height: 1; }
+.weekCompareDeltaValueUp { color: #10b981; }
+.weekCompareDeltaValueDown { color: #ef4444; }
+
+/* ─── TIME-OF-DAY PRODUCTIVITY MAP (new) ─────────────────────────────────── */
+.timeOfDayScroll { overflow-x: auto; padding-bottom: 4px; }
+.timeOfDayGrid { display: grid; grid-template-columns: 30px repeat(24, minmax(16px, 1fr)); gap: 2px; min-width: 560px; }
+.timeOfDayRow { display: contents; }
+.timeOfDayDayLabel { font-size: 0.65rem; color: var(--text2); align-self: center; font-weight: 600; }
+.timeOfDayCell { aspect-ratio: 1; border-radius: 3px; transition: transform 0.15s ease; cursor: default; }
+.timeOfDayCell:hover { transform: scale(1.25); }
+.timeOfDayInsight { font-size: 0.78rem; color: var(--text2); margin-top: 10px; padding: 8px 12px; background: var(--surface2); border-radius: 8px; border: 1px dashed var(--border2); }
+.timeOfDayInsight strong { color: var(--text); }
+
+/* ─── MOOD VS ACCURACY (new) ──────────────────────────────────────────────── */
+.moodList { display: flex; flex-direction: column; gap: 9px; }
+.moodRow { display: flex; align-items: center; gap: 10px; }
+.moodEmoji { font-size: 1.1rem; width: 26px; flex-shrink: 0; text-align: center; }
+.moodLabel { font-size: 0.82rem; color: var(--text2); min-width: 70px; flex-shrink: 0; }
+.moodBarTrack { flex: 1; height: 8px; border-radius: 5px; background: var(--surface3); overflow: hidden; }
+.moodBarFill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
+.moodBarFillHigh { background: #10b981; }
+.moodBarFillMid  { background: #f59e0b; }
+.moodBarFillLow  { background: #ef4444; }
+.moodPct { font-size: 0.85rem; font-weight: 800; color: var(--text); min-width: 40px; text-align: right; flex-shrink: 0; }
+.moodCount { font-size: 0.7rem; color: var(--text3); min-width: 44px; flex-shrink: 0; }
+
+/* ─── UP NEXT MILESTONE ROADMAP (restyled) ───────────────────────────────── */
+.milestoneList { display: flex; flex-direction: column; gap: 10px; }
+.milestoneItem { padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); transition: all 0.2s; }
+.milestoneItem:hover { border-color: var(--border2); transform: translateX(2px); }
+.milestoneRow { display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 4px; gap: 8px; }
+.milestoneTitle { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.milestoneProgress { color: var(--text2); white-space: nowrap; }
+.milestoneBarTrack { height: 6px; border-radius: 4px; background: var(--accentS); overflow: hidden; }
+.milestoneBarFill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.4s ease; }
+.milestoneDesc { font-size: 0.76rem; color: var(--text2); margin: 4px 0 0; }
+
+/* ─── EXAM READINESS (new) ───────────────────────────────────────────────── */
+.readinessList { display: flex; flex-direction: column; gap: 10px; }
+.readinessEmpty { font-size: 0.82rem; color: var(--text2); padding: 4px 2px; }
+.readinessItem { padding: 10px 12px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); transition: all 0.2s; }
+.readinessItem:hover { border-color: var(--border2); }
+.readinessRow { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 6px; }
+.readinessName { font-size: 0.88rem; color: var(--text); }
+.readinessBadge { font-size: 0.78rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+.readinessDone        { color: #10b981; background: rgba(16,185,129,0.12); }
+.readinessOnTrack     { color: #10b981; background: rgba(16,185,129,0.12); }
+.readinessManageable  { color: #f59e0b; background: rgba(245,158,11,0.12); }
+.readinessAtRisk      { color: #ef4444; background: rgba(239,68,68,0.12); }
+.readinessBarTrack { height: 6px; border-radius: 4px; background: var(--accentS); overflow: hidden; margin-bottom: 5px; }
+.readinessBarFillDone       { background: #10b981; }
+.readinessBarFillOnTrack    { background: #10b981; }
+.readinessBarFillManageable { background: #f59e0b; }
+.readinessBarFillAtRisk     { background: #ef4444; }
+.readinessBarFill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+.readinessDetail { font-size: 0.76rem; color: var(--text2); margin: 0; }
+
+/* Small readiness pill used inline inside the Exams tab card */
+.examReadinessPill {
+  font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; color: #fff;
+}
+.examReadinessPillDone       { background: #10b981; }
+.examReadinessPillOnTrack    { background: #10b981; }
+.examReadinessPillManageable { background: #f59e0b; }
+.examReadinessPillAtRisk     { background: #ef4444; }
+.examReadinessNote { font-size: 0.76rem; color: var(--text2); margin: 2px 0 8px; }
+
 /* ─── EXAMS ──────────────────────────────────────────────────────────────── */
 .examForm { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
 .examForm .formInput, .examForm .formSelect { flex:1; min-width:130px; }
@@ -880,6 +986,7 @@
   .studyFsStats { gap:8px; }
   .examProgressGrid { grid-template-columns:1fr 1fr; }
   .scActions { flex-wrap:wrap; }
+  .weekCompareGrid { gap: 10px; }
 }
 @media (max-width:640px) {
   .page { padding:14px; }
@@ -906,4 +1013,10 @@
   .syllabusForm { flex-direction:column; }
   .syllabusForm .formSelect,
   .syllabusForm .formInput { min-width:100%; }
+  .xpBanner { padding: 12px 14px; gap: 12px; }
+  .xpAvatar { width: 44px; height: 44px; font-size: 0.95rem; }
+  .weekCompareGrid { flex-direction: column; }
+  .weekCompareCol, .weekCompareDeltaBox { width: 100%; }
+  .moodLabel { min-width: 56px; font-size: 0.76rem; }
+  .moodCount { display: none; }
 }
