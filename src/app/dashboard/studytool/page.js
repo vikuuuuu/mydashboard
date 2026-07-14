@@ -1261,7 +1261,8 @@ export default function UltraStudyHub() {
   }, [syllabusStatsByExam]);
 
   const readinessLabel = { "done": "✅ Syllabus complete", "on-track": "🟢 On track", "manageable": "🟡 Manageable pace", "at-risk": "🔴 At risk" };
-  const readinessColor = { "done": "#10b981", "on-track": "#10b981", "manageable": "#f59e0b", "at-risk": "#ef4444" };
+  // Maps a readiness status to the CSS class-name suffix used by the .readiness* / .examReadinessPill* variants below.
+  const READINESS_KEY = { "done": "Done", "on-track": "OnTrack", "manageable": "Manageable", "at-risk": "AtRisk" };
 
   // ─── YEAR PROGRESS ────────────────────────────────────────────────────────
   const currentYear = currentTime.getFullYear();
@@ -1450,31 +1451,21 @@ export default function UltraStudyHub() {
       </div>
 
       {/* ── LEVEL / XP BANNER ── */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 16, padding: "14px 18px", borderRadius: 14,
-        background: "linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)", color: "#fff", margin: "0 0 14px",
-        flexWrap: "wrap",
-      }}>
-        <div style={{
-          width: 54, height: 54, borderRadius: "50%", background: "rgba(255,255,255,0.15)",
-          display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "1.1rem",
-          border: "2px solid rgba(255,255,255,0.4)", flexShrink: 0,
-        }}>
-          Lv{levelInfo.level}
-        </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginBottom: 4, opacity: 0.95 }}>
+      <div className={styles.xpBanner}>
+        <div className={styles.xpAvatar}>Lv{levelInfo.level}</div>
+        <div className={styles.xpInfo}>
+          <div className={styles.xpTitleRow}>
             <strong>{levelInfo.title}</strong>
             <span>{totalXP} XP{levelInfo.pct < 100 ? ` • ${levelInfo.xpToNext} to next level` : ""}</span>
           </div>
-          <div style={{ height: 8, borderRadius: 5, background: "rgba(255,255,255,0.25)", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${levelInfo.pct}%`, background: "#ffd166", borderRadius: 5, transition: "width 0.4s ease" }} />
+          <div className={styles.xpBarTrack}>
+            <div className={styles.xpBarFill} style={{ width: `${levelInfo.pct}%` }} />
           </div>
         </div>
-        <div style={{ fontSize: "0.8rem", textAlign: "right", opacity: 0.95, flexShrink: 0 }}>
+        <div className={styles.xpWeekly}>
           🏁 Weekly: {weeklyChallenge.current}/{weeklyChallenge.target} min
-          <div style={{ width: 90, height: 6, borderRadius: 4, background: "rgba(255,255,255,0.25)", marginTop: 4, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${weeklyChallenge.pct}%`, background: weeklyChallenge.completed ? "#06d6a0" : "#fff" }} />
+          <div className={styles.xpWeeklyBar}>
+            <div className={`${styles.xpWeeklyFill} ${weeklyChallenge.completed ? styles.xpWeeklyFillComplete : ""}`} style={{ width: `${weeklyChallenge.pct}%` }} />
           </div>
         </div>
       </div>
@@ -1845,27 +1836,24 @@ export default function UltraStudyHub() {
           {/* ── WEEK-OVER-WEEK COMPARISON (new) ── */}
           <div className={styles.card}>
             <div className={styles.cardHead}><span>⚖️</span><h2>Week-over-Week</h2></div>
-            <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-              <div style={{ textAlign: "center", flex: 1, minWidth: 100 }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "var(--accent, #4361ee)" }}>
+            <div className={styles.weekCompareGrid}>
+              <div className={styles.weekCompareCol}>
+                <div className={styles.weekCompareValue}>
                   {Math.floor(weekComparison.thisWeek / 60)}h {weekComparison.thisWeek % 60}m
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "var(--text2, #6b7ab5)", fontWeight: 600 }}>This Week</div>
+                <div className={styles.weekCompareLabel}>This Week</div>
               </div>
-              <div style={{ textAlign: "center", flex: 1, minWidth: 100 }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "var(--text2, #6b7ab5)" }}>
+              <div className={styles.weekCompareCol}>
+                <div className={styles.weekCompareValueMuted}>
                   {Math.floor(weekComparison.lastWeek / 60)}h {weekComparison.lastWeek % 60}m
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "var(--text2, #6b7ab5)", fontWeight: 600 }}>Last Week</div>
+                <div className={styles.weekCompareLabel}>Last Week</div>
               </div>
-              <div style={{
-                textAlign: "center", flex: 1, minWidth: 100, padding: "8px 12px", borderRadius: 10,
-                background: weekComparison.delta >= 0 ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
-              }}>
-                <div style={{ fontSize: "1.4rem", fontWeight: 900, color: weekComparison.delta >= 0 ? "#10b981" : "#ef4444" }}>
+              <div className={`${styles.weekCompareDeltaBox} ${weekComparison.delta >= 0 ? styles.weekCompareDeltaUp : styles.weekCompareDeltaDown}`}>
+                <div className={`${styles.weekCompareDeltaValue} ${weekComparison.delta >= 0 ? styles.weekCompareDeltaValueUp : styles.weekCompareDeltaValueDown}`}>
                   {weekComparison.delta >= 0 ? "▲" : "▼"} {Math.abs(weekComparison.delta)}%
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "var(--text2, #6b7ab5)", fontWeight: 600 }}>vs Last Week</div>
+                <div className={styles.weekCompareLabel}>vs Last Week</div>
               </div>
             </div>
           </div>
@@ -1900,20 +1888,23 @@ export default function UltraStudyHub() {
             <div className={styles.cardHead}><span>🕐</span><h2>Best Study Hours</h2></div>
             {studySessions.length === 0 ? <p className={styles.emptyState}>Complete sessions to see your best hours</p> : (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "34px repeat(24, minmax(0,1fr))", gap: 2, overflowX: "auto" }}>
-                  {timeOfDayMap.map((row, dayIdx) => (
-                    <div key={dayIdx} style={{ display: "contents" }}>
-                      <span style={{ fontSize: "0.65rem", color: "var(--text2, #6b7280)", alignSelf: "center" }}>{DAYS[dayIdx].slice(0, 2)}</span>
-                      {row.map((mins, hour) => (
-                        <div key={hour}
-                          title={`${DAYS[dayIdx]} ${String(hour).padStart(2, "0")}:00 — ${mins} min`}
-                          style={{ aspectRatio: "1", borderRadius: 2, background: heatColor(mins) }} />
-                      ))}
-                    </div>
-                  ))}
+                <div className={styles.timeOfDayScroll}>
+                  <div className={styles.timeOfDayGrid}>
+                    {timeOfDayMap.map((row, dayIdx) => (
+                      <div key={dayIdx} className={styles.timeOfDayRow}>
+                        <span className={styles.timeOfDayDayLabel}>{DAYS[dayIdx].slice(0, 2)}</span>
+                        {row.map((mins, hour) => (
+                          <div key={hour}
+                            className={styles.timeOfDayCell}
+                            title={`${DAYS[dayIdx]} ${String(hour).padStart(2, "0")}:00 — ${mins} min`}
+                            style={{ background: heatColor(mins) }} />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 {bestStudyHour.mins > 0 && (
-                  <p style={{ fontSize: "0.78rem", color: "var(--text2, #6b7280)", marginTop: 10 }}>
+                  <p className={styles.timeOfDayInsight}>
                     ⭐ Your most productive slot: <strong>{DAYS[bestStudyHour.day]} at {String(bestStudyHour.hour).padStart(2, "0")}:00</strong> ({bestStudyHour.mins} min logged there)
                   </p>
                 )}
@@ -1925,16 +1916,19 @@ export default function UltraStudyHub() {
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🧠</span><h2>Mood vs Accuracy</h2></div>
             {moodAccuracy.length === 0 ? <p className={styles.emptyState}>Log your mood in sessions to see this insight</p> : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              <div className={styles.moodList}>
                 {moodAccuracy.map(({ mood, avg, count }) => (
-                  <div key={mood} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontSize: "1.1rem", width: 28 }}>{moodEmoji(mood)}</span>
-                    <span style={{ fontSize: "0.82rem", color: "var(--text2, #6b7280)", minWidth: 70 }}>{mood.split(" ").slice(1).join(" ")}</span>
-                    <div style={{ flex: 1, height: 8, borderRadius: 5, background: "var(--surface3, #edf1fb)", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${avg}%`, background: avg >= 80 ? "#10b981" : avg >= 50 ? "#f59e0b" : "#ef4444", borderRadius: 5 }} />
+                  <div key={mood} className={styles.moodRow}>
+                    <span className={styles.moodEmoji}>{moodEmoji(mood)}</span>
+                    <span className={styles.moodLabel}>{mood.split(" ").slice(1).join(" ")}</span>
+                    <div className={styles.moodBarTrack}>
+                      <div
+                        className={`${styles.moodBarFill} ${avg >= 80 ? styles.moodBarFillHigh : avg >= 50 ? styles.moodBarFillMid : styles.moodBarFillLow}`}
+                        style={{ width: `${avg}%` }}
+                      />
                     </div>
-                    <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text, #1a2147)", minWidth: 40, textAlign: "right" }}>{avg}%</span>
-                    <span style={{ fontSize: "0.7rem", color: "var(--text3, #9ca8d0)", minWidth: 46 }}>({count})</span>
+                    <span className={styles.moodPct}>{avg}%</span>
+                    <span className={styles.moodCount}>({count})</span>
                   </div>
                 ))}
               </div>
@@ -1977,17 +1971,17 @@ export default function UltraStudyHub() {
             {upNextAchievements.length === 0 ? (
               <p className={styles.emptyState}>🎉 You've unlocked every achievement!</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div className={styles.milestoneList}>
                 {upNextAchievements.map(a => (
-                  <div key={a.id} style={{ padding: "10px 12px", borderRadius: 10, background: "var(--bg, #f6f8ff)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", marginBottom: 4 }}>
-                      <span><span style={{ marginRight: 6 }}>{a.icon}</span><strong>{a.title}</strong></span>
-                      <span style={{ color: "var(--text2, #6b7280)" }}>{a.current}/{a.target}</span>
+                  <div key={a.id} className={styles.milestoneItem}>
+                    <div className={styles.milestoneRow}>
+                      <span className={styles.milestoneTitle}><span>{a.icon}</span><strong>{a.title}</strong></span>
+                      <span className={styles.milestoneProgress}>{a.current}/{a.target}</span>
                     </div>
-                    <div style={{ height: 6, borderRadius: 4, background: "rgba(67,97,238,0.12)", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${a.pct}%`, background: "#4361ee", borderRadius: 4 }} />
+                    <div className={styles.milestoneBarTrack}>
+                      <div className={styles.milestoneBarFill} style={{ width: `${a.pct}%` }} />
                     </div>
-                    <p style={{ fontSize: "0.76rem", color: "var(--text2, #6b7280)", margin: "4px 0 0" }}>{a.description}</p>
+                    <p className={styles.milestoneDesc}>{a.description}</p>
                   </div>
                 ))}
               </div>
@@ -1998,24 +1992,25 @@ export default function UltraStudyHub() {
           {upcomingExams.length > 0 && (
             <div className={styles.card}>
               <div className={styles.cardHead}><span>🧭</span><h2>Exam Readiness</h2></div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div className={styles.readinessList}>
                 {upcomingExams.map(ex => {
                   const r = examReadiness(ex);
                   if (!r) return (
-                    <div key={ex.id} style={{ fontSize: "0.82rem", color: "var(--text2, #6b7280)" }}>
+                    <div key={ex.id} className={styles.readinessEmpty}>
                       {ex.examName}: no syllabus chapters added yet
                     </div>
                   );
+                  const key = READINESS_KEY[r.status];
                   return (
-                    <div key={ex.id} style={{ padding: "10px 12px", borderRadius: 10, background: "var(--surface2, #f4f7fe)", border: "1px solid var(--border, rgba(99,120,200,0.14))" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, flexWrap: "wrap", gap: 6 }}>
-                        <strong style={{ fontSize: "0.88rem" }}>{ex.examName}</strong>
-                        <span style={{ fontSize: "0.78rem", fontWeight: 700, color: readinessColor[r.status] }}>{readinessLabel[r.status]}</span>
+                    <div key={ex.id} className={styles.readinessItem}>
+                      <div className={styles.readinessRow}>
+                        <strong className={styles.readinessName}>{ex.examName}</strong>
+                        <span className={`${styles.readinessBadge} ${styles[`readiness${key}`]}`}>{readinessLabel[r.status]}</span>
                       </div>
-                      <div style={{ height: 6, borderRadius: 4, background: "rgba(67,97,238,0.12)", overflow: "hidden", marginBottom: 5 }}>
-                        <div style={{ height: "100%", width: `${r.pct}%`, background: readinessColor[r.status], borderRadius: 4 }} />
+                      <div className={styles.readinessBarTrack}>
+                        <div className={`${styles.readinessBarFill} ${styles[`readinessBarFill${key}`]}`} style={{ width: `${r.pct}%` }} />
                       </div>
-                      <p style={{ fontSize: "0.76rem", color: "var(--text2, #6b7280)", margin: 0 }}>
+                      <p className={styles.readinessDetail}>
                         {r.status === "done"
                           ? `All ${r.total} chapters complete!`
                           : `${r.done}/${r.total} chapters done • ${r.daysLeft} days left • need ~${r.requiredPacePerDay} chapters/day`}
@@ -2132,7 +2127,7 @@ export default function UltraStudyHub() {
                           </button>
                         )}
                         {readiness && (
-                          <span style={{ fontSize: "10.5px", fontWeight: 700, padding: "2px 9px", borderRadius: 999, color: "#fff", background: readinessColor[readiness.status] }}>
+                          <span className={`${styles.examReadinessPill} ${styles[`examReadinessPill${READINESS_KEY[readiness.status]}`]}`}>
                             {readinessLabel[readiness.status]}
                           </span>
                         )}
@@ -2150,7 +2145,7 @@ export default function UltraStudyHub() {
                         </div>
                       )}
                       {readiness && readiness.status !== "done" && (
-                        <p style={{ fontSize: "0.76rem", color: "var(--text2, #6b7ab5)", margin: "2px 0 8px" }}>
+                        <p className={styles.examReadinessNote}>
                           🧭 Need ~{readiness.requiredPacePerDay} chapters/day to finish in time
                         </p>
                       )}
