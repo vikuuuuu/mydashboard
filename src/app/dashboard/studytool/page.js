@@ -50,6 +50,13 @@ const ACHIEVEMENTS_LIST = [
   { id: "habit_30",      icon: "🌱", title: "Habit Builder",      description: "Log 30 habit check-ins",                   check: (s) => s.habitCheckins >= 30 },
   { id: "early_bird",    icon: "🌅", title: "Early Bird",         description: "Complete a study session before 6 AM",     check: (s) => s.earlyBird },
   { id: "night_owl",     icon: "🦉", title: "Night Owl",          description: "Complete a study session after 11 PM",     check: (s) => s.nightOwl },
+  { id: "subject_specialist_10", icon: "🎓", title: "Subject Specialist", description: "Log 10+ hours in a single subject",       check: (s) => s.maxSubjectMins >= 600 },
+  { id: "subject_specialist_25", icon: "🏛️", title: "Deep Specialist",    description: "Log 25+ hours in a single subject",       check: (s) => s.maxSubjectMins >= 1500 },
+  { id: "renaissance_5",         icon: "🎨", title: "Renaissance Learner",description: "Study 5+ different subjects total",       check: (s) => s.uniqueSubjectsCount >= 5 },
+  { id: "weekly_variety",        icon: "🧩", title: "Balanced Week",      description: "Study 3+ subjects in a single week",       check: (s) => s.thisWeekSubjectsCount >= 3 },
+  { id: "weekend_warrior",       icon: "🏖️", title: "Weekend Warrior",    description: "Study on both Saturday and Sunday",        check: (s) => s.weekendWarrior },
+  { id: "achievement_hunter",    icon: "🗺️", title: "Achievement Hunter", description: "Unlock 10 achievements",                   check: (s) => s.achievementsUnlocked >= 10 },
+  { id: "comeback_kid",          icon: "💪", title: "Comeback Kid",       description: "Resume a 3+ day streak after a gap",       check: (s) => s.comebackFlag },
 ];
 
 // Maps achievement id -> [currentValue, targetValue] using combinedStats, used to render
@@ -75,6 +82,13 @@ const ACHIEVEMENT_PROGRESS = {
   habit_30:      (s) => [s.habitCheckins, 30],
   early_bird:    (s) => [s.earlyBird ? 1 : 0, 1],
   night_owl:     (s) => [s.nightOwl ? 1 : 0, 1],
+  subject_specialist_10: (s) => [s.maxSubjectMins, 600],
+  subject_specialist_25: (s) => [s.maxSubjectMins, 1500],
+  renaissance_5:         (s) => [s.uniqueSubjectsCount, 5],
+  weekly_variety:        (s) => [s.thisWeekSubjectsCount, 3],
+  weekend_warrior:       (s) => [s.weekendWarrior ? 1 : 0, 1],
+  achievement_hunter:    (s) => [s.achievementsUnlocked, 10],
+  comeback_kid:          (s) => [s.comebackFlag ? 1 : 0, 1],
 };
 
 // ─── XP / LEVEL SYSTEM ─────────────────────────────────────────────────────
@@ -100,6 +114,9 @@ const getWeekKey = (d = new Date()) => {
   const start = getStartOfWeek(d);
   return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
 };
+
+// Mood emoji -> label used for the mood/accuracy analytics card (keeps the emoji, drops the word)
+const moodEmoji = (mood) => (mood || "").split(" ")[0];
 
 export default function UltraStudyHub() {
   const router = useRouter();
@@ -223,6 +240,7 @@ export default function UltraStudyHub() {
   const [upcomingClasses, setUpcomingClasses] = useState([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [monthlyStats, setMonthlyStats] = useState([]);
+  const [comebackFlag, setComebackFlag] = useState(false); // true when the current streak followed a 4+ day gap
 
   // Habits
   const [habits, setHabits] = useState([]);
@@ -678,9 +696,7 @@ export default function UltraStudyHub() {
 
   const checkAchievements = async (stats) => {
     if (!user) return;
-    for (const a of ACHIEVEMENTS_LIST) {
-      if (a.check(stats)) await unlockAchievement(a);
-    }
+    await Promise.all(ACHIEVEMENTS_LIST.filter(a => a.check(stats)).map(a => unlockAchievement(a)));
   };
 
   const calculateStats = (sessions) => {
@@ -727,6 +743,7 @@ export default function UltraStudyHub() {
     });
 
     let finalStreak = 0;
+    let hadGapThenRestarted = false;
     if (sorted.length) {
       const oneDay = 86400000;
       const uniqueDayTimestamps = [...new Set(sorted.map(s => {
@@ -745,8 +762,20 @@ export default function UltraStudyHub() {
           else break;
         }
       }
+
+      // "Comeback Kid": look at the gap immediately preceding the current streak's oldest day.
+      // If that gap was 4+ days and the current streak has reached 3+ days, count it as a comeback.
+      if (finalStreak >= 3) {
+        const streakOldestIdx = finalStreak - 1;
+        const nextOlderIdx = streakOldestIdx + 1;
+        if (uniqueDayTimestamps[nextOlderIdx] !== undefined) {
+          const gapDays = (uniqueDayTimestamps[streakOldestIdx] - uniqueDayTimestamps[nextOlderIdx]) / oneDay;
+          if (gapDays >= 4) hadGapThenRestarted = true;
+        }
+      }
     }
     setStreak(finalStreak);
+    setComebackFlag(hadGapThenRestarted);
     // NOTE: achievement checking has been moved OUT of here — it now runs from a single
     // `combinedStats` useEffect below, so it reacts consistently to sessions, todos,
     // syllabus, habits AND pomodoro data together instead of only sessions.
@@ -961,11 +990,40 @@ export default function UltraStudyHub() {
       const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
       return d.getHours() >= 23;
     });
+
+    // ── New: per-subject totals, drive subject-mastery + variety achievements ──
+    const subjectMinutes = {};
+    studySessions.forEach(s => {
+      subjectMinutes[s.subjectName] = (subjectMinutes[s.subjectName] || 0) + (s.actualTime || 0);
+    });
+    const maxSubjectMins = Math.max(0, ...Object.values(subjectMinutes));
+    const uniqueSubjectsCount = Object.keys(subjectMinutes).length;
+
+    // ── New: subjects studied in the current calendar week ──
+    const startOfThisWeek = getStartOfWeek();
+    const thisWeekSubjects = new Set(
+      studySessions
+        .filter(s => (s.createdAt?.toDate?.() || new Date(s.createdAt)) >= startOfThisWeek)
+        .map(s => s.subjectName)
+    );
+
+    // ── New: did the user study on both Saturday (6) and Sunday (0), ever? ──
+    const weekendDays = new Set(
+      studySessions
+        .map(s => s.createdAt?.toDate?.() || new Date(s.createdAt))
+        .filter(d => d.getDay() === 0 || d.getDay() === 6)
+        .map(d => d.getDay())
+    );
+    const weekendWarrior = weekendDays.has(0) && weekendDays.has(6);
+
     return {
       streak, totalMins, totalSessions: studySessions.length, avgAccuracy,
       syllabusDone, todosDone, habitCheckins, pomodoroTotal, earlyBird, nightOwl,
+      subjectMinutes, maxSubjectMins, uniqueSubjectsCount,
+      thisWeekSubjectsCount: thisWeekSubjects.size, weekendWarrior,
+      achievementsUnlocked: achievements.length, comebackFlag,
     };
-  }, [studySessions, syllabusItems, todos, habits, streak, pomodoroTotal]);
+  }, [studySessions, syllabusItems, todos, habits, streak, pomodoroTotal, achievements.length, comebackFlag]);
 
   useEffect(() => {
     if (!user) return;
@@ -1026,6 +1084,57 @@ export default function UltraStudyHub() {
     return "#047857";
   };
 
+  // ══════════════════════════════════════════════════════════════════════
+  // ─── ENHANCED ANALYTICS ─────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════
+
+  // a) Time-of-Day Productivity Map — 7 (day-of-week) × 24 (hour) grid of minutes studied.
+  const timeOfDayMap = useMemo(() => {
+    const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+    studySessions.forEach(s => {
+      const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
+      grid[d.getDay()][d.getHours()] += (s.actualTime || 0);
+    });
+    return grid;
+  }, [studySessions]);
+
+  const bestStudyHour = useMemo(() => {
+    let best = { day: null, hour: null, mins: 0 };
+    timeOfDayMap.forEach((row, dayIdx) => {
+      row.forEach((mins, hour) => {
+        if (mins > best.mins) best = { day: dayIdx, hour, mins };
+      });
+    });
+    return best;
+  }, [timeOfDayMap]);
+
+  // b) Mood vs Accuracy correlation — turns the `mood` field (currently write-only) into an insight.
+  const moodAccuracy = useMemo(() => {
+    const byMood = {};
+    studySessions.forEach(s => {
+      if (!s.mood) return;
+      if (!byMood[s.mood]) byMood[s.mood] = { total: 0, count: 0 };
+      byMood[s.mood].total += s.accuracyPercentage || 0;
+      byMood[s.mood].count += 1;
+    });
+    return Object.entries(byMood)
+      .map(([mood, v]) => ({ mood, avg: Math.round(v.total / v.count), count: v.count }))
+      .sort((a, b) => b.avg - a.avg);
+  }, [studySessions]);
+
+  // c) Week-over-week comparison.
+  const weekComparison = useMemo(() => {
+    const thisWeekStart = getStartOfWeek();
+    const lastWeekStart = new Date(thisWeekStart); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+    const sum = (from, to) => studySessions
+      .filter(s => { const d = s.createdAt?.toDate?.() || new Date(s.createdAt); return d >= from && d < to; })
+      .reduce((a, s) => a + (s.actualTime || 0), 0);
+    const thisWeek = sum(thisWeekStart, new Date());
+    const lastWeek = sum(lastWeekStart, thisWeekStart);
+    const delta = lastWeek === 0 ? (thisWeek > 0 ? 100 : 0) : Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
+    return { thisWeek, lastWeek, delta };
+  }, [studySessions]);
+
   // Auto-tracked weekly challenge: study 300+ min this week.
   const weeklyChallenge = useMemo(() => {
     const startOfWeek = getStartOfWeek();
@@ -1083,10 +1192,8 @@ export default function UltraStudyHub() {
   }, [achievements, combinedStats]);
 
   // ─── COMPUTED VALUES (memoized — these previously recalculated on every 500ms timer tick) ──
-  const totalStudiedMins = useMemo(() => studySessions.reduce((a, s) => a + (s.actualTime || 0), 0), [studySessions]);
-  const avgAccuracy = useMemo(() => (
-    studySessions.length ? Math.round(studySessions.reduce((a, s) => a + (s.accuracyPercentage || 0), 0) / studySessions.length) : 0
-  ), [studySessions]);
+  const totalStudiedMins = combinedStats.totalMins;
+  const avgAccuracy = combinedStats.avgAccuracy;
   const todayStudied = useMemo(() => studySessions.filter(s => {
     const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
     return d.toDateString() === new Date().toDateString();
@@ -1141,6 +1248,20 @@ export default function UltraStudyHub() {
       pct: items.length ? Math.round((done / items.length) * 100) : 0,
     };
   }, [syllabusItems]);
+
+  // d) Exam Readiness — combines syllabus completion % with days remaining into a required daily pace.
+  const examReadiness = useCallback((exam) => {
+    const st = syllabusStatsByExam(exam.id);
+    if (st.total === 0) return null;
+    const daysLeft = Math.max(1, Math.ceil((new Date(exam.examDate) - new Date()) / 86400000));
+    const remaining = st.total - st.done;
+    const requiredPacePerDay = remaining / daysLeft;
+    const status = remaining <= 0 ? "done" : requiredPacePerDay <= 0.5 ? "on-track" : requiredPacePerDay <= 1.5 ? "manageable" : "at-risk";
+    return { ...st, daysLeft, remaining, requiredPacePerDay: requiredPacePerDay.toFixed(1), status };
+  }, [syllabusStatsByExam]);
+
+  const readinessLabel = { "done": "✅ Syllabus complete", "on-track": "🟢 On track", "manageable": "🟡 Manageable pace", "at-risk": "🔴 At risk" };
+  const readinessColor = { "done": "#10b981", "on-track": "#10b981", "manageable": "#f59e0b", "at-risk": "#ef4444" };
 
   // ─── YEAR PROGRESS ────────────────────────────────────────────────────────
   const currentYear = currentTime.getFullYear();
@@ -1721,7 +1842,35 @@ export default function UltraStudyHub() {
             </div>
           </div>
 
-          {/* ── STUDY HEATMAP (new) ── */}
+          {/* ── WEEK-OVER-WEEK COMPARISON (new) ── */}
+          <div className={styles.card}>
+            <div className={styles.cardHead}><span>⚖️</span><h2>Week-over-Week</h2></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+              <div style={{ textAlign: "center", flex: 1, minWidth: 100 }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "var(--accent, #4361ee)" }}>
+                  {Math.floor(weekComparison.thisWeek / 60)}h {weekComparison.thisWeek % 60}m
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text2, #6b7ab5)", fontWeight: 600 }}>This Week</div>
+              </div>
+              <div style={{ textAlign: "center", flex: 1, minWidth: 100 }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "var(--text2, #6b7ab5)" }}>
+                  {Math.floor(weekComparison.lastWeek / 60)}h {weekComparison.lastWeek % 60}m
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text2, #6b7ab5)", fontWeight: 600 }}>Last Week</div>
+              </div>
+              <div style={{
+                textAlign: "center", flex: 1, minWidth: 100, padding: "8px 12px", borderRadius: 10,
+                background: weekComparison.delta >= 0 ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+              }}>
+                <div style={{ fontSize: "1.4rem", fontWeight: 900, color: weekComparison.delta >= 0 ? "#10b981" : "#ef4444" }}>
+                  {weekComparison.delta >= 0 ? "▲" : "▼"} {Math.abs(weekComparison.delta)}%
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text2, #6b7ab5)", fontWeight: 600 }}>vs Last Week</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── STUDY HEATMAP ── */}
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🗓️</span><h2>Study Heatmap (12 weeks)</h2></div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 4, padding: "6px 2px" }}>
@@ -1744,6 +1893,52 @@ export default function UltraStudyHub() {
               ))}
               More
             </div>
+          </div>
+
+          {/* ── TIME-OF-DAY PRODUCTIVITY MAP (new) ── */}
+          <div className={styles.card}>
+            <div className={styles.cardHead}><span>🕐</span><h2>Best Study Hours</h2></div>
+            {studySessions.length === 0 ? <p className={styles.emptyState}>Complete sessions to see your best hours</p> : (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "34px repeat(24, minmax(0,1fr))", gap: 2, overflowX: "auto" }}>
+                  {timeOfDayMap.map((row, dayIdx) => (
+                    <div key={dayIdx} style={{ display: "contents" }}>
+                      <span style={{ fontSize: "0.65rem", color: "var(--text2, #6b7280)", alignSelf: "center" }}>{DAYS[dayIdx].slice(0, 2)}</span>
+                      {row.map((mins, hour) => (
+                        <div key={hour}
+                          title={`${DAYS[dayIdx]} ${String(hour).padStart(2, "0")}:00 — ${mins} min`}
+                          style={{ aspectRatio: "1", borderRadius: 2, background: heatColor(mins) }} />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {bestStudyHour.mins > 0 && (
+                  <p style={{ fontSize: "0.78rem", color: "var(--text2, #6b7280)", marginTop: 10 }}>
+                    ⭐ Your most productive slot: <strong>{DAYS[bestStudyHour.day]} at {String(bestStudyHour.hour).padStart(2, "0")}:00</strong> ({bestStudyHour.mins} min logged there)
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ── MOOD VS ACCURACY (new) ── */}
+          <div className={styles.card}>
+            <div className={styles.cardHead}><span>🧠</span><h2>Mood vs Accuracy</h2></div>
+            {moodAccuracy.length === 0 ? <p className={styles.emptyState}>Log your mood in sessions to see this insight</p> : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                {moodAccuracy.map(({ mood, avg, count }) => (
+                  <div key={mood} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: "1.1rem", width: 28 }}>{moodEmoji(mood)}</span>
+                    <span style={{ fontSize: "0.82rem", color: "var(--text2, #6b7280)", minWidth: 70 }}>{mood.split(" ").slice(1).join(" ")}</span>
+                    <div style={{ flex: 1, height: 8, borderRadius: 5, background: "var(--surface3, #edf1fb)", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${avg}%`, background: avg >= 80 ? "#10b981" : avg >= 50 ? "#f59e0b" : "#ef4444", borderRadius: 5 }} />
+                    </div>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text, #1a2147)", minWidth: 40, textAlign: "right" }}>{avg}%</span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--text3, #9ca8d0)", minWidth: 46 }}>({count})</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className={styles.card}>
@@ -1776,7 +1971,7 @@ export default function UltraStudyHub() {
             </div>
           </div>
 
-          {/* ── UP NEXT MILESTONE ROADMAP (new) ── */}
+          {/* ── UP NEXT MILESTONE ROADMAP ── */}
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🧗</span><h2>Up Next — Milestones</h2></div>
             {upNextAchievements.length === 0 ? (
@@ -1798,6 +1993,39 @@ export default function UltraStudyHub() {
               </div>
             )}
           </div>
+
+          {/* ── EXAM READINESS (new) ── */}
+          {upcomingExams.length > 0 && (
+            <div className={styles.card}>
+              <div className={styles.cardHead}><span>🧭</span><h2>Exam Readiness</h2></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {upcomingExams.map(ex => {
+                  const r = examReadiness(ex);
+                  if (!r) return (
+                    <div key={ex.id} style={{ fontSize: "0.82rem", color: "var(--text2, #6b7280)" }}>
+                      {ex.examName}: no syllabus chapters added yet
+                    </div>
+                  );
+                  return (
+                    <div key={ex.id} style={{ padding: "10px 12px", borderRadius: 10, background: "var(--surface2, #f4f7fe)", border: "1px solid var(--border, rgba(99,120,200,0.14))" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, flexWrap: "wrap", gap: 6 }}>
+                        <strong style={{ fontSize: "0.88rem" }}>{ex.examName}</strong>
+                        <span style={{ fontSize: "0.78rem", fontWeight: 700, color: readinessColor[r.status] }}>{readinessLabel[r.status]}</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 4, background: "rgba(67,97,238,0.12)", overflow: "hidden", marginBottom: 5 }}>
+                        <div style={{ height: "100%", width: `${r.pct}%`, background: readinessColor[r.status], borderRadius: 4 }} />
+                      </div>
+                      <p style={{ fontSize: "0.76rem", color: "var(--text2, #6b7280)", margin: 0 }}>
+                        {r.status === "done"
+                          ? `All ${r.total} chapters complete!`
+                          : `${r.done}/${r.total} chapters done • ${r.daysLeft} days left • need ~${r.requiredPacePerDay} chapters/day`}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🧠</span><h2>AI Insights</h2></div>
@@ -1887,6 +2115,7 @@ export default function UltraStudyHub() {
               exams.sort((a, b) => new Date(a.examDate) - new Date(b.examDate)).map(ex => {
                 const cd = getCD(ex.examDate);
                 const sylSt = syllabusStatsByExam(ex.id);
+                const readiness = examReadiness(ex);
                 return (
                   <div key={ex.id} className={`${styles.examCountdownCard} ${!cd.done && cd.d < 7 ? styles.examUrgent : !cd.done && cd.d < 30 ? styles.examWarning : ""}`}>
                     <div className={styles.examCountdownInfo}>
@@ -1902,6 +2131,11 @@ export default function UltraStudyHub() {
                             📖 Syllabus {sylSt.pct}%
                           </button>
                         )}
+                        {readiness && (
+                          <span style={{ fontSize: "10.5px", fontWeight: 700, padding: "2px 9px", borderRadius: 999, color: "#fff", background: readinessColor[readiness.status] }}>
+                            {readinessLabel[readiness.status]}
+                          </span>
+                        )}
                       </div>
                       {ex.subjects && <p className={styles.examSubjects}>📚 {ex.subjects}</p>}
                       {ex.notes && <p className={styles.examNotes}>📌 {ex.notes}</p>}
@@ -1914,6 +2148,11 @@ export default function UltraStudyHub() {
                             {sylSt.done}/{sylSt.total} chapters done
                           </span>
                         </div>
+                      )}
+                      {readiness && readiness.status !== "done" && (
+                        <p style={{ fontSize: "0.76rem", color: "var(--text2, #6b7ab5)", margin: "2px 0 8px" }}>
+                          🧭 Need ~{readiness.requiredPacePerDay} chapters/day to finish in time
+                        </p>
                       )}
                       {cd.done ? <p className={styles.examCompletedText}>✅ Exam Complete!</p> : (
                         <div className={styles.countdownGrid}>
