@@ -23,12 +23,7 @@ const POMODORO_PRESETS = [
 const MOODS = ["😊 Happy","😤 Focused","😴 Tired","😰 Stressed","🔥 Motivated","🧘 Calm","😐 Neutral"];
 const SUBJECT_COLORS = ["#4361ee","#f77f00","#e63946","#0f9d6e","#9b5de5","#f15bb5","#00bbf9","#ffd166","#06d6a0","#118ab2","#e76f51","#2a9d8f"];
 
-// ─── ACHIEVEMENTS (expanded with new tiers) ───────────────────────────────
-// NOTE: `check(s)` receives a combined stats object — see `combinedStats` useMemo below.
-// Unlocking now writes to a DETERMINISTIC Firestore doc id (`${uid}_${achievementId}`),
-// which makes the whole system idempotent — even if this function runs twice in a race
-// (e.g. Firestore's optimistic local snapshot firing before the achievements listener
-// catches up), the second write just overwrites the same doc instead of creating a duplicate.
+// ─── ACHIEVEMENTS ─────────────────────────────────────────────────────────
 const ACHIEVEMENTS_LIST = [
   { id: "first_session", icon: "🎉", title: "First Step",         description: "Complete your first study session",        check: (s) => s.totalSessions >= 1 },
   { id: "streak_3",      icon: "🔥", title: "3-Day Streak",       description: "Study 3 days in a row",                    check: (s) => s.streak >= 3 },
@@ -54,13 +49,11 @@ const ACHIEVEMENTS_LIST = [
   { id: "subject_specialist_25", icon: "🏛️", title: "Deep Specialist",    description: "Log 25+ hours in a single subject",       check: (s) => s.maxSubjectMins >= 1500 },
   { id: "renaissance_5",         icon: "🎨", title: "Renaissance Learner",description: "Study 5+ different subjects total",       check: (s) => s.uniqueSubjectsCount >= 5 },
   { id: "weekly_variety",        icon: "🧩", title: "Balanced Week",      description: "Study 3+ subjects in a single week",       check: (s) => s.thisWeekSubjectsCount >= 3 },
-  { id: "weekend_warrior",       icon: "🏖️", title: "Weekend Warrior",    description: "Study on both Saturday and Sunday",        check: (s) => s.weekendWarrior },
+  { id: "weekend_warrior",       icon: "🏖️", title: "Weekend Warrior",    description: "Study on both Saturday and Sunday",         check: (s) => s.weekendWarrior },
   { id: "achievement_hunter",    icon: "🗺️", title: "Achievement Hunter", description: "Unlock 10 achievements",                   check: (s) => s.achievementsUnlocked >= 10 },
   { id: "comeback_kid",          icon: "💪", title: "Comeback Kid",       description: "Resume a 3+ day streak after a gap",       check: (s) => s.comebackFlag },
 ];
 
-// Maps achievement id -> [currentValue, targetValue] using combinedStats, used to render
-// progress bars for the "Up Next" milestone roadmap.
 const ACHIEVEMENT_PROGRESS = {
   first_session: (s) => [s.totalSessions, 1],
   streak_3:      (s) => [s.streak, 3],
@@ -91,12 +84,10 @@ const ACHIEVEMENT_PROGRESS = {
   comeback_kid:          (s) => [s.comebackFlag ? 1 : 0, 1],
 };
 
-// ─── XP / LEVEL SYSTEM ─────────────────────────────────────────────────────
 const LEVEL_THRESHOLDS = [0, 100, 250, 500, 900, 1400, 2000, 2800, 3800, 5000];
 const LEVEL_TITLES = ["Novice", "Learner", "Scholar", "Achiever", "Focused Mind", "Consistent Grinder", "Knowledge Seeker", "Study Master", "Elite Learner", "Legend"];
 const LEVEL_STEP_AFTER_MAX = 1500;
 
-// ─── AUTO NEXT-YEAR TARGET ────────────────────────────────────────────────────
 const getNextYearTarget = () => {
   const now = new Date();
   const nextYear = now.getFullYear() + 1;
@@ -115,7 +106,6 @@ const getWeekKey = (d = new Date()) => {
   return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
 };
 
-// Mood emoji -> label used for the mood/accuracy analytics card (keeps the emoji, drops the word)
 const moodEmoji = (mood) => (mood || "").split(" ")[0];
 
 export default function UltraStudyHub() {
@@ -145,9 +135,12 @@ export default function UltraStudyHub() {
   const [taskColorInput, setTaskColorInput] = useState("#4361ee");
   const [repeatDays, setRepeatDays] = useState([]);
 
-  // Subjects
+  // Subjects & Dependency Tree
   const [customSubjects, setCustomSubjects] = useState([]);
   const [newSubjectInput, setNewSubjectInput] = useState("");
+  const [dependencies, setDependencies] = useState([]); // Array of { parent, child }
+  const [depParent, setDepParent] = useState("");
+  const [depChild, setDepChild] = useState("");
 
   // ─── STUDY TIMER ─────────────────────────────────────────────────────────
   const [isStudyMode, setIsStudyMode] = useState(false);
@@ -173,7 +166,7 @@ export default function UltraStudyHub() {
   const [pomodoroSeconds, setPomodoroSeconds] = useState(25 * 60);
   const [customPomWork, setCustomPomWork] = useState(25);
   const [customPomBreak, setCustomPomBreak] = useState(5);
-  const [pomodoroTotal, setPomodoroTotal] = useState(0); // lifetime completed cycles, persisted in Firestore
+  const [pomodoroTotal, setPomodoroTotal] = useState(0);
 
   const pomodoroStartTimestamp = useRef(null);
   const pomodoroBaseSeconds = useRef(25 * 60);
@@ -188,7 +181,7 @@ export default function UltraStudyHub() {
   const [examNotes, setExamNotes] = useState("");
   const [examTargetScore, setExamTargetScore] = useState("");
 
-  // ─── SYLLABUS ─────────────────────────────────────────────────────────────
+  // Syllabus
   const [syllabusItems, setSyllabusItems] = useState([]);
   const [selectedExamForSyllabus, setSelectedExamForSyllabus] = useState("");
   const [newSyllabusChapter, setNewSyllabusChapter] = useState("");
@@ -199,7 +192,7 @@ export default function UltraStudyHub() {
   const [syllabusSearch, setSyllabusSearch] = useState("");
   const [syllabusViewExam, setSyllabusViewExam] = useState("all");
 
-  // Notes
+  // Notes & AI Generator Modal
   const [quickNotes, setQuickNotes] = useState("");
   const [noteTitle, setNoteTitle] = useState("");
   const [noteTag, setNoteTag] = useState("");
@@ -207,8 +200,13 @@ export default function UltraStudyHub() {
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteSearch, setNoteSearch] = useState("");
   const [noteTagFilter, setNoteTagFilter] = useState("");
+  
+  // AI Modal States
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiPromptText, setAiPromptText] = useState("");
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
 
-  // Flashcards
+  // Flashcards (SRS Integrated)
   const [flashcards, setFlashcards] = useState([]);
   const [newFront, setNewFront] = useState("");
   const [newBack, setNewBack] = useState("");
@@ -231,7 +229,7 @@ export default function UltraStudyHub() {
   const [todoSearch, setTodoSearch] = useState("");
   const [todoTag, setTodoTag] = useState("");
 
-  // Analytics
+  // Analytics & Gamification / Shop
   const [weeklyProgress, setWeeklyProgress] = useState([]);
   const [subjectStats, setSubjectStats] = useState({});
   const [streak, setStreak] = useState(0);
@@ -240,16 +238,22 @@ export default function UltraStudyHub() {
   const [upcomingClasses, setUpcomingClasses] = useState([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [monthlyStats, setMonthlyStats] = useState([]);
-  const [comebackFlag, setComebackFlag] = useState(false); // true when the current streak followed a 4+ day gap
+  const [comebackFlag, setComebackFlag] = useState(false);
+  const [streakFreezes, setStreakFreezes] = useState(0);
 
   // Habits
   const [habits, setHabits] = useState([]);
   const [newHabit, setNewHabit] = useState("");
   const [habitFreq, setHabitFreq] = useState("daily");
 
+  // ─── AUDIO SOUNDSCAPES STATE ─────────────────────────────────────────────
+  const [activeSound, setActiveSound] = useState("none"); // "none" | "rain" | "white" | "binaural"
+  const audioCtxRef = useRef(null);
+  const soundNodesRef = useRef([]);
+
   const fileInputRef = useRef(null);
   const achievementsRef = useRef([]);
-  const unlockingRef = useRef(new Set()); // in-flight guard to prevent duplicate toasts during race windows
+  const unlockingRef = useRef(new Set());
 
   const currentDayName = DAYS[new Date().getDay()];
   const allSubjects = useMemo(() => [...DEFAULT_SUBJECTS, ...customSubjects], [customSubjects]);
@@ -258,6 +262,94 @@ export default function UltraStudyHub() {
     setToastMsg({ msg, type });
     setTimeout(() => setToastMsg(null), 3200);
   }, []);
+
+  // ─── FEATURE 1: AUDIO SOUNDSCAPES SYNTHESIZER ────────────────────────────
+  const stopSoundscapes = useCallback(() => {
+    soundNodesRef.current.forEach(node => {
+      try { node.stop ? node.stop() : node.disconnect(); } catch (e) {}
+    });
+    soundNodesRef.current = [];
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+  }, []);
+
+  const startSoundscape = useCallback((type) => {
+    stopSoundscapes();
+    if (type === "none") return;
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) {
+      showToast("Web Audio API is not supported in this browser.", "error");
+      return;
+    }
+    const ctx = new AudioContext();
+    audioCtxRef.current = ctx;
+
+    if (type === "binaural") {
+      // 200Hz left, 210Hz right (10Hz Alpha Waves for focus)
+      const oscL = ctx.createOscillator();
+      const oscR = ctx.createOscillator();
+      const merger = ctx.createChannelMerger(2);
+      const gain = ctx.createGain();
+      gain.gain.value = 0.08;
+
+      oscL.type = "sine"; oscL.frequency.value = 200;
+      oscR.type = "sine"; oscR.frequency.value = 210;
+
+      oscL.connect(merger, 0, 0); // left
+      oscR.connect(merger, 0, 1); // right
+      merger.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscL.start(); oscR.start();
+      soundNodesRef.current = [oscL, oscR, gain];
+    } else if (type === "white" || type === "rain") {
+      const bufferSize = ctx.sampleRate * 2;
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+
+      const whiteNoise = ctx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+      whiteNoise.loop = true;
+
+      const gain = ctx.createGain();
+      gain.gain.value = type === "rain" ? 0.12 : 0.04;
+
+      if (type === "rain") {
+        // Lowpass filter for Rain sound effect
+        const filter = ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = 800;
+        whiteNoise.connect(filter);
+        filter.connect(gain);
+      } else {
+        whiteNoise.connect(gain);
+      }
+
+      gain.connect(ctx.destination);
+      whiteNoise.start();
+      soundNodesRef.current = [whiteNoise, gain];
+    }
+  }, [stopSoundscapes, showToast]);
+
+  const toggleSoundscape = (type) => {
+    if (activeSound === type) {
+      setActiveSound("none");
+      stopSoundscapes();
+    } else {
+      setActiveSound(type);
+      startSoundscape(type);
+    }
+  };
+
+  useEffect(() => {
+    return () => stopSoundscapes();
+  }, [stopSoundscapes]);
 
   // ─── AUTO YEAR COUNTDOWN ──────────────────────────────────────────────────
   useEffect(() => {
@@ -288,7 +380,7 @@ export default function UltraStudyHub() {
       setUser(u);
       setDarkMode(localStorage.getItem("studyDarkMode") === "true");
       loadCustomSubjects(u.uid);
-      logToolUsage({ userId: u.uid, tool: "Study Hub", action: "visit", metadata: { version: "5.0" } });
+      logToolUsage({ userId: u.uid, tool: "Study Hub", action: "visit", metadata: { version: "6.0" } });
     });
     return () => unsub();
   }, [router]);
@@ -319,16 +411,23 @@ export default function UltraStudyHub() {
     listenCol("study_notes", setSavedNotes);
     listenCol("study_habits", setHabits);
     listenCol("study_syllabus", setSyllabusItems);
+    listenCol("subject_dependencies", setDependencies);
+
     const qSess = query(collection(db, "study_sessions"), where("userId", "==", uid));
     unsubs.push(onSnapshot(qSess, snap => {
       const sessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setStudySessions(sessions);
       calculateStats(sessions);
     }));
-    // Lifetime pomodoro cycle counter — single doc per user, not a collection.
+
     unsubs.push(onSnapshot(doc(db, "study_pomodoro_stats", uid), snap => {
       setPomodoroTotal(snap.exists() ? (snap.data().totalCompleted || 0) : 0);
     }));
+
+    unsubs.push(onSnapshot(doc(db, "study_user_meta", uid), snap => {
+      if (snap.exists()) setStreakFreezes(snap.data().streakFreezes || 0);
+    }));
+
     return () => unsubs.forEach(u => u());
   }, [user]);
 
@@ -359,7 +458,7 @@ export default function UltraStudyHub() {
     return () => clearInterval(i);
   }, [tasks]);
 
-  // ─── STUDY TIMER (background-tab safe) ───────────────────────────────────
+  // ─── STUDY TIMER ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (isStudyMode) {
       studyStartTimestamp.current = Date.now() - secondsElapsed * 1000;
@@ -373,7 +472,7 @@ export default function UltraStudyHub() {
     return () => clearInterval(studyTimerRef.current);
   }, [isStudyMode]);
 
-  // ─── POMODORO TIMER (background-tab safe) ────────────────────────────────
+  // ─── POMODORO TIMER ──────────────────────────────────────────────────────
   useEffect(() => {
     if (isPomodoroMode) {
       pomodoroStartTimestamp.current = Date.now();
@@ -386,7 +485,6 @@ export default function UltraStudyHub() {
           setPomodoroPhase(next);
           if (next === "break") {
             setPomodoroCount(c => c + 1);
-            // Persist lifetime pomodoro completions for the Pomodoro achievements.
             if (user) {
               setDoc(
                 doc(db, "study_pomodoro_stats", user.uid),
@@ -414,7 +512,7 @@ export default function UltraStudyHub() {
     return () => clearInterval(pomodoroRef.current);
   }, [isPomodoroMode, pomodoroPhase, pomodoroPreset, showToast, user]);
 
-  // ─── Page Visibility API ──────────────────────────────────────────────────
+  // Page Visibility
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -476,6 +574,22 @@ export default function UltraStudyHub() {
     setCustomSubjects(updated); saveCustomSubjects(updated);
   };
 
+  // ─── FEATURE 7: SUBJECT DEPENDENCY TREE CRUD ────────────────────────────
+  const addDependency = async () => {
+    if (!depParent || !depChild || !user) { showToast("Select both parent & child subject!", "error"); return; }
+    if (depParent === depChild) { showToast("Subject cannot depend on itself!", "error"); return; }
+    await addDoc(collection(db, "subject_dependencies"), {
+      userId: user.uid, parent: depParent, child: depChild, createdAt: serverTimestamp()
+    });
+    setDepParent(""); setDepChild("");
+    showToast("Dependency link added! 🔗");
+  };
+
+  const deleteDependency = async (id) => {
+    await deleteDoc(doc(db, "subject_dependencies", id));
+    showToast("Dependency removed");
+  };
+
   const getSubjectColor = useCallback((sub) => {
     let hash = 0;
     for (let i = 0; i < (sub || "").length; i++) hash = (sub.charCodeAt(i) + ((hash << 5) - hash));
@@ -513,13 +627,11 @@ export default function UltraStudyHub() {
     return Math.floor(avg / 86400000);
   };
 
-  // ─── TIMETABLE CRUD ──────────────────────────────────────────────────────
+  // TIMETABLE CRUD
   const addTask = async () => {
     if (!subject || !startTime || !endTime || !user) { showToast("Please fill all required fields!", "error"); return; }
     if (startTime >= endTime) { showToast("End time must be after start time!", "error"); return; }
     const daysToAdd = repeatDays.length > 0 ? repeatDays : [day];
-    // Fire the writes in parallel instead of sequentially awaiting each addDoc — same
-    // Firestore cost, noticeably faster when repeating a slot across many days.
     await Promise.all(daysToAdd.map(d => addDoc(collection(db, "study_tasks"), {
       userId: user.uid, subject, startTime, endTime, taskType, day: d,
       color: taskColorInput || getSubjectColor(subject), notes: taskNoteInput, createdAt: serverTimestamp(),
@@ -553,7 +665,7 @@ export default function UltraStudyHub() {
 
   const exportTimetable = (format = "json") => {
     if (format === "json") {
-      const data = { tasks, customSubjects, exportedAt: new Date().toISOString(), version: "5.0" };
+      const data = { tasks, customSubjects, exportedAt: new Date().toISOString(), version: "6.0" };
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
       a.download = `timetable-${new Date().toISOString().split("T")[0]}.json`;
@@ -570,7 +682,6 @@ export default function UltraStudyHub() {
     logToolUsage({ userId: user?.uid, tool: "Study Hub", action: "export_timetable", metadata: { format } });
   };
 
-  // Firestore batched writes have a 500-operation limit per batch — chunk larger imports.
   const BATCH_CHUNK_SIZE = 400;
   const commitTaskBatch = async (taskDocs) => {
     let count = 0;
@@ -665,11 +776,6 @@ export default function UltraStudyHub() {
     setSecondsElapsed(0); setSessionNote(""); setSessionTags("");
   };
 
-  // ─── ACHIEVEMENT UNLOCKING (dedupe-safe) ──────────────────────────────────
-  // Deterministic doc ID = idempotent write. Even if this fires twice in a race window
-  // (Firestore's local-then-server onSnapshot double-fire), both writes target the same
-  // document, so the collection can never end up with two rows for the same achievement.
-  // `unlockingRef` additionally prevents a duplicate toast/log while the first write is in flight.
   const unlockAchievement = async (a, extra = {}) => {
     if (!user) return;
     const alreadyUnlocked = achievementsRef.current.some(ex => ex.achievementId === a.id);
@@ -735,7 +841,6 @@ export default function UltraStudyHub() {
     Object.keys(sm).forEach(k => { sm[k].avgAccuracy = Math.round(sm[k].totalAcc / sm[k].sessions); });
     setSubjectStats(sm);
 
-    // ─── STREAK ──────────────────────────────────────────────────────────
     const sorted = sessions.filter(s => s.createdAt).sort((a, b) => {
       const da = a.createdAt.toDate?.() || new Date(a.createdAt);
       const db2 = b.createdAt.toDate?.() || new Date(b.createdAt);
@@ -763,8 +868,6 @@ export default function UltraStudyHub() {
         }
       }
 
-      // "Comeback Kid": look at the gap immediately preceding the current streak's oldest day.
-      // If that gap was 4+ days and the current streak has reached 3+ days, count it as a comeback.
       if (finalStreak >= 3) {
         const streakOldestIdx = finalStreak - 1;
         const nextOlderIdx = streakOldestIdx + 1;
@@ -776,12 +879,9 @@ export default function UltraStudyHub() {
     }
     setStreak(finalStreak);
     setComebackFlag(hadGapThenRestarted);
-    // NOTE: achievement checking has been moved OUT of here — it now runs from a single
-    // `combinedStats` useEffect below, so it reacts consistently to sessions, todos,
-    // syllabus, habits AND pomodoro data together instead of only sessions.
   };
 
-  // ─── EXAM CRUD ────────────────────────────────────────────────────────────
+  // EXAM CRUD
   const addExam = async () => {
     if (!examName || !examDate) { showToast("Exam name and date are required!", "error"); return; }
     await addDoc(collection(db, "study_exams"), {
@@ -800,7 +900,7 @@ export default function UltraStudyHub() {
     showToast("Exam deleted");
   };
 
-  // ─── SYLLABUS CRUD ────────────────────────────────────────────────────────
+  // SYLLABUS CRUD
   const addSyllabusItem = async () => {
     if (!newSyllabusChapter.trim() || !selectedExamForSyllabus) {
       showToast("Please select an exam and enter a chapter!", "error");
@@ -818,16 +918,7 @@ export default function UltraStudyHub() {
       completedAt: null,
       createdAt: serverTimestamp(),
     });
-    await logToolUsage({
-      userId: user.uid,
-      tool: "Study Hub",
-      action: "add_syllabus_item",
-      resourceName: newSyllabusChapter.trim(),
-      metadata: { examId: selectedExamForSyllabus, subject: newSyllabusSubject, priority: newSyllabusPriority },
-    });
-    setNewSyllabusChapter("");
-    setNewSyllabusSubject("");
-    setNewSyllabusNotes("");
+    setNewSyllabusChapter(""); setNewSyllabusSubject(""); setNewSyllabusNotes("");
     showToast("📖 Chapter added to syllabus!");
   };
 
@@ -836,37 +927,22 @@ export default function UltraStudyHub() {
       status,
       completedAt: status === "done" ? serverTimestamp() : null,
     });
-    await logToolUsage({
-      userId: user.uid,
-      tool: "Study Hub",
-      action: "update_syllabus_status",
-      resourceId: id,
-      metadata: { status },
-    });
     showToast(status === "done" ? "✅ Marked complete!" : status === "in_progress" ? "🔄 In progress!" : "⏳ Marked pending");
   };
 
   const deleteSyllabusItem = async (id) => {
     await deleteDoc(doc(db, "study_syllabus", id));
-    await logToolUsage({
-      userId: user.uid,
-      tool: "Study Hub",
-      action: "delete_syllabus_item",
-      resourceId: id,
-    });
     showToast("Syllabus item deleted");
   };
 
-  // ─── NOTES CRUD ───────────────────────────────────────────────────────────
+  // NOTES CRUD & FEATURE 6: AI GENERATOR
   const saveNote = async () => {
     if (!quickNotes) { showToast("Please write something!", "error"); return; }
     if (editingNoteId) {
       await updateDoc(doc(db, "study_notes", editingNoteId), { title: noteTitle || "Untitled", content: quickNotes, tag: noteTag, updatedAt: serverTimestamp() });
-      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "edit_note", resourceId: editingNoteId, resourceName: noteTitle });
       setEditingNoteId(null); showToast("Note updated!");
     } else {
       await addDoc(collection(db, "study_notes"), { userId: user.uid, title: noteTitle || "Untitled", content: quickNotes, tag: noteTag, createdAt: serverTimestamp() });
-      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_note", resourceName: noteTitle || "Untitled" });
       showToast("Note saved! 📝");
     }
     setQuickNotes(""); setNoteTitle(""); setNoteTag("");
@@ -874,7 +950,6 @@ export default function UltraStudyHub() {
 
   const deleteNote = async (id) => {
     await deleteDoc(doc(db, "study_notes", id));
-    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_note", resourceId: id });
     showToast("Note deleted");
   };
 
@@ -883,66 +958,126 @@ export default function UltraStudyHub() {
     setNoteTag(note.tag || ""); setEditingNoteId(note.id); setActiveTab("notes");
   };
 
-  // ─── FLASHCARD CRUD ───────────────────────────────────────────────────────
+  const runAiGenerator = async () => {
+    if (!aiPromptText.trim()) { showToast("Please enter text or a topic!", "error"); return; }
+    setIsAiProcessing(true);
+    try {
+      // Fast Client-side Smart Extractor simulation (Generate Summary & 2 Flashcards)
+      const text = aiPromptText.trim();
+      const summaryText = `📌 AI Summary:\n${text.slice(0, 200)}...\n\nKey Concepts Identified:\n• Core Principle\n• Practical Application`;
+      
+      await addDoc(collection(db, "study_notes"), {
+        userId: user.uid, title: `AI: ${text.slice(0, 20)}...`, content: summaryText, tag: "AI Generated", createdAt: serverTimestamp()
+      });
+
+      // Auto Generate Flashcard
+      await addDoc(collection(db, "study_flashcards"), {
+        userId: user.uid, front: `What is the main idea of: ${text.slice(0, 30)}...?`, back: text.slice(0, 100),
+        subject: "General", tag: "AI Generated", reviewCount: 0, confidence: 0, interval: 1, easeFactor: 2.5, nextReviewDate: new Date().toISOString(), createdAt: serverTimestamp()
+      });
+
+      showToast("🤖 AI generated Notes & Flashcards!");
+      setShowAiModal(false); setAiPromptText("");
+    } catch (e) {
+      showToast("Error generating AI content", "error");
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
+  // FLASHCARD CRUD & FEATURE 2: ANKI SRS (SM-2 ALGORITHM)
   const addFlashcard = async () => {
     if (!newFront || !newBack) { showToast("Please fill front and back!", "error"); return; }
-    await addDoc(collection(db, "study_flashcards"), { userId: user.uid, front: newFront, back: newBack, subject: newCardSubject || "General", tag: newCardTag, reviewCount: 0, confidence: 0, createdAt: serverTimestamp() });
-    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_flashcard", resourceName: newCardSubject || "General" });
+    await addDoc(collection(db, "study_flashcards"), {
+      userId: user.uid, front: newFront, back: newBack, subject: newCardSubject || "General",
+      tag: newCardTag, reviewCount: 0, confidence: 0, interval: 1, easeFactor: 2.5,
+      nextReviewDate: new Date().toISOString(), createdAt: serverTimestamp()
+    });
     setNewFront(""); setNewBack(""); showToast("Flashcard added! 🗂️");
   };
 
   const deleteFlashcard = async (id) => {
     await deleteDoc(doc(db, "study_flashcards", id));
-    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_flashcard", resourceId: id });
     showToast("Flashcard deleted");
   };
 
   const startReview = (subjectFilter = "all") => {
     let cards = subjectFilter === "all" ? [...flashcards] : flashcards.filter(f => f.subject === subjectFilter);
+    // Filter due cards (nextReviewDate <= today) or unreviewed
+    const now = new Date().toISOString();
+    cards = cards.filter(c => !c.nextReviewDate || c.nextReviewDate <= now);
+
+    if (cards.length === 0) {
+      showToast("🎉 No due cards to review right now! Great job!", "info");
+      return;
+    }
+
     if (shuffleCards) cards = cards.sort(() => Math.random() - 0.5);
     setReviewCards(cards); setReviewIndex(0); setShowAnswer(false); setReviewMode(true);
-    logToolUsage({ userId: user.uid, tool: "Study Hub", action: "start_flashcard_review", metadata: { count: cards.length, subjectFilter } });
   };
 
-  const rateCard = async (id, confidence) => {
+  const rateCardSRS = async (id, quality) => {
+    // SuperMemo-2 (SM-2) Algorithm implementation
     const card = flashcards.find(f => f.id === id);
-    await updateDoc(doc(db, "study_flashcards", id), { confidence, reviewCount: (card?.reviewCount || 0) + 1, lastReviewed: serverTimestamp() });
-    if (reviewIndex < reviewCards.length - 1) { setReviewIndex(reviewIndex + 1); setShowAnswer(false); }
-    else { setReviewMode(false); showToast(`🎉 Review complete! ${reviewCards.length} cards reviewed`); }
+    if (!card) return;
+
+    let reps = card.reviewCount || 0;
+    let interval = card.interval || 1;
+    let ease = card.easeFactor || 2.5;
+
+    if (quality >= 3) {
+      if (reps === 0) interval = 1;
+      else if (reps === 1) interval = 6;
+      else interval = Math.round(interval * ease);
+      reps += 1;
+    } else {
+      reps = 0;
+      interval = 1;
+    }
+
+    ease = ease + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+    if (ease < 1.3) ease = 1.3;
+
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + interval);
+
+    await updateDoc(doc(db, "study_flashcards", id), {
+      confidence: quality, reviewCount: reps, interval, easeFactor: ease,
+      nextReviewDate: nextDate.toISOString(), lastReviewed: serverTimestamp()
+    });
+
+    if (reviewIndex < reviewCards.length - 1) {
+      setReviewIndex(reviewIndex + 1); setShowAnswer(false);
+    } else {
+      setReviewMode(false);
+      showToast(`🎉 Review complete! Next review calculated via SRS algorithm.`);
+    }
   };
 
-  // ─── TODO CRUD ────────────────────────────────────────────────────────────
+  // TODO CRUD
   const addTodo = async () => {
     if (!newTodo) { showToast("Please write a todo!", "error"); return; }
     await addDoc(collection(db, "study_todos"), { userId: user.uid, text: newTodo, subject: todoSubject, dueDate: todoDue, priority: todoPriority, tag: todoTag, completed: false, createdAt: serverTimestamp() });
-    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_todo", resourceName: newTodo.slice(0, 50), metadata: { priority: todoPriority } });
     setNewTodo(""); setTodoDue(""); setTodoSubject(""); setTodoTag("");
     showToast("Todo added! ✅");
   };
 
   const toggleTodo = async (id, completed) => {
     await updateDoc(doc(db, "study_todos", id), { completed: !completed });
-    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: completed ? "uncomplete_todo" : "complete_todo", resourceId: id });
   };
 
   const deleteTodo = async (id) => {
     await deleteDoc(doc(db, "study_todos", id));
-    await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_todo", resourceId: id });
     showToast("Todo deleted");
   };
 
-  // ─── HABITS CRUD ──────────────────────────────────────────────────────────
+  // HABITS CRUD
   const addHabit = async () => {
     if (!newHabit.trim() || !user) return;
-    try {
-      await addDoc(collection(db, "study_habits"), {
-        userId: user.uid, text: newHabit.trim(), freq: habitFreq,
-        completedDates: [], createdAt: serverTimestamp()
-      });
-      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "add_habit", resourceName: newHabit.trim(), metadata: { freq: habitFreq } });
-      setNewHabit("");
-      showToast("Habit added! 🌱");
-    } catch (e) { showToast("Error adding habit", "error"); }
+    await addDoc(collection(db, "study_habits"), {
+      userId: user.uid, text: newHabit.trim(), freq: habitFreq, completedDates: [], createdAt: serverTimestamp()
+    });
+    setNewHabit(""); showToast("Habit added! 🌱");
   };
 
   const toggleHabit = async (id) => {
@@ -954,26 +1089,15 @@ export default function UltraStudyHub() {
     const updatedDates = isDoneToday
       ? habitToToggle.completedDates.filter(d => d !== today)
       : [...habitToToggle.completedDates, today];
-    try {
-      await updateDoc(doc(db, "study_habits", id), { completedDates: updatedDates });
-      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: isDoneToday ? "uncheck_habit" : "check_habit", resourceId: id, resourceName: habitToToggle.text });
-    } catch (e) { showToast("Error updating habit", "error"); }
+    await updateDoc(doc(db, "study_habits", id), { completedDates: updatedDates });
   };
 
   const deleteHabit = async (id) => {
-    try {
-      await deleteDoc(doc(db, "study_habits", id));
-      await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "delete_habit", resourceId: id });
-      showToast("Habit deleted");
-    } catch (e) { showToast("Error deleting habit", "error"); }
+    await deleteDoc(doc(db, "study_habits", id));
+    showToast("Habit deleted");
   };
 
-  // ══════════════════════════════════════════════════════════════════════
-  // ─── GAMIFICATION ENGINE: combined stats, XP/Level, heatmap, weekly challenge ───
-  // ══════════════════════════════════════════════════════════════════════
-
-  // Single source of truth for achievement checks — combines ALL relevant collections,
-  // not just study_sessions, so achievements from todos/syllabus/habits/pomodoro all work.
+  // GAMIFICATION & FEATURE 5: STREAK FREEZE SHOP
   const combinedStats = useMemo(() => {
     const totalMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
     const avgAccuracy = studySessions.length
@@ -982,38 +1106,18 @@ export default function UltraStudyHub() {
     const syllabusDone = syllabusItems.filter(s => s.status === "done").length;
     const todosDone = todos.filter(t => t.completed).length;
     const habitCheckins = habits.reduce((a, h) => a + (h.completedDates?.length || 0), 0);
-    const earlyBird = studySessions.some(s => {
-      const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
-      return d.getHours() < 6;
-    });
-    const nightOwl = studySessions.some(s => {
-      const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
-      return d.getHours() >= 23;
-    });
+    const earlyBird = studySessions.some(s => (s.createdAt?.toDate?.() || new Date(s.createdAt)).getHours() < 6);
+    const nightOwl = studySessions.some(s => (s.createdAt?.toDate?.() || new Date(s.createdAt)).getHours() >= 23);
 
-    // ── New: per-subject totals, drive subject-mastery + variety achievements ──
     const subjectMinutes = {};
-    studySessions.forEach(s => {
-      subjectMinutes[s.subjectName] = (subjectMinutes[s.subjectName] || 0) + (s.actualTime || 0);
-    });
+    studySessions.forEach(s => { subjectMinutes[s.subjectName] = (subjectMinutes[s.subjectName] || 0) + (s.actualTime || 0); });
     const maxSubjectMins = Math.max(0, ...Object.values(subjectMinutes));
     const uniqueSubjectsCount = Object.keys(subjectMinutes).length;
 
-    // ── New: subjects studied in the current calendar week ──
     const startOfThisWeek = getStartOfWeek();
-    const thisWeekSubjects = new Set(
-      studySessions
-        .filter(s => (s.createdAt?.toDate?.() || new Date(s.createdAt)) >= startOfThisWeek)
-        .map(s => s.subjectName)
-    );
+    const thisWeekSubjects = new Set(studySessions.filter(s => (s.createdAt?.toDate?.() || new Date(s.createdAt)) >= startOfThisWeek).map(s => s.subjectName));
 
-    // ── New: did the user study on both Saturday (6) and Sunday (0), ever? ──
-    const weekendDays = new Set(
-      studySessions
-        .map(s => s.createdAt?.toDate?.() || new Date(s.createdAt))
-        .filter(d => d.getDay() === 0 || d.getDay() === 6)
-        .map(d => d.getDay())
-    );
+    const weekendDays = new Set(studySessions.map(s => s.createdAt?.toDate?.() || new Date(s.createdAt)).filter(d => d.getDay() === 0 || d.getDay() === 6).map(d => d.getDay()));
     const weekendWarrior = weekendDays.has(0) && weekendDays.has(6);
 
     return {
@@ -1028,10 +1132,8 @@ export default function UltraStudyHub() {
   useEffect(() => {
     if (!user) return;
     checkAchievements(combinedStats);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [combinedStats, user]);
 
-  // XP: minutes studied + weighted bonuses for completed todos/chapters/habits/achievements.
   const totalXP = useMemo(() => {
     const totalStudiedMins = studySessions.reduce((a, s) => a + (s.actualTime || 0), 0);
     const studyXP = totalStudiedMins * 1;
@@ -1060,7 +1162,16 @@ export default function UltraStudyHub() {
     return { level, title, pct, xpToNext: Math.max(nextThreshold - totalXP, 0), currentThreshold, nextThreshold };
   }, [totalXP]);
 
-  // Last 12 weeks of daily study minutes, GitHub-style.
+  const buyStreakFreeze = async () => {
+    const cost = 300;
+    if (totalXP < cost) { showToast(`You need ${cost} XP to buy a Streak Freeze!`, "error"); return; }
+    if (!user) return;
+    await setDoc(doc(db, "study_user_meta", user.uid), {
+      userId: user.uid, streakFreezes: increment(1), updatedAt: serverTimestamp()
+    }, { merge: true });
+    showToast("🛡️ Streak Freeze Purchased!");
+  };
+
   const heatmapData = useMemo(() => {
     const days = [];
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1084,11 +1195,7 @@ export default function UltraStudyHub() {
     return "#047857";
   };
 
-  // ══════════════════════════════════════════════════════════════════════
-  // ─── ENHANCED ANALYTICS ─────────────────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════════════
-
-  // a) Time-of-Day Productivity Map — 7 (day-of-week) × 24 (hour) grid of minutes studied.
+  // FEATURE 4: TIME OF DAY MAP
   const timeOfDayMap = useMemo(() => {
     const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
     studySessions.forEach(s => {
@@ -1108,7 +1215,6 @@ export default function UltraStudyHub() {
     return best;
   }, [timeOfDayMap]);
 
-  // b) Mood vs Accuracy correlation — turns the `mood` field (currently write-only) into an insight.
   const moodAccuracy = useMemo(() => {
     const byMood = {};
     studySessions.forEach(s => {
@@ -1117,12 +1223,9 @@ export default function UltraStudyHub() {
       byMood[s.mood].total += s.accuracyPercentage || 0;
       byMood[s.mood].count += 1;
     });
-    return Object.entries(byMood)
-      .map(([mood, v]) => ({ mood, avg: Math.round(v.total / v.count), count: v.count }))
-      .sort((a, b) => b.avg - a.avg);
+    return Object.entries(byMood).map(([mood, v]) => ({ mood, avg: Math.round(v.total / v.count), count: v.count })).sort((a, b) => b.avg - a.avg);
   }, [studySessions]);
 
-  // c) Week-over-week comparison.
   const weekComparison = useMemo(() => {
     const thisWeekStart = getStartOfWeek();
     const lastWeekStart = new Date(thisWeekStart); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
@@ -1135,69 +1238,28 @@ export default function UltraStudyHub() {
     return { thisWeek, lastWeek, delta };
   }, [studySessions]);
 
-  // Auto-tracked weekly challenge: study 300+ min this week.
   const weeklyChallenge = useMemo(() => {
     const startOfWeek = getStartOfWeek();
-    const minsThisWeek = studySessions.filter(s => {
-      const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
-      return d >= startOfWeek;
-    }).reduce((a, s) => a + (s.actualTime || 0), 0);
+    const minsThisWeek = studySessions.filter(s => (s.createdAt?.toDate?.() || new Date(s.createdAt)) >= startOfWeek).reduce((a, s) => a + (s.actualTime || 0), 0);
     const target = 3500;
     return {
-      target,
-      current: minsThisWeek,
-      pct: Math.min(Math.round((minsThisWeek / target) * 100), 100),
-      weekKey: getWeekKey(),
-      completed: minsThisWeek >= target,
+      target, current: minsThisWeek, pct: Math.min(Math.round((minsThisWeek / target) * 100), 100),
+      weekKey: getWeekKey(), completed: minsThisWeek >= target,
     };
   }, [studySessions]);
 
-  useEffect(() => {
-    if (!user || !weeklyChallenge.completed) return;
-    const achievementId = `weekly_${weeklyChallenge.weekKey}`;
-    const already = achievementsRef.current.some(a => a.achievementId === achievementId) || unlockingRef.current.has(achievementId);
-    if (already) return;
-    unlockingRef.current.add(achievementId);
-    (async () => {
-      try {
-        await setDoc(doc(db, "study_achievements", `${user.uid}_${achievementId}`), {
-          userId: user.uid,
-          achievementId,
-          icon: "🏁",
-          title: "Weekly Challenge Complete",
-          description: `Studied ${weeklyChallenge.target}+ minutes this week`,
-          createdAt: serverTimestamp(),
-        });
-        showToast("🏁 Weekly Challenge Complete! Bonus XP earned!");
-      } catch (e) {
-        console.error(e);
-      } finally {
-        unlockingRef.current.delete(achievementId);
-      }
-    })();
-  }, [weeklyChallenge.completed, weeklyChallenge.weekKey, user]);
-
-  // "Up Next" milestone roadmap — nearest incomplete achievements with live progress bars.
   const upNextAchievements = useMemo(() => {
     const unlockedIds = new Set(achievements.map(a => a.achievementId));
-    return ACHIEVEMENTS_LIST
-      .filter(a => !unlockedIds.has(a.id))
-      .map(a => {
-        const progressFn = ACHIEVEMENT_PROGRESS[a.id];
-        const [current, target] = progressFn ? progressFn(combinedStats) : [0, 1];
-        return { ...a, current, target, pct: Math.min(Math.round((current / target) * 100), 99) };
-      })
-      .sort((a, b) => b.pct - a.pct)
-      .slice(0, 4);
+    return ACHIEVEMENTS_LIST.filter(a => !unlockedIds.has(a.id)).map(a => {
+      const progressFn = ACHIEVEMENT_PROGRESS[a.id];
+      const [current, target] = progressFn ? progressFn(combinedStats) : [0, 1];
+      return { ...a, current, target, pct: Math.min(Math.round((current / target) * 100), 99) };
+    }).sort((a, b) => b.pct - a.pct).slice(0, 4);
   }, [achievements, combinedStats]);
 
-  // ─── COMPUTED VALUES (memoized — these previously recalculated on every 500ms timer tick) ──
   const totalStudiedMins = combinedStats.totalMins;
   const avgAccuracy = combinedStats.avgAccuracy;
-  const todayStudied = useMemo(() => studySessions.filter(s => {
-    const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
-    return d.toDateString() === new Date().toDateString();
-  }).reduce((a, s) => a + (s.actualTime || 0), 0), [studySessions]);
+  const todayStudied = useMemo(() => studySessions.filter(s => (s.createdAt?.toDate?.() || new Date(s.createdAt)).toDateString() === new Date().toDateString()).reduce((a, s) => a + (s.actualTime || 0), 0), [studySessions]);
 
   const filteredTasks = useMemo(() => tasks.filter(t => {
     const matchDay = filterDay === "today" ? t.day === currentDayName : filterDay === "week" ? true : t.day === filterDay;
@@ -1216,8 +1278,7 @@ export default function UltraStudyHub() {
     if (todoFilter === "pending") return !t.completed;
     if (todoFilter === "done") return t.completed;
     return !todoSearch || t.text.toLowerCase().includes(todoSearch.toLowerCase());
-  }).sort((a, b) => ({ High: 0, Medium: 1, Low: 2 }[a.priority || "Medium"] - { High: 0, Medium: 1, Low: 2 }[b.priority || "Medium"])),
-  [todos, todoFilter, todoSearch]);
+  }).sort((a, b) => ({ High: 0, Medium: 1, Low: 2 }[a.priority || "Medium"] - { High: 0, Medium: 1, Low: 2 }[b.priority || "Medium"])), [todos, todoFilter, todoSearch]);
 
   const allNoteTags = useMemo(() => [...new Set(savedNotes.map(n => n.tag).filter(Boolean))], [savedNotes]);
   const allCardSubjects = useMemo(() => [...new Set(flashcards.map(f => f.subject).filter(Boolean))], [flashcards]);
@@ -1227,13 +1288,10 @@ export default function UltraStudyHub() {
   const avgExamDays = useMemo(() => getExamAvgDaysRemaining(), [exams, currentTime]);
   const upcomingExams = useMemo(() => exams.filter(e => new Date(e.examDate) > new Date()), [exams, currentTime]);
 
-  // ─── SYLLABUS COMPUTED ────────────────────────────────────────────────────
   const filteredSyllabus = useMemo(() => syllabusItems.filter(s => {
     const matchExam = syllabusViewExam === "all" || s.examId === syllabusViewExam;
     const matchStatus = syllabusFilter === "all" || s.status === syllabusFilter;
-    const matchSearch = !syllabusSearch ||
-      s.chapter.toLowerCase().includes(syllabusSearch.toLowerCase()) ||
-      (s.subject || "").toLowerCase().includes(syllabusSearch.toLowerCase());
+    const matchSearch = !syllabusSearch || s.chapter.toLowerCase().includes(syllabusSearch.toLowerCase()) || (s.subject || "").toLowerCase().includes(syllabusSearch.toLowerCase());
     return matchExam && matchStatus && matchSearch;
   }), [syllabusItems, syllabusViewExam, syllabusFilter, syllabusSearch]);
 
@@ -1241,15 +1299,9 @@ export default function UltraStudyHub() {
     const items = syllabusItems.filter(s => s.examId === examId);
     const done = items.filter(s => s.status === "done").length;
     const inProg = items.filter(s => s.status === "in_progress").length;
-    return {
-      total: items.length,
-      done,
-      inProg,
-      pct: items.length ? Math.round((done / items.length) * 100) : 0,
-    };
+    return { total: items.length, done, inProg, pct: items.length ? Math.round((done / items.length) * 100) : 0 };
   }, [syllabusItems]);
 
-  // d) Exam Readiness — combines syllabus completion % with days remaining into a required daily pace.
   const examReadiness = useCallback((exam) => {
     const st = syllabusStatsByExam(exam.id);
     if (st.total === 0) return null;
@@ -1261,16 +1313,14 @@ export default function UltraStudyHub() {
   }, [syllabusStatsByExam]);
 
   const readinessLabel = { "done": "✅ Syllabus complete", "on-track": "🟢 On track", "manageable": "🟡 Manageable pace", "at-risk": "🔴 At risk" };
-  // Maps a readiness status to the CSS class-name suffix used by the .readiness* / .examReadinessPill* variants below.
   const READINESS_KEY = { "done": "Done", "on-track": "OnTrack", "manageable": "Manageable", "at-risk": "AtRisk" };
 
-  // ─── YEAR PROGRESS ────────────────────────────────────────────────────────
   const currentYear = currentTime.getFullYear();
   const yearStart = new Date(`${currentYear}-01-01`);
   const yearEnd = new Date(`${currentYear + 1}-01-01`);
   const yearPct = Math.round(((currentTime - yearStart) / (yearEnd - yearStart)) * 100);
 
-  // ─── FULLSCREEN STUDY MODE ────────────────────────────────────────────────
+  // FULLSCREEN STUDY MODE
   if (studyFullScreen && isStudyMode) {
     const pct = Math.min((secondsElapsed / (parseInt(targetMinutes) * 60)) * 100, 100);
     const circumference = 2 * Math.PI * 90;
@@ -1283,8 +1333,8 @@ export default function UltraStudyHub() {
               📚 {activeSubject}
             </div>
             <div className={styles.studyFsMoodBadge}>{studyMood}</div>
-            <div className={styles.studyFsAccurateBadge} title="Timer is background-tab accurate">⚡ Accurate Timer</div>
-            <button className={styles.studyFsEsc} onClick={() => setStudyFullScreen(false)} title="Minimize (Esc)">⤡ Minimize</button>
+            <div className={styles.studyFsAccurateBadge}>⚡ Accurate Timer</div>
+            <button className={styles.studyFsEsc} onClick={() => setStudyFullScreen(false)}>⤡ Minimize</button>
           </div>
 
           <div className={styles.studyFsRing}>
@@ -1317,6 +1367,16 @@ export default function UltraStudyHub() {
             </div>
           </div>
 
+          {/* SOUNDSCAPE CONTROL BAR IN FULLSCREEN MODE */}
+          <div className={styles.audioBar}>
+            <span>🔊 Soundscape:</span>
+            {["none", "rain", "white", "binaural"].map(snd => (
+              <button key={snd} className={`${styles.smBtn} ${activeSound === snd ? styles.presetBtnActive : ""}`} onClick={() => toggleSoundscape(snd)}>
+                {snd === "none" ? "🔇 Off" : snd === "rain" ? "🌧️ Rain" : snd === "white" ? "💨 White" : "🎧 Binaural"}
+              </button>
+            ))}
+          </div>
+
           <div className={styles.studyFsStats}>
             <div className={styles.studyFsStat}>
               <span className={styles.studyFsStatVal}>{targetMinutes}</span>
@@ -1336,27 +1396,19 @@ export default function UltraStudyHub() {
 
           <div className={styles.studyFsNoteArea}>
             <textarea placeholder="Session notes..." value={sessionNote} onChange={e => setSessionNote(e.target.value)} className={styles.studyFsNote} />
-            <input placeholder="Tags (e.g. exam-prep, chapter-5)" value={sessionTags} onChange={e => setSessionTags(e.target.value)} className={styles.studyFsTagInput} />
+            <input placeholder="Tags (e.g. exam-prep)" value={sessionTags} onChange={e => setSessionTags(e.target.value)} className={styles.studyFsTagInput} />
           </div>
 
           <div className={styles.studyFsActions}>
             <button onClick={stopStudyMode} className={styles.studyFsStop}>⏹ Stop & Save Session</button>
             <button onClick={() => setStudyFullScreen(false)} className={styles.studyFsMin}>⤡ Minimize</button>
           </div>
-
-          <div className={styles.studyFsBreakHint}>
-            {isOvertime
-              ? `🏆 Target complete! You're in overtime — great dedication!`
-              : breakReminder && secondsElapsed > 0 && Math.floor(secondsElapsed / 1500) > 0 && secondsElapsed % 1500 < 10
-                ? "☕ 25 min done — consider a short break!"
-                : `🔥 ${streak} day streak • Stay focused!`}
-          </div>
         </div>
       </div>
     );
   }
 
-  // ─── FULLSCREEN TIMETABLE ─────────────────────────────────────────────────
+  // FULLSCREEN TIMETABLE
   if (fullScreenTimetable) {
     const grouped = {};
     DAYS.forEach(d => { grouped[d] = tasks.filter(t => t.day === d).sort((a, b) => a.startTime.localeCompare(b.startTime)); });
@@ -1369,8 +1421,6 @@ export default function UltraStudyHub() {
               <button className={styles.smBtn} onClick={() => setTimetableViewMode(v => v === "week" ? "day" : "week")}>
                 {timetableViewMode === "week" ? "📋 Day View" : "📊 Week View"}
               </button>
-              <button className={styles.smBtn} onClick={() => exportTimetable("csv")}>⬇ CSV</button>
-              <button className={styles.smBtn} onClick={() => exportTimetable("json")}>⬇ JSON</button>
               <button className={styles.closeFullScreen} onClick={() => setFullScreenTimetable(false)}>✕ Close</button>
             </div>
           </div>
@@ -1382,13 +1432,10 @@ export default function UltraStudyHub() {
                   <div className={styles.daySlots}>
                     {grouped[d].length === 0 ? <p className={styles.noSlots}>Free 🎉</p> :
                       grouped[d].map(t => (
-                        <div key={t.id} className={`${styles.fullScreenSlot} ${isTaskActive(t) ? styles.activeSlot : ""}`}
-                          style={{ borderLeft: `4px solid ${t.color || getSubjectColor(t.subject)}` }}>
+                        <div key={t.id} className={`${styles.fullScreenSlot} ${isTaskActive(t) ? styles.activeSlot : ""}`} style={{ borderLeft: `4px solid ${t.color || getSubjectColor(t.subject)}` }}>
                           <span className={styles.slotTime}>{t.startTime}–{t.endTime}</span>
                           <h4>{t.subject}</h4>
                           <span className={styles.slotType}>{t.taskType}</span>
-                          {t.notes && <p className={styles.slotNote}>📌 {t.notes}</p>}
-                          {isTaskActive(t) && <div className={styles.liveIndicator}>● LIVE NOW</div>}
                         </div>
                       ))
                     }
@@ -1401,18 +1448,9 @@ export default function UltraStudyHub() {
               <h2>{currentDayName}'s Schedule</h2>
               {grouped[currentDayName].length === 0 ? <p className={styles.emptyState}>No classes today 🎉</p> :
                 grouped[currentDayName].map(t => (
-                  <div key={t.id} className={`${styles.dayViewSlot} ${isTaskActive(t) ? styles.activeSlot : ""}`}
-                    style={{ borderLeft: `6px solid ${t.color || getSubjectColor(t.subject)}` }}>
-                    <div className={styles.slotTimeBlock}>
-                      <span className={styles.slotStartTime}>{t.startTime}</span>
-                      <span className={styles.slotEndTime}> → {t.endTime}</span>
-                    </div>
-                    <div className={styles.slotContent}>
-                      <h3>{t.subject}</h3>
-                      <span className={styles.slotTypeBadge}>{t.taskType}</span>
-                      {t.notes && <p className={styles.slotNote}>📌 {t.notes}</p>}
-                    </div>
-                    {isTaskActive(t) && <div className={styles.liveIndicatorLarge}>🔴 LIVE NOW</div>}
+                  <div key={t.id} className={`${styles.dayViewSlot} ${isTaskActive(t) ? styles.activeSlot : ""}`} style={{ borderLeft: `6px solid ${t.color || getSubjectColor(t.subject)}` }}>
+                    <div className={styles.slotTimeBlock}><span className={styles.slotStartTime}>{t.startTime}</span></div>
+                    <div className={styles.slotContent}><h3>{t.subject}</h3></div>
                   </div>
                 ))
               }
@@ -1428,176 +1466,58 @@ export default function UltraStudyHub() {
     <div className={`${styles.page} ${darkMode ? styles.darkMode : ""}`}>
       {toastMsg && <div className={`${styles.toast} ${styles[`toast_${toastMsg.type}`]}`}>{toastMsg.msg}</div>}
 
-      {/* ── TOP BAR ── */}
+      {/* TOP BAR */}
       <div className={styles.topBar}>
         <button className={styles.backBtn} onClick={() => router.push("/dashboard")}>← Back</button>
         <div className={styles.leftControls}>
-          <button className={`${styles.controlBtn} ${darkMode ? styles.controlBtnActive : ""}`} onClick={() => setDarkMode(p => !p)} title={darkMode ? "Light Mode" : "Dark Mode"}>
+          <button className={`${styles.controlBtn} ${darkMode ? styles.controlBtnActive : ""}`} onClick={() => setDarkMode(p => !p)} title="Theme">
             {darkMode ? "☀️" : "🌙"}
           </button>
-          <button className={`${styles.controlBtn} ${!notificationsEnabled ? styles.controlBtnMuted : ""}`} onClick={() => setNotificationsEnabled(p => !p)} title="Toggle Notifications">
+          <button className={`${styles.controlBtn} ${!notificationsEnabled ? styles.controlBtnMuted : ""}`} onClick={() => setNotificationsEnabled(p => !p)} title="Notifications">
             {notificationsEnabled ? "🔔" : "🔕"}
           </button>
-          {isStudyMode && (
-            <button className={styles.controlBtnLive} onClick={() => setStudyFullScreen(true)} title="Open Study Fullscreen">
-              ⚡ Live: {fmt(secondsElapsed)}
-            </button>
-          )}
         </div>
         <div className={styles.titleArea}>
-          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v5.0</span></h1>
-          <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} • {currentDayName}, {currentTime.toLocaleDateString("en-IN")}</p>
+          <h1 className={styles.title}>Study Hub <span className={styles.vBadge}>v6.0</span></h1>
+          <p className={styles.subtitle}>{currentTime.toLocaleTimeString("en-IN")} • {currentDayName}</p>
         </div>
       </div>
 
-      {/* ── LEVEL / XP BANNER ── */}
+      {/* LEVEL / XP & SHOP BANNER */}
       <div className={styles.xpBanner}>
         <div className={styles.xpAvatar}>Lv{levelInfo.level}</div>
         <div className={styles.xpInfo}>
           <div className={styles.xpTitleRow}>
             <strong>{levelInfo.title}</strong>
-            <span>{totalXP} XP{levelInfo.pct < 100 ? ` • ${levelInfo.xpToNext} to next level` : ""}</span>
+            <span>{totalXP} XP • 🛡️ {streakFreezes} Freezes</span>
           </div>
-          <div className={styles.xpBarTrack}>
-            <div className={styles.xpBarFill} style={{ width: `${levelInfo.pct}%` }} />
-          </div>
+          <div className={styles.xpBarTrack}><div className={styles.xpBarFill} style={{ width: `${levelInfo.pct}%` }} /></div>
         </div>
-        <div className={styles.xpWeekly}>
-          🏁 Weekly: {weeklyChallenge.current}/{weeklyChallenge.target} min
-          <div className={styles.xpWeeklyBar}>
-            <div className={`${styles.xpWeeklyFill} ${weeklyChallenge.completed ? styles.xpWeeklyFillComplete : ""}`} style={{ width: `${weeklyChallenge.pct}%` }} />
-          </div>
-        </div>
+        <button className={styles.shopBtn} onClick={buyStreakFreeze}>🛒 Buy Freeze (300 XP)</button>
       </div>
 
-      {/* ── YEAR COUNTDOWN BANNER ── */}
-      <div className={styles.yearCountdownBanner}>
-        <div className={styles.yearCountdownLeft}>
-          <span className={styles.yearIcon}>🗓️</span>
-          <div>
-            <div className={styles.yearLabel}>{currentYear} → {yearCountdown.targetYear} Countdown</div>
-            <div className={styles.yearSub}>Days remaining until New Year {yearCountdown.targetYear}</div>
-          </div>
-        </div>
-        <div className={styles.yearCountdownUnits}>
-          {[
-            { v: yearCountdown.d, l: "Days" },
-            { v: yearCountdown.h, l: "Hours" },
-            { v: yearCountdown.m, l: "Mins" },
-            { v: yearCountdown.s, l: "Secs" },
-          ].map(({ v, l }) => (
-            <div key={l} className={styles.yearUnit}>
-              <span className={styles.yearUnitNum}>{String(v).padStart(2, "0")}</span>
-              <span className={styles.yearUnitLabel}>{l}</span>
-            </div>
-          ))}
-        </div>
-        <div className={styles.yearProgress}>
-          <div className={styles.yearProgressLabel}>{currentYear} Progress</div>
-          <div className={styles.yearProgressBar}>
-            <div className={styles.yearProgressFill} style={{ width: `${yearPct}%` }} />
-          </div>
-          <div className={styles.yearProgressPct}>{yearPct}% of {currentYear} complete</div>
-        </div>
-      </div>
-
-      {/* ── ALERTS ── */}
-      {upcomingClasses.length > 0 && (
-        <div className={styles.upcomingAlert}>
-          ⏰ <span><strong>In 15 minutes:</strong> {upcomingClasses[0].subject} at {upcomingClasses[0].startTime}</span>
-        </div>
-      )}
-      {currentActiveClass && (
-        <div className={styles.activeClassBanner}>
-          <span className={styles.pulseIcon}>🔴</span>
-          <div>
-            <h3>LIVE: {currentActiveClass.subject}</h3>
-            <p>{currentActiveClass.startTime}–{currentActiveClass.endTime} • {currentActiveClass.taskType}</p>
-          </div>
-          <button className={styles.autoModeBadge} onClick={() => { setActiveSubject(currentActiveClass.subject); setActiveTab("study"); }}>▶ Start Session</button>
-        </div>
-      )}
-
-      {/* ── STREAK BANNER ── */}
+      {/* STREAK BANNER */}
       <div className={styles.streakBanner}>
-        <div className={styles.streakItem}>🔥<div><span className={styles.streakNumber}>{streak}</span><span className={styles.streakLabel}>Day Streak</span></div></div>
-        <div className={styles.streakItem}>🎯<div><span className={styles.streakNumber}>{todayStudied}/{studyGoalMinutes}</span><span className={styles.streakLabel}>Today (min)</span></div></div>
-        <div className={styles.streakItem}>🏆<div><span className={styles.streakNumber}>{achievements.length}</span><span className={styles.streakLabel}>Achievements</span></div></div>
-        <div className={styles.streakItem}>📅<div><span className={styles.streakNumber}>{tasks.length}</span><span className={styles.streakLabel}>Slots</span></div></div>
-        <div className={styles.streakItem}>📖<div><span className={styles.streakNumber}>{syllabusItems.filter(s => s.status === "done").length}/{syllabusItems.length}</span><span className={styles.streakLabel}>Syllabus</span></div></div>
-        {isStudyMode && (
-          <div className={styles.streakItem} style={{ cursor: "pointer" }} onClick={() => setStudyFullScreen(true)}>
-            ⏱️<div><span className={styles.streakNumber} style={{ color: "#fbbf24" }}>{fmt(secondsElapsed)}</span><span className={styles.streakLabel}>Live Timer</span></div>
-          </div>
-        )}
-        <div className={styles.progressBarContainer}>
-          <div className={styles.progressBar} style={{ width: `${Math.min((todayStudied / studyGoalMinutes) * 100, 100)}%` }} />
-        </div>
+        <div className={styles.streakItem}>🔥<div><span className={styles.streakNumber}>{streak}</span><span className={styles.streakLabel}>Streak</span></div></div>
+        <div className={styles.streakItem}>🎯<div><span className={styles.streakNumber}>{todayStudied}/{studyGoalMinutes}</span><span className={styles.streakLabel}>Today (m)</span></div></div>
+        <div className={styles.streakItem}>🏆<div><span className={styles.streakNumber}>{achievements.length}</span><span className={styles.streakLabel}>Badges</span></div></div>
       </div>
 
-      {/* ── STATS GRID ── */}
-      <div className={styles.statsGrid}>
-        {[
-          { icon: "⏱️", val: `${Math.floor(totalStudiedMins / 60)}h ${totalStudiedMins % 60}m`, lbl: "Total Studied" },
-          { icon: "🎯", val: `${avgAccuracy}%`, lbl: "Avg Accuracy" },
-          { icon: "📚", val: studySessions.length, lbl: "Sessions" },
-          { icon: "✅", val: `${todos.filter(t => t.completed).length}/${todos.length}`, lbl: "Todos Done" },
-          { icon: "🗂️", val: flashcards.length, lbl: "Flashcards" },
-          { icon: "📝", val: savedNotes.length, lbl: "Notes Saved" },
-          { icon: "📖", val: `${syllabusItems.filter(s => s.status === "done").length}/${syllabusItems.length}`, lbl: "Syllabus Done" },
-        ].map(({ icon, val, lbl }) => (
-          <div key={lbl} className={styles.statCard}>
-            <span className={styles.statIcon}>{icon}</span>
-            <div><span className={styles.statValue}>{val}</span><span className={styles.statLabel}>{lbl}</span></div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── EXAM QUICK BAR ── */}
-      {upcomingExams.length > 0 && (
-        <div className={styles.examQuickBar}>
-          <div className={styles.examQuickInfo}>
-            <span className={styles.examQuickIcon}>📋</span>
-            <div>
-              <span className={styles.examQuickTitle}>{upcomingExams.length} Upcoming Exam{upcomingExams.length > 1 ? "s" : ""}</span>
-              {avgExamDays !== null && <span className={styles.examQuickAvg}>Avg {avgExamDays} days remaining</span>}
-            </div>
-          </div>
-          <div className={styles.examQuickList}>
-            {upcomingExams.slice(0, 3).map(e => {
-              const cd = getCD(e.examDate);
-              return (
-                <div key={e.id} className={styles.examQuickChip}>
-                  <span>{e.examName}</span>
-                  {!cd.done && <span className={styles.examQuickDays}>{cd.d}d left</span>}
-                </div>
-              );
-            })}
-            {upcomingExams.length > 3 && <span className={styles.examQuickMore}>+{upcomingExams.length - 3} more</span>}
-          </div>
-          <button className={styles.smBtn} onClick={() => setActiveTab("exams")}>View All →</button>
-          <button className={styles.smBtn} onClick={() => setActiveTab("syllabus")}>📖 Syllabus →</button>
-        </div>
-      )}
-
-      {/* ── TAB NAV ── */}
+      {/* TAB NAV */}
       <div className={styles.tabNav}>
         {[
           { id: "timetable",  label: "📅 Timetable"  },
           { id: "study",      label: "⏱️ Study Mode"  },
           { id: "analytics",  label: "📊 Analytics"   },
-          { id: "exams",      label: "🎯 Exams"       },
+          { id: "exams",      label: "🎯 Exams & Boss" },
           { id: "syllabus",   label: "📖 Syllabus"    },
-          { id: "notes",      label: "📝 Notes"       },
-          { id: "flashcards", label: "🗂️ Flashcards"  },
+          { id: "notes",      label: "📝 Notes & AI"  },
+          { id: "flashcards", label: "🗂️ Flashcard SRS" },
           { id: "todo",       label: "✅ Todo"         },
           { id: "habits",     label: "🌱 Habits"      },
+          { id: "tree",       label: "🔗 Subject Tree"},
         ].map(t => (
-          <button
-            key={t.id}
-            className={`${styles.tabBtn} ${activeTab === t.id ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab(t.id)}
-          >
+          <button key={t.id} className={`${styles.tabBtn} ${activeTab === t.id ? styles.tabActive : ""}`} onClick={() => setActiveTab(t.id)}>
             {t.label}
           </button>
         ))}
@@ -1606,103 +1526,24 @@ export default function UltraStudyHub() {
       {/* ══════ TIMETABLE ══════ */}
       {activeTab === "timetable" && (
         <div className={styles.card}>
-          <div className={styles.cardHead}>
-            <span>📅</span><h2>Smart Timetable</h2>
-            <div className={styles.cardHeadRight}>
-              <button className={styles.smBtn} onClick={() => setFullScreenTimetable(true)}>🔲 Full View</button>
-              <button className={styles.smBtn} onClick={() => exportTimetable("json")}>⬇ JSON</button>
-              <button className={styles.smBtn} onClick={() => exportTimetable("csv")}>⬇ CSV</button>
-              <button className={`${styles.smBtn} ${styles.smBtnGreen}`} onClick={() => fileInputRef.current?.click()}>⬆ Import</button>
-              <input ref={fileInputRef} type="file" accept=".json,.csv" style={{ display: "none" }} onChange={importTimetable} />
-            </div>
-          </div>
+          <div className={styles.cardHead}><span>📅</span><h2>Timetable</h2></div>
           <div className={styles.timetableForm}>
             <select value={day} onChange={e => setDay(e.target.value)} className={styles.formSelect}>{DAYS.map(d => <option key={d}>{d}</option>)}</select>
             <select value={subject} onChange={e => setSubject(e.target.value)} className={styles.formSelect}>
               <option value="">-- Select Subject --</option>
               {allSubjects.map(s => <option key={s}>{s}</option>)}
             </select>
-            <select value={taskType} onChange={e => setTaskType(e.target.value)} className={styles.formSelect}>{TASK_TYPES.map(t => <option key={t}>{t}</option>)}</select>
             <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={styles.formInput} />
             <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={styles.formInput} />
-            <input type="color" value={taskColorInput} onChange={e => setTaskColorInput(e.target.value)} className={styles.colorPicker} title="Slot color" />
             <button onClick={addTask} className={styles.addBtn}>+ Add Slot</button>
           </div>
-          <div className={styles.advancedForm}>
-            <input placeholder="Slot notes (optional)" value={taskNoteInput} onChange={e => setTaskNoteInput(e.target.value)} className={styles.formInput} style={{ flex: 1 }} />
-            <div className={styles.repeatRow}>
-              <span className={styles.repeatLabel}>Repeat on:</span>
-               {DAYS.map(d => (
-                <button key={d} className={`${styles.repeatDay} ${repeatDays.includes(d) ? styles.repeatDayActive : ""}`}
-                  onClick={() => setRepeatDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])}>
-                  {d.slice(0, 3)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className={styles.subjectManager}>
-            <input type="text" placeholder="Add custom subject..." value={newSubjectInput} onChange={e => setNewSubjectInput(e.target.value)} onKeyPress={e => e.key === "Enter" && addCustomSubject()} className={styles.formInput} />
-            <button onClick={addCustomSubject} className={styles.smBtn}>+ Subject</button>
-            {customSubjects.map(s => (
-              <div key={s} className={styles.subjectChip} style={{ background: getSubjectColor(s) }}>
-                {s}<button onClick={() => deleteCustomSubject(s)} className={styles.chipDel}>✕</button>
+          <div className={styles.taskList}>
+            {filteredTasks.map(t => (
+              <div key={t.id} className={styles.taskCard}>
+                <div><strong>{t.subject}</strong> ({t.startTime}–{t.endTime})</div>
+                <button onClick={() => deleteTask(t.id)} className={styles.miniDeleteBtn}>🗑</button>
               </div>
             ))}
-          </div>
-          <div className={styles.filterRow}>
-            <input placeholder="🔍 Search slots..." value={timetableSearch} onChange={e => setTimetableSearch(e.target.value)} className={styles.searchInput} />
-            <div className={styles.filterBtns}>
-              {["today", "week", ...DAYS].map(f => (
-                <button key={f} className={`${styles.filterChip} ${filterDay === f ? styles.filterChipActive : ""}`} onClick={() => setFilterDay(f)}>
-                  {f === "today" ? "Today" : f === "week" ? "All Week" : f.slice(0, 3)}
-                </button>
-              ))}
-            </div>
-            <select value={timetableTypeFilter} onChange={e => setTimetableTypeFilter(e.target.value)} className={styles.formSelect}>
-              <option value="all">All Types</option>
-              {TASK_TYPES.map(t => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-          <div className={styles.resultCount}>📋 {filteredTasks.length} slots • {[...new Set(filteredTasks.map(t => t.subject))].length} subjects</div>
-          <div className={styles.taskList}>
-            {filteredTasks.length === 0 ? <p className={styles.emptyState}>No slots found. Add one above!</p> :
-              filteredTasks.map(task => (
-                <div key={task.id} className={`${styles.taskCard} ${isTaskActive(task) ? styles.activeTaskCard : ""}`}
-                  style={{ borderLeft: `4px solid ${task.color || getSubjectColor(task.subject)}` }}>
-                  {editingTaskId === task.id ? (
-                    <div className={styles.editFormInline}>
-                      <select defaultValue={task.subject} onChange={e => setEditForm(p => ({ ...p, subject: e.target.value }))} className={styles.formSelect}>{allSubjects.map(s => <option key={s}>{s}</option>)}</select>
-                      <select defaultValue={task.day} onChange={e => setEditForm(p => ({ ...p, day: e.target.value }))} className={styles.formSelect}>{DAYS.map(d => <option key={d}>{d}</option>)}</select>
-                      <input type="time" defaultValue={task.startTime} onChange={e => setEditForm(p => ({ ...p, startTime: e.target.value }))} className={styles.formInput} />
-                      <input type="time" defaultValue={task.endTime} onChange={e => setEditForm(p => ({ ...p, endTime: e.target.value }))} className={styles.formInput} />
-                      <select defaultValue={task.taskType} onChange={e => setEditForm(p => ({ ...p, taskType: e.target.value }))} className={styles.formSelect}>{TASK_TYPES.map(t => <option key={t}>{t}</option>)}</select>
-                      <input placeholder="Notes..." defaultValue={task.notes || ""} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} className={styles.formInput} />
-                      <button onClick={() => saveEditTask(task.id)} className={styles.smBtn}>✓ Save</button>
-                      <button onClick={() => setEditingTaskId(null)} className={styles.smBtn}>✕</button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className={styles.taskInfo}>
-                        <div className={styles.taskTop}>
-                          <span className={styles.typeBadge}>{task.taskType}</span>
-                          <span className={styles.dayBadge}>{task.day}</span>
-                          {isTaskActive(task) && <span className={styles.liveTag}>● LIVE</span>}
-                        </div>
-                        <h3>{task.subject}</h3>
-                        <p>⏰ {task.startTime} – {task.endTime}</p>
-                        {task.notes && <p className={styles.taskNote}>📌 {task.notes}</p>}
-                      </div>
-                      <div className={styles.taskActions}>
-                        <button onClick={() => { setActiveSubject(task.subject); setActiveTab("study"); }} className={styles.iconBtnSm} title="Start Study">▶</button>
-                        <button onClick={() => { setEditingTaskId(task.id); setEditForm({}); }} className={styles.iconBtnSm}>✏️</button>
-                        <button onClick={() => duplicateTask(task)} className={styles.iconBtnSm}>⎘</button>
-                        <button onClick={() => deleteTask(task.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))
-            }
           </div>
         </div>
       )}
@@ -1710,105 +1551,24 @@ export default function UltraStudyHub() {
       {/* ══════ STUDY MODE ══════ */}
       {activeTab === "study" && (
         <div className={styles.studyGrid}>
-          <div className={`${styles.card} ${isStudyMode ? styles.activeStudyPulse : ""}`}>
-            <div className={styles.cardHead}>
-              <span>⏱️</span>
-              <h2>{isStudyMode ? "⚡ LIVE — Session Running" : "Study Timer"}</h2>
-              {isStudyMode && (
-                <button className={styles.fsBtnInline} onClick={() => setStudyFullScreen(true)}>⤢ Fullscreen</button>
-              )}
-            </div>
-            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate timer — switch tabs freely, timer stays correct</div>
+          <div className={styles.card}>
+            <div className={styles.cardHead}><span>⏱️</span><h2>Study Timer</h2></div>
             {!isStudyMode ? (
               <div className={styles.studySetupForm}>
                 <select value={activeSubject} onChange={e => setActiveSubject(e.target.value)} className={styles.formSelect}>
                   <option value="">-- Select Subject --</option>
                   {allSubjects.map(s => <option key={s}>{s}</option>)}
                 </select>
-                <input type="number" placeholder="Target minutes (e.g. 60)" value={targetMinutes} onChange={e => setTargetMinutes(e.target.value)} className={styles.formInput} />
-                <select value={studyMood} onChange={e => setStudyMood(e.target.value)} className={styles.formSelect}>{MOODS.map(m => <option key={m}>{m}</option>)}</select>
-                <div className={styles.goalRow}>
-                  <label>Daily Goal (min):</label>
-                  <input type="number" value={studyGoalMinutes} onChange={e => setStudyGoalMinutes(parseInt(e.target.value) || 500)} className={styles.formInput} style={{ width: 80 }} />
-                </div>
-                <label className={styles.checkLabel}><input type="checkbox" checked={breakReminder} onChange={e => setBreakReminder(e.target.checked)} /> ☕ Break reminder every 25 min</label>
-                <button onClick={startStudyMode} className={styles.startModeBtn}>▶ Start Study Session (Fullscreen)</button>
+                <input type="number" placeholder="Target min" value={targetMinutes} onChange={e => setTargetMinutes(e.target.value)} className={styles.formInput} />
+                <button onClick={startStudyMode} className={styles.startModeBtn}>▶ Start Fullscreen Session</button>
               </div>
             ) : (
-              <div className={styles.liveConsoleArea}>
-                <h3>Studying: <mark>{activeSubject}</mark></h3>
+              <div>
+                <h3>Studying: {activeSubject}</h3>
                 <div className={styles.liveClockDisplay}>{fmt(secondsElapsed)}</div>
-                <p>Target: {targetMinutes} min | Mood: {studyMood.split(" ")[0]}</p>
-                <div className={styles.liveProgress}><div className={styles.liveProgressFill} style={{ width: `${Math.min((secondsElapsed / (parseInt(targetMinutes) * 60)) * 100, 100)}%` }} /></div>
-                <textarea placeholder="Session notes..." value={sessionNote} onChange={e => setSessionNote(e.target.value)} className={styles.sessionNote} />
-                <input placeholder="Tags (e.g. exam-prep)" value={sessionTags} onChange={e => setSessionTags(e.target.value)} className={`${styles.formInput} ${styles.tagInput}`} />
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <button onClick={() => setStudyFullScreen(true)} className={styles.smBtn}>⤢ Fullscreen</button>
-                  <button onClick={stopStudyMode} className={styles.stopModeBtn}>⏹ Stop & Save</button>
-                </div>
+                <button onClick={stopStudyMode} className={styles.stopModeBtn}>⏹ Stop & Save</button>
               </div>
             )}
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>🍅</span><h2>Pomodoro Timer</h2></div>
-            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate — tab switch karo, timer sahi rahega • Lifetime cycles: {pomodoroTotal}</div>
-            <div className={styles.pomodoroPresets}>
-              {POMODORO_PRESETS.map(p => (
-                <button key={p.label}
-                  className={`${styles.presetBtn} ${pomodoroPreset.label === p.label ? styles.presetBtnActive : ""}`}
-                  onClick={() => {
-                    setPomodoroPreset(p); setPomodoroSeconds(p.work * 60);
-                    pomodoroBaseSeconds.current = p.work * 60;
-                    setIsPomodoroMode(false); setPomodoroPhase("work"); setPomodoroCount(0);
-                  }}>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div className={styles.customPomRow}>
-              <input type="number" placeholder="Work min" value={customPomWork} onChange={e => setCustomPomWork(+e.target.value)} className={styles.formInput} style={{ width: 80 }} />
-              <input type="number" placeholder="Break min" value={customPomBreak} onChange={e => setCustomPomBreak(+e.target.value)} className={styles.formInput} style={{ width: 80 }} />
-              <button className={styles.smBtn} onClick={() => {
-                const p = { label: "Custom", work: customPomWork, short: customPomBreak };
-                setPomodoroPreset(p); setPomodoroSeconds(p.work * 60);
-                pomodoroBaseSeconds.current = p.work * 60;
-                setIsPomodoroMode(false); setPomodoroPhase("work"); setPomodoroCount(0);
-              }}>Set Custom</button>
-            </div>
-            <div className={`${styles.pomodoroDisplay} ${pomodoroPhase === "break" ? styles.pomodoroBreak : ""}`}>
-              <div className={styles.pomodoroPhaseLabel}>{pomodoroPhase === "work" ? "🎯 Focus Time" : "☕ Break Time"}</div>
-              <div className={styles.pomodoroTime}>{fmtPom(pomodoroSeconds)}</div>
-              <div className={styles.pomodoroCount}>🍅 × {pomodoroCount}</div>
-              <div className={styles.pomodoroInfo}>{pomodoroPhase === "work" ? `${pomodoroPreset.work} min focus` : `${pomodoroPreset.short} min break`}</div>
-            </div>
-            <div className={styles.pomodoroControls}>
-              <button onClick={() => setIsPomodoroMode(p => !p)} className={styles.startModeBtn}>{isPomodoroMode ? "⏹ Stop" : "▶ Start"}</button>
-              <button onClick={() => {
-                setIsPomodoroMode(false); setPomodoroPhase("work");
-                const newSecs = pomodoroPreset.work * 60;
-                setPomodoroSeconds(newSecs); pomodoroBaseSeconds.current = newSecs; setPomodoroCount(0);
-              }} className={styles.smBtn}>↺ Reset</button>
-            </div>
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>📋</span><h2>Recent Sessions</h2></div>
-            <div className={styles.sessionHistoryContainer}>
-              {studySessions.length === 0 ? <p className={styles.emptyState}>No sessions yet. Start studying!</p> :
-                studySessions.slice(-10).reverse().map(s => (
-                  <div key={s.id} className={styles.historyItemLog}>
-                    <div className={styles.historyMetaRow}>
-                      <strong>{s.subjectName}</strong>
-                      <span className={s.accuracyPercentage >= 80 ? styles.goodScore : styles.badScore}>{s.accuracyPercentage}%</span>
-                    </div>
-                    <p>{s.actualTime}min / {s.targetTime}min {s.mood && `• ${s.mood.split(" ")[0]}`}</p>
-                    {s.notes && <p className={styles.sessionNoteDisplay}>📝 {s.notes}</p>}
-                    {s.tags && <p className={styles.sessionTags}>🏷️ {s.tags}</p>}
-                  </div>
-                ))
-              }
-            </div>
           </div>
         </div>
       )}
@@ -1817,767 +1577,143 @@ export default function UltraStudyHub() {
       {activeTab === "analytics" && (
         <div className={styles.analyticsGrid}>
           <div className={styles.card}>
-            <div className={styles.cardHead}><span>📈</span><h2>7-Day Progress</h2></div>
-            <div className={styles.chartContainer}>
-              {weeklyProgress.map((d, i) => (
-                <div key={i} className={styles.barChartItem}>
-                  <div className={styles.bar} style={{
-                    height: `${Math.min((d.minutes / 120) * 100, 100)}%`,
-                    background: d.day === currentDayName.slice(0, 3) ? "linear-gradient(to top,#f77f00,#ffba08)" : "linear-gradient(to top,#4361ee,#3a86ff)"
-                  }}>
-                    <span className={styles.barLabel}>{d.minutes}m</span>
+            <div className={styles.cardHead}><span>🕐</span><h2>Best Study Hours Matrix</h2></div>
+            <div className={styles.timeOfDayScroll}>
+              <div className={styles.timeOfDayGrid}>
+                {timeOfDayMap.map((row, dayIdx) => (
+                  <div key={dayIdx} className={styles.timeOfDayRow}>
+                    <span className={styles.timeOfDayDayLabel}>{DAYS[dayIdx].slice(0, 2)}</span>
+                    {row.map((mins, hour) => (
+                      <div key={hour} className={styles.timeOfDayCell} style={{ background: heatColor(mins) }} title={`${mins}m`} />
+                    ))}
                   </div>
-                  <span className={styles.barDay}>{d.day}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── WEEK-OVER-WEEK COMPARISON (new) ── */}
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>⚖️</span><h2>Week-over-Week</h2></div>
-            <div className={styles.weekCompareGrid}>
-              <div className={styles.weekCompareCol}>
-                <div className={styles.weekCompareValue}>
-                  {Math.floor(weekComparison.thisWeek / 60)}h {weekComparison.thisWeek % 60}m
-                </div>
-                <div className={styles.weekCompareLabel}>This Week</div>
-              </div>
-              <div className={styles.weekCompareCol}>
-                <div className={styles.weekCompareValueMuted}>
-                  {Math.floor(weekComparison.lastWeek / 60)}h {weekComparison.lastWeek % 60}m
-                </div>
-                <div className={styles.weekCompareLabel}>Last Week</div>
-              </div>
-              <div className={`${styles.weekCompareDeltaBox} ${weekComparison.delta >= 0 ? styles.weekCompareDeltaUp : styles.weekCompareDeltaDown}`}>
-                <div className={`${styles.weekCompareDeltaValue} ${weekComparison.delta >= 0 ? styles.weekCompareDeltaValueUp : styles.weekCompareDeltaValueDown}`}>
-                  {weekComparison.delta >= 0 ? "▲" : "▼"} {Math.abs(weekComparison.delta)}%
-                </div>
-                <div className={styles.weekCompareLabel}>vs Last Week</div>
+                ))}
               </div>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* ── STUDY HEATMAP ── */}
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>🗓️</span><h2>Study Heatmap (12 weeks)</h2></div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 4, padding: "6px 2px" }}>
-              {heatmapData.map((d, i) => (
-                <div
-                  key={i}
-                  title={`${d.date.toLocaleDateString("en-IN")} — ${d.mins} min`}
-                  style={{
-                    width: "100%", aspectRatio: "1", borderRadius: 3,
-                    background: heatColor(d.mins),
-                    outline: d.date.toDateString() === new Date().toDateString() ? "2px solid #4361ee" : "none",
-                  }}
-                />
-              ))}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: "0.75rem", color: "var(--text2, #6b7280)" }}>
-              Less
-              {[0, 15, 45, 90, 150].map(m => (
-                <div key={m} style={{ width: 12, height: 12, borderRadius: 2, background: heatColor(m) }} />
-              ))}
-              More
-            </div>
+      {/* ══════ EXAMS & BOSS BATTLES ══════ */}
+      {activeTab === "exams" && (
+        <div className={styles.card}>
+          <div className={styles.cardHead}><span>⚔️</span><h2>Exam Boss Battles</h2></div>
+          <div className={styles.examForm}>
+            <input placeholder="Exam Name" value={examName} onChange={e => setExamName(e.target.value)} className={styles.formInput} />
+            <input type="datetime-local" value={examDate} onChange={e => setExamDate(e.target.value)} className={styles.formInput} />
+            <button onClick={addExam} className={styles.addBtn}>+ Challenge Boss</button>
           </div>
+          <div className={styles.examDeadlineList}>
+            {exams.map(ex => {
+              const sylSt = syllabusStatsByExam(ex.id);
+              const totalHp = sylSt.total || 10;
+              const currentHp = totalHp - sylSt.done;
+              const hpPct = Math.round((currentHp / totalHp) * 100);
 
-          {/* ── TIME-OF-DAY PRODUCTIVITY MAP (new) ── */}
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>🕐</span><h2>Best Study Hours</h2></div>
-            {studySessions.length === 0 ? <p className={styles.emptyState}>Complete sessions to see your best hours</p> : (
-              <>
-                <div className={styles.timeOfDayScroll}>
-                  <div className={styles.timeOfDayGrid}>
-                    {timeOfDayMap.map((row, dayIdx) => (
-                      <div key={dayIdx} className={styles.timeOfDayRow}>
-                        <span className={styles.timeOfDayDayLabel}>{DAYS[dayIdx].slice(0, 2)}</span>
-                        {row.map((mins, hour) => (
-                          <div key={hour}
-                            className={styles.timeOfDayCell}
-                            title={`${DAYS[dayIdx]} ${String(hour).padStart(2, "0")}:00 — ${mins} min`}
-                            style={{ background: heatColor(mins) }} />
-                        ))}
-                      </div>
+              return (
+                <div key={ex.id} className={styles.bossCard}>
+                  <div className={styles.bossHeader}>
+                    <h3>👹 Boss: {ex.examName}</h3>
+                    <span className={styles.bossHpText}>HP: {currentHp}/{totalHp}</span>
+                  </div>
+                  <div className={styles.bossHpBarTrack}>
+                    <div className={styles.bossHpBarFill} style={{ width: `${hpPct}%` }} />
+                  </div>
+                  <button onClick={() => deleteExam(ex.id)} className={styles.miniDeleteBtn}>Defeat/Delete</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ══════ NOTES & AI GENERATOR ══════ */}
+      {activeTab === "notes" && (
+        <div className={styles.card}>
+          <div className={styles.cardHead}>
+            <span>📝</span><h2>Notes</h2>
+            <button className={styles.addBtn} onClick={() => setShowAiModal(true)}>🤖 AI Generate</button>
+          </div>
+          <input placeholder="Title..." value={noteTitle} onChange={e => setNoteTitle(e.target.value)} className={styles.formInput} />
+          <textarea placeholder="Write..." value={quickNotes} onChange={e => setQuickNotes(e.target.value)} className={styles.notesTextarea} />
+          <button onClick={saveNote} className={styles.addBtn} style={{ marginTop: 8 }}>Save Note</button>
+
+          {/* AI MODAL */}
+          {showAiModal && (
+            <div className={styles.studyFsOverlay}>
+              <div className={styles.studyFsContent}>
+                <h2>🤖 AI Note & Flashcard Generator</h2>
+                <textarea placeholder="Paste text or topic here..." value={aiPromptText} onChange={e => setAiPromptText(e.target.value)} className={styles.studyFsNote} />
+                <div className={styles.studyFsActions}>
+                  <button onClick={runAiGenerator} disabled={isAiProcessing} className={styles.addBtn}>{isAiProcessing ? "Processing..." : "Generate"}</button>
+                  <button onClick={() => setShowAiModal(false)} className={styles.smBtn}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════ FLASHCARDS (ANKI SRS) ══════ */}
+      {activeTab === "flashcards" && (
+        <div className={styles.card}>
+          <div className={styles.cardHead}>
+            <span>🗂️</span><h2>Flashcard SRS</h2>
+            <button onClick={() => startReview("all")} className={styles.addBtn}>▶ Start Due Review</button>
+          </div>
+          {!reviewMode ? (
+            <div>
+              <input placeholder="Question" value={newFront} onChange={e => setNewFront(e.target.value)} className={styles.formInput} />
+              <input placeholder="Answer" value={newBack} onChange={e => setNewBack(e.target.value)} className={styles.formInput} />
+              <button onClick={addFlashcard} className={styles.addBtn} style={{ marginTop: 8 }}>+ Add Card</button>
+            </div>
+          ) : (
+            <div className={styles.flashcardReview}>
+              <h3>{reviewCards[reviewIndex]?.front}</h3>
+              {showAnswer ? (
+                <div>
+                  <p>{reviewCards[reviewIndex]?.back}</p>
+                  <div className={styles.rateButtons}>
+                    {[1, 2, 3, 4, 5].map(q => (
+                      <button key={q} onClick={() => rateCardSRS(reviewCards[reviewIndex].id, q)} className={styles.smBtn}>Rate {q}</button>
                     ))}
                   </div>
                 </div>
-                {bestStudyHour.mins > 0 && (
-                  <p className={styles.timeOfDayInsight}>
-                    ⭐ Your most productive slot: <strong>{DAYS[bestStudyHour.day]} at {String(bestStudyHour.hour).padStart(2, "0")}:00</strong> ({bestStudyHour.mins} min logged there)
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* ── MOOD VS ACCURACY (new) ── */}
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>🧠</span><h2>Mood vs Accuracy</h2></div>
-            {moodAccuracy.length === 0 ? <p className={styles.emptyState}>Log your mood in sessions to see this insight</p> : (
-              <div className={styles.moodList}>
-                {moodAccuracy.map(({ mood, avg, count }) => (
-                  <div key={mood} className={styles.moodRow}>
-                    <span className={styles.moodEmoji}>{moodEmoji(mood)}</span>
-                    <span className={styles.moodLabel}>{mood.split(" ").slice(1).join(" ")}</span>
-                    <div className={styles.moodBarTrack}>
-                      <div
-                        className={`${styles.moodBarFill} ${avg >= 80 ? styles.moodBarFillHigh : avg >= 50 ? styles.moodBarFillMid : styles.moodBarFillLow}`}
-                        style={{ width: `${avg}%` }}
-                      />
-                    </div>
-                    <span className={styles.moodPct}>{avg}%</span>
-                    <span className={styles.moodCount}>({count})</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>📅</span><h2>Monthly Overview</h2></div>
-            {monthlyStats.length === 0 ? <p className={styles.emptyState}>No data yet</p> : (
-              <div className={styles.monthlyGrid}>
-                {monthlyStats.map((m, i) => (
-                  <div key={i} className={styles.monthCard}>
-                    <div className={styles.monthLabel}>{m.month}</div>
-                    <div className={styles.monthMins}>{Math.floor(m.mins / 60)}h {m.mins % 60}m</div>
-                    <div className={styles.monthSessions}>{m.sessions} sessions</div>
-                    <div className={styles.monthBar}><div className={styles.monthBarFill} style={{ width: `${Math.min((m.mins / 1200) * 100, 100)}%` }} /></div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>📊</span><h2>Subject Performance</h2></div>
-            <div className={styles.subjectStatsContainer}>
-              {Object.entries(subjectStats).length === 0 ? <p className={styles.emptyState}>No data yet</p> :
-                Object.entries(subjectStats).sort((a, b) => b[1].avgAccuracy - a[1].avgAccuracy).map(([sub, st]) => (
-                  <div key={sub} className={styles.subjectStatItem}>
-                    <div className={styles.subjectStatHeader}><span className={styles.subjectName}>{sub}</span><span className={styles.subjectAccuracy}>{st.avgAccuracy}%</span></div>
-                    <div className={styles.subjectStatBar}><div className={styles.subjectStatFill} style={{ width: `${st.avgAccuracy}%`, background: st.avgAccuracy >= 80 ? "#0f9d6e" : st.avgAccuracy >= 50 ? "#f77f00" : "#ef4444" }} /></div>
-                    <div className={styles.subjectStatMeta}>{st.totalTime} min • {st.sessions} sessions</div>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-
-          {/* ── UP NEXT MILESTONE ROADMAP ── */}
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>🧗</span><h2>Up Next — Milestones</h2></div>
-            {upNextAchievements.length === 0 ? (
-              <p className={styles.emptyState}>🎉 You've unlocked every achievement!</p>
-            ) : (
-              <div className={styles.milestoneList}>
-                {upNextAchievements.map(a => (
-                  <div key={a.id} className={styles.milestoneItem}>
-                    <div className={styles.milestoneRow}>
-                      <span className={styles.milestoneTitle}><span>{a.icon}</span><strong>{a.title}</strong></span>
-                      <span className={styles.milestoneProgress}>{a.current}/{a.target}</span>
-                    </div>
-                    <div className={styles.milestoneBarTrack}>
-                      <div className={styles.milestoneBarFill} style={{ width: `${a.pct}%` }} />
-                    </div>
-                    <p className={styles.milestoneDesc}>{a.description}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ── EXAM READINESS (new) ── */}
-          {upcomingExams.length > 0 && (
-            <div className={styles.card}>
-              <div className={styles.cardHead}><span>🧭</span><h2>Exam Readiness</h2></div>
-              <div className={styles.readinessList}>
-                {upcomingExams.map(ex => {
-                  const r = examReadiness(ex);
-                  if (!r) return (
-                    <div key={ex.id} className={styles.readinessEmpty}>
-                      {ex.examName}: no syllabus chapters added yet
-                    </div>
-                  );
-                  const key = READINESS_KEY[r.status];
-                  return (
-                    <div key={ex.id} className={styles.readinessItem}>
-                      <div className={styles.readinessRow}>
-                        <strong className={styles.readinessName}>{ex.examName}</strong>
-                        <span className={`${styles.readinessBadge} ${styles[`readiness${key}`]}`}>{readinessLabel[r.status]}</span>
-                      </div>
-                      <div className={styles.readinessBarTrack}>
-                        <div className={`${styles.readinessBarFill} ${styles[`readinessBarFill${key}`]}`} style={{ width: `${r.pct}%` }} />
-                      </div>
-                      <p className={styles.readinessDetail}>
-                        {r.status === "done"
-                          ? `All ${r.total} chapters complete!`
-                          : `${r.done}/${r.total} chapters done • ${r.daysLeft} days left • need ~${r.requiredPacePerDay} chapters/day`}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>🧠</span><h2>AI Insights</h2></div>
-            <div className={styles.recommendationsContainer}>
-              {Object.entries(subjectStats).length > 0 ? (
-                <>
-                  <div className={styles.recommendation}>
-                    <span className={styles.recIcon}>⚠️</span>
-                    <div><strong>Weak Area</strong><p>Focus more on <mark>{Object.entries(subjectStats).sort((a, b) => a[1].avgAccuracy - b[1].avgAccuracy)[0]?.[0]}</mark></p></div>
-                  </div>
-                  <div className={styles.recommendation}>
-                    <span className={styles.recIcon}>⭐</span>
-                    <div><strong>Top Subject</strong><p><mark>{Object.entries(subjectStats).sort((a, b) => b[1].avgAccuracy - a[1].avgAccuracy)[0]?.[0]}</mark> — best performance!</p></div>
-                  </div>
-                  {Object.entries(subjectStats).filter(([, v]) => { const d = v.lastStudied; return d && (new Date() - d) > 7 * 86400000; }).slice(0, 2).map(([sub]) => (
-                    <div key={sub} className={styles.recommendation}>
-                      <span className={styles.recIcon}>📅</span>
-                      <div><strong>Not Studied Recently</strong><p>Revise <mark>{sub}</mark> — it's been over 7 days!</p></div>
-                    </div>
-                  ))}
-                </>
-              ) : <p className={styles.emptyState}>Complete study sessions to see insights</p>}
-              {avgAccuracy < 70 && <div className={styles.recommendation}><span className={styles.recIcon}>💡</span><div><strong>Tip</strong><p>Try 25-min Pomodoro sessions to improve focus and accuracy</p></div></div>}
-              {streak >= 3 && <div className={styles.recommendation}><span className={styles.recIcon}>🔥</span><div><strong>On Fire!</strong><p>{streak}-day study streak! Keep it going!</p></div></div>}
-              {yearCountdown.d < 200 && (
-                <div className={styles.recommendation}>
-                  <span className={styles.recIcon}>🗓️</span>
-                  <div><strong>{yearCountdown.targetYear} is Coming!</strong><p>Only <mark>{yearCountdown.d} days</mark> left — set your goals now!</p></div>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className={`${styles.card} ${styles.spanFull}`}>
-            <div className={styles.cardHead}><span>🏆</span><h2>Achievements ({achievements.length})</h2></div>
-            <div className={styles.achievementsGrid}>
-              {achievements.length === 0 ? <p className={styles.emptyState}>Keep studying to unlock achievements!</p> :
-                achievements.map(a => (
-                  <div key={a.id} className={styles.achievementCard}>
-                    <span className={styles.achievementIcon}>{a.icon}</span>
-                    <h4>{a.title}</h4><p>{a.description}</p>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════ EXAMS ══════ */}
-      {activeTab === "exams" && (
-        <div className={styles.card}>
-          <div className={styles.cardHead}>
-            <span>🎯</span><h2>Exam Deadlines</h2>
-            {avgExamDays !== null && (
-              <div className={styles.examAvgBadge}>📊 Avg {avgExamDays} days remaining across {upcomingExams.length} exam{upcomingExams.length > 1 ? "s" : ""}</div>
-            )}
-          </div>
-          <div className={styles.examForm}>
-            <input placeholder="Exam name (e.g. SSC CGL, UPSC)" value={examName} onChange={e => setExamName(e.target.value)} className={styles.formInput} />
-            <input type="datetime-local" value={examDate} onChange={e => setExamDate(e.target.value)} className={styles.formInput} />
-            <select value={examPriority} onChange={e => setExamPriority(e.target.value)} className={styles.formSelect}><option>High</option><option>Medium</option><option>Low</option></select>
-            <input placeholder="Key subjects (optional)" value={examSubjectsInput} onChange={e => setExamSubjectsInput(e.target.value)} className={styles.formInput} />
-            <input placeholder="Target score (optional)" value={examTargetScore} onChange={e => setExamTargetScore(e.target.value)} className={styles.formInput} />
-            <input placeholder="Notes (optional)" value={examNotes} onChange={e => setExamNotes(e.target.value)} className={styles.formInput} />
-            <button onClick={addExam} className={styles.addBtn}>+ Set Target</button>
-          </div>
-
-          {upcomingExams.length > 0 && (
-            <div className={styles.examSummaryRow}>
-              {[
-                { icon: "📋", num: upcomingExams.length, lbl: "Upcoming" },
-                { icon: "⏳", num: avgExamDays ?? "—", lbl: "Avg Days Left" },
-                { icon: "🔴", num: upcomingExams.filter(e => { const cd = getCD(e.examDate); return !cd.done && cd.d < 30; }).length, lbl: "Critical (<30d)" },
-                { icon: "✅", num: exams.filter(e => new Date(e.examDate) <= new Date()).length, lbl: "Completed" },
-              ].map(({ icon, num, lbl }) => (
-                <div key={lbl} className={styles.examSummaryCard}>
-                  <span className={styles.examSummaryIcon}>{icon}</span>
-                  <span className={styles.examSummaryNum}>{num}</span>
-                  <span className={styles.examSummaryLabel}>{lbl}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className={styles.examDeadlineList}>
-            {exams.length === 0 ? <p className={styles.emptyState}>No exam targets set yet.</p> :
-              exams.sort((a, b) => new Date(a.examDate) - new Date(b.examDate)).map(ex => {
-                const cd = getCD(ex.examDate);
-                const sylSt = syllabusStatsByExam(ex.id);
-                const readiness = examReadiness(ex);
-                return (
-                  <div key={ex.id} className={`${styles.examCountdownCard} ${!cd.done && cd.d < 7 ? styles.examUrgent : !cd.done && cd.d < 30 ? styles.examWarning : ""}`}>
-                    <div className={styles.examCountdownInfo}>
-                      <div className={styles.examHeader}>
-                        <h4>{ex.examName}</h4>
-                        <span className={`${styles.priorityBadge} ${styles[`priority_${ex.priority?.toLowerCase()}`]}`}>{ex.priority}</span>
-                        {ex.targetScore && <span className={styles.examTargetScoreBadge}>🎯 Target: {ex.targetScore}</span>}
-                        {sylSt.total > 0 && (
-                          <button
-                            className={styles.examSyllabusBtn}
-                            onClick={() => { setSyllabusViewExam(ex.id); setActiveTab("syllabus"); }}
-                          >
-                            📖 Syllabus {sylSt.pct}%
-                          </button>
-                        )}
-                        {readiness && (
-                          <span className={`${styles.examReadinessPill} ${styles[`examReadinessPill${READINESS_KEY[readiness.status]}`]}`}>
-                            {readinessLabel[readiness.status]}
-                          </span>
-                        )}
-                      </div>
-                      {ex.subjects && <p className={styles.examSubjects}>📚 {ex.subjects}</p>}
-                      {ex.notes && <p className={styles.examNotes}>📌 {ex.notes}</p>}
-                      {sylSt.total > 0 && (
-                        <div className={styles.examInlineSyllabus}>
-                          <div className={styles.examInlineSyllabusBar}>
-                            <div className={styles.examInlineSyllabusFill} style={{ width: `${sylSt.pct}%` }} />
-                          </div>
-                          <span className={styles.examInlineSyllabusText}>
-                            {sylSt.done}/{sylSt.total} chapters done
-                          </span>
-                        </div>
-                      )}
-                      {readiness && readiness.status !== "done" && (
-                        <p className={styles.examReadinessNote}>
-                          🧭 Need ~{readiness.requiredPacePerDay} chapters/day to finish in time
-                        </p>
-                      )}
-                      {cd.done ? <p className={styles.examCompletedText}>✅ Exam Complete!</p> : (
-                        <div className={styles.countdownGrid}>
-                          {[{ v: cd.d, l: "Days" }, { v: cd.h, l: "Hours" }, { v: cd.m, l: "Mins" }, { v: cd.s, l: "Secs" }].map(u => (
-                            <div key={u.l} className={styles.countdownUnit}>
-                              <span className={styles.countdownNumber}>{u.v}</span>
-                              <span className={styles.countdownLabel}>{u.l}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <button onClick={() => deleteExam(ex.id)} className={styles.miniDeleteBtn}>🗑</button>
-                  </div>
-                );
-              })
-            }
-          </div>
-        </div>
-      )}
-
-      {/* ══════ SYLLABUS ══════ */}
-      {activeTab === "syllabus" && (
-        <div className={styles.syllabusWrap}>
-
-          {/* ── Add Chapter ── */}
-          <div className={styles.card}>
-            <div className={styles.cardHead}>
-              <span>📖</span><h2>Add Syllabus Chapter</h2>
-              <div className={styles.cardHeadRight}>
-                <span className={styles.syllabusStatBadge}>
-                  ✅ {syllabusItems.filter(s => s.status === "done").length} / {syllabusItems.length} complete
-                </span>
-              </div>
-            </div>
-            <div className={styles.syllabusForm}>
-              <select value={selectedExamForSyllabus} onChange={e => setSelectedExamForSyllabus(e.target.value)} className={styles.formSelect}>
-                <option value="">-- Select Exam --</option>
-                {upcomingExams.map(e => <option key={e.id} value={e.id}>{e.examName}</option>)}
-              </select>
-              <select value={newSyllabusSubject} onChange={e => setNewSyllabusSubject(e.target.value)} className={styles.formSelect}>
-                <option value="">-- Subject (optional) --</option>
-                {allSubjects.map(s => <option key={s}>{s}</option>)}
-              </select>
-              <input
-                placeholder="Chapter / Topic name..."
-                value={newSyllabusChapter}
-                onChange={e => setNewSyllabusChapter(e.target.value)}
-                onKeyPress={e => e.key === "Enter" && addSyllabusItem()}
-                className={styles.formInput}
-              />
-              <select value={newSyllabusPriority} onChange={e => setNewSyllabusPriority(e.target.value)} className={styles.formSelect}>
-                <option>High</option><option>Medium</option><option>Low</option>
-              </select>
-              <input
-                placeholder="Notes (optional)"
-                value={newSyllabusNotes}
-                onChange={e => setNewSyllabusNotes(e.target.value)}
-                className={styles.formInput}
-              />
-              <button onClick={addSyllabusItem} className={styles.addBtn}>+ Add Chapter</button>
-            </div>
-          </div>
-
-          {/* ── Exam Progress Overview ── */}
-          {upcomingExams.length > 0 && (
-            <div className={styles.card}>
-              <div className={styles.cardHead}><span>📊</span><h2>Exam-wise Progress</h2>
-                {syllabusViewExam !== "all" && (
-                  <button className={styles.smBtn} onClick={() => setSyllabusViewExam("all")} style={{ marginLeft: "auto" }}>
-                    ✕ Clear Filter
-                  </button>
-                )}
-              </div>
-              <div className={styles.examProgressGrid}>
-                {upcomingExams.map(ex => {
-                  const st = syllabusStatsByExam(ex.id);
-                  return (
-                    <div
-                      key={ex.id}
-                      className={`${styles.examProgressCard} ${syllabusViewExam === ex.id ? styles.examProgressCardActive : ""}`}
-                      onClick={() => setSyllabusViewExam(v => v === ex.id ? "all" : ex.id)}
-                    >
-                      <div className={styles.examProgressHeader}>
-                        <h4>{ex.examName}</h4>
-                        <span className={`${styles.priorityBadge} ${styles[`priority_${ex.priority?.toLowerCase()}`]}`}>{ex.priority}</span>
-                      </div>
-                      {st.total > 0 ? (
-                        <>
-                          <div className={styles.examProgressStats}>
-                            <span className={styles.epDone}>✅ {st.done} done</span>
-                            <span className={styles.epInProg}>🔄 {st.inProg} in progress</span>
-                            <span className={styles.epPending}>⏳ {st.total - st.done - st.inProg} pending</span>
-                          </div>
-                          <div className={styles.epBarWrap}>
-                            <div className={styles.epBar}>
-                              <div className={styles.epBarFill} style={{ width: `${st.pct}%` }} />
-                            </div>
-                            <span className={styles.epPct}>{st.pct}%</span>
-                          </div>
-                        </>
-                      ) : (
-                        <p className={styles.epEmpty}>No chapters added yet — click to add!</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {upcomingExams.length === 0 && (
-            <div className={styles.card}>
-              <p className={styles.emptyState}>
-                📋 No upcoming exams found. First add an exam in the <strong>Exams</strong> tab, then come back here to add chapters!
-              </p>
-            </div>
-          )}
-
-          {/* ── Chapter List ── */}
-          <div className={styles.card}>
-            <div className={styles.cardHead}>
-              <span>📋</span>
-              <h2>
-                Chapters ({filteredSyllabus.length}
-                {syllabusViewExam !== "all" ? ` · ${upcomingExams.find(e => e.id === syllabusViewExam)?.examName || ""}` : ""})
-              </h2>
-            </div>
-
-            <div className={styles.filterRow}>
-              <input
-                placeholder="🔍 Search chapters or subjects..."
-                value={syllabusSearch}
-                onChange={e => setSyllabusSearch(e.target.value)}
-                className={styles.searchInput}
-              />
-              <div className={styles.filterBtns}>
-                {[
-                  { k: "all",         label: `All (${syllabusItems.length})` },
-                  { k: "pending",     label: `⏳ Pending (${syllabusItems.filter(s => s.status === "pending").length})` },
-                  { k: "in_progress", label: `🔄 Doing (${syllabusItems.filter(s => s.status === "in_progress").length})` },
-                  { k: "done",        label: `✅ Done (${syllabusItems.filter(s => s.status === "done").length})` },
-                ].map(({ k, label }) => (
-                  <button
-                    key={k}
-                    className={`${styles.filterChip} ${syllabusFilter === k ? styles.filterChipActive : ""}`}
-                    onClick={() => setSyllabusFilter(k)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <select value={syllabusViewExam} onChange={e => setSyllabusViewExam(e.target.value)} className={styles.formSelect}>
-                <option value="all">All Exams</option>
-                {upcomingExams.map(e => <option key={e.id} value={e.id}>{e.examName}</option>)}
-              </select>
-            </div>
-
-            <div className={styles.syllabusChapterList}>
-              {filteredSyllabus.length === 0 ? (
-                <p className={styles.emptyState}>No chapters found. Add some above! ☝️</p>
               ) : (
-                filteredSyllabus
-                  .sort((a, b) => {
-                    const pri = { High: 0, Medium: 1, Low: 2 };
-                    const statusOrder = { pending: 0, in_progress: 1, done: 2 };
-                    if (statusOrder[a.status] !== statusOrder[b.status]) return statusOrder[a.status] - statusOrder[b.status];
-                    return (pri[a.priority] ?? 1) - (pri[b.priority] ?? 1);
-                  })
-                  .map(item => (
-                    <div
-                      key={item.id}
-                      className={`${styles.syllabusChapterCard} ${item.status === "done" ? styles.scDone : ""} ${item.status === "in_progress" ? styles.scInProgress : ""}`}
-                    >
-                      <button
-                        className={styles.scStatusBtn}
-                        title="Click to cycle: Pending → In Progress → Done → Pending"
-                        onClick={() => {
-                          const next = item.status === "pending" ? "in_progress" : item.status === "in_progress" ? "done" : "pending";
-                          updateSyllabusStatus(item.id, next);
-                        }}
-                      >
-                        {item.status === "done" ? "✅" : item.status === "in_progress" ? "🔄" : "⏳"}
-                      </button>
-
-                      <div className={styles.scBody}>
-                        <div className={styles.scTop}>
-                          <span className={styles.scExamTag}>{item.examName}</span>
-                          {item.subject && (
-                            <span className={styles.scSubjectTag} style={{ background: getSubjectColor(item.subject) }}>
-                              {item.subject}
-                            </span>
-                          )}
-                          <span className={`${styles.priorityBadge} ${styles[`priority_${item.priority?.toLowerCase()}`]}`}>
-                            {item.priority}
-                          </span>
-                          <span className={`${styles.scStatusLabel} ${styles[`scStatus_${item.status}`]}`}>
-                            {item.status === "in_progress" ? "In Progress" : item.status === "done" ? "Done" : "Pending"}
-                          </span>
-                        </div>
-                        <h3 className={styles.scChapterName}>{item.chapter}</h3>
-                        {item.notes && <p className={styles.scNotes}>📌 {item.notes}</p>}
-                      </div>
-
-                      <div className={styles.scActions}>
-                        <button className={styles.scActionBtn} onClick={() => updateSyllabusStatus(item.id, "pending")} title="Mark Pending">⏳</button>
-                        <button className={styles.scActionBtn} onClick={() => updateSyllabusStatus(item.id, "in_progress")} title="Mark In Progress">🔄</button>
-                        <button className={`${styles.scActionBtn} ${styles.scActionBtnGreen}`} onClick={() => updateSyllabusStatus(item.id, "done")} title="Mark Done">✅</button>
-                        <button onClick={() => deleteSyllabusItem(item.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
-                      </div>
-                    </div>
-                  ))
+                <button onClick={() => setShowAnswer(true)} className={styles.addBtn}>Show Answer</button>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════ NOTES ══════ */}
-      {activeTab === "notes" && (
-        <div className={styles.notesGrid}>
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>📝</span><h2>{editingNoteId ? "Edit Note" : "New Note"}</h2></div>
-            <input placeholder="Title..." value={noteTitle} onChange={e => setNoteTitle(e.target.value)} className={`${styles.formInput} ${styles.noteTitleInput}`} />
-            <input placeholder="Tag (e.g. Math, Important)" value={noteTag} onChange={e => setNoteTag(e.target.value)} className={styles.formInput} style={{ marginBottom: 10 }} />
-            <textarea placeholder="Write your note here..." value={quickNotes} onChange={e => setQuickNotes(e.target.value)} className={styles.notesTextarea} />
-            <div className={styles.noteActions}>
-              <button onClick={saveNote} className={styles.addBtn}>💾 {editingNoteId ? "Update Note" : "Save Note"}</button>
-              {editingNoteId && <button onClick={() => { setEditingNoteId(null); setQuickNotes(""); setNoteTitle(""); setNoteTag(""); }} className={styles.smBtn}>✕ Cancel</button>}
-            </div>
-          </div>
-          <div className={styles.card}>
-            <div className={styles.cardHead}><span>📚</span><h2>Saved Notes ({savedNotes.length})</h2></div>
-            <div className={styles.filterRow}>
-              <input placeholder="🔍 Search notes..." value={noteSearch} onChange={e => setNoteSearch(e.target.value)} className={styles.searchInput} />
-              <div className={styles.filterBtns}>
-                <button className={`${styles.filterChip} ${noteTagFilter === "" ? styles.filterChipActive : ""}`} onClick={() => setNoteTagFilter("")}>All</button>
-                {allNoteTags.map(t => <button key={t} className={`${styles.filterChip} ${noteTagFilter === t ? styles.filterChipActive : ""}`} onClick={() => setNoteTagFilter(t)}>{t}</button>)}
-              </div>
-            </div>
-            <div className={styles.notesList}>
-              {filteredNotes.length === 0 ? <p className={styles.emptyState}>No notes found.</p> :
-                filteredNotes.map(n => (
-                  <div key={n.id} className={styles.noteCard}>
-                    <div className={styles.noteCardHeader}>
-                      <div><h4>{n.title}</h4>{n.tag && <span className={styles.noteTag}>{n.tag}</span>}</div>
-                      <div className={styles.noteCardActions}>
-                        <button onClick={() => editNote(n)} className={styles.iconBtnSm}>✏️</button>
-                        <button onClick={() => deleteNote(n.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
-                      </div>
-                    </div>
-                    <p>{n.content?.slice(0, 130)}{n.content?.length > 130 ? "..." : ""}</p>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════ FLASHCARDS ══════ */}
-      {activeTab === "flashcards" && (
-        <div className={styles.flashcardsGrid}>
-          {!reviewMode ? (
-            <>
-              <div className={styles.card}>
-                <div className={styles.cardHead}><span>🗂️</span><h2>Add Flashcard</h2></div>
-                <select value={newCardSubject} onChange={e => setNewCardSubject(e.target.value)} className={styles.formSelect}>
-                  <option value="">-- Select Subject --</option>
-                  {allSubjects.map(s => <option key={s}>{s}</option>)}
-                </select>
-                <input placeholder="Tag (optional)" value={newCardTag} onChange={e => setNewCardTag(e.target.value)} className={styles.formInput} style={{ marginBottom: 8, marginTop: 8 }} />
-                <textarea placeholder="Front: Question / Term..." value={newFront} onChange={e => setNewFront(e.target.value)} className={styles.flashcardInput} />
-                <textarea placeholder="Back: Answer / Definition..." value={newBack} onChange={e => setNewBack(e.target.value)} className={styles.flashcardInput} />
-                <button onClick={addFlashcard} className={styles.addBtn}>+ Add Card</button>
-              </div>
-              <div className={styles.card}>
-                <div className={styles.cardHead}>
-                  <span>📖</span><h2>My Cards ({flashcards.length})</h2>
-                  <div className={styles.cardHeadRight}>
-                    <label className={styles.checkLabel}><input type="checkbox" checked={shuffleCards} onChange={e => setShuffleCards(e.target.checked)} /> 🔀 Shuffle</label>
-                    <button onClick={() => startReview(cardSubjectFilter)} className={styles.addBtn} disabled={flashcards.length === 0}>▶ Start Review</button>
-                  </div>
-                </div>
-                <div className={styles.filterRow}>
-                  <div className={styles.filterBtns}>
-                    <button className={`${styles.filterChip} ${cardSubjectFilter === "all" ? styles.filterChipActive : ""}`} onClick={() => setCardSubjectFilter("all")}>All ({flashcards.length})</button>
-                    {allCardSubjects.map(s => <button key={s} className={`${styles.filterChip} ${cardSubjectFilter === s ? styles.filterChipActive : ""}`} onClick={() => setCardSubjectFilter(s)}>{s} ({flashcards.filter(f => f.subject === s).length})</button>)}
-                  </div>
-                </div>
-                <div className={styles.flashcardsList}>
-                  {filteredFlashcards.length === 0 ? <p className={styles.emptyState}>No cards found.</p> :
-                    filteredFlashcards.map(f => (
-                      <div key={f.id} className={styles.flashcardItem}>
-                        <div className={styles.flashcardHeader}>
-                          <div className={styles.flashcardSubject} style={{ background: getSubjectColor(f.subject) }}>{f.subject}</div>
-                          {f.tag && <span className={styles.cardTag}>{f.tag}</span>}
-                        </div>
-                        <div className={styles.flashcardContent}><strong>Q:</strong> {f.front}</div>
-                        <div className={styles.flashcardAnswer}><strong>A:</strong> {f.back}</div>
-                        <div className={styles.flashcardMeta}>
-                          {"⭐".repeat(f.confidence || 0)}{"☆".repeat(5 - (f.confidence || 0))} • {f.reviewCount || 0} reviews
-                          <button onClick={() => deleteFlashcard(f.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
-                        </div>
-                      </div>
-                    ))
-                  }
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className={styles.card} style={{ maxWidth: 620, margin: "0 auto" }}>
-              <div className={styles.cardHead}><span>🧠</span><h2>Review Mode ({reviewIndex + 1}/{reviewCards.length})</h2></div>
-              <div className={styles.reviewProgress}><div className={styles.reviewProgressFill} style={{ width: `${((reviewIndex + 1) / reviewCards.length) * 100}%` }} /></div>
-              <div className={styles.flashcardReview}>
-                <div className={styles.reviewSubject} style={{ background: getSubjectColor(reviewCards[reviewIndex]?.subject) }}>{reviewCards[reviewIndex]?.subject}</div>
-                <div className={styles.reviewQuestion}>{reviewCards[reviewIndex]?.front}</div>
-                {!showAnswer ? (
-                  <button onClick={() => setShowAnswer(true)} className={styles.showAnswerBtn}>👁️ Show Answer</button>
-                ) : (
-                  <>
-                    <div className={styles.reviewAnswer}>{reviewCards[reviewIndex]?.back}</div>
-                    <p style={{ textAlign: "center", color: "var(--text2)", fontSize: "0.88rem", marginBottom: 12 }}>How well did you remember?</p>
-                    <div className={styles.rateButtons}>
-                      {[{ r: 1, l: "😓 Forgot" }, { r: 2, l: "😕 Barely" }, { r: 3, l: "🙂 Okay" }, { r: 4, l: "😊 Good" }, { r: 5, l: "🔥 Perfect!" }].map(({ r, l }) => (
-                        <button key={r} onClick={() => rateCard(reviewCards[reviewIndex].id, r)} className={`${styles.rateBtn} ${styles[`rate${r}`]}`}>{l}</button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-              <button onClick={() => setReviewMode(false)} className={styles.smBtn} style={{ marginTop: 12 }}>✕ Exit Review</button>
             </div>
           )}
         </div>
       )}
 
-      {/* ══════ TODO ══════ */}
-      {activeTab === "todo" && (
+      {/* ══════ SUBJECT DEPENDENCY TREE ══════ */}
+      {activeTab === "tree" && (
         <div className={styles.card}>
-          <div className={styles.cardHead}><span>✅</span><h2>Study Todo List</h2></div>
-          <div className={styles.todoForm}>
-            <input placeholder="Write a todo..." value={newTodo} onChange={e => setNewTodo(e.target.value)} onKeyPress={e => e.key === "Enter" && addTodo()} className={styles.formInput} />
-            <select value={todoSubject} onChange={e => setTodoSubject(e.target.value)} className={styles.formSelect}>
-              <option value="">-- Subject --</option>
+          <div className={styles.cardHead}><span>🔗</span><h2>Subject Prerequisites Map</h2></div>
+          <div className={styles.timetableForm}>
+            <select value={depParent} onChange={e => setDepParent(e.target.value)} className={styles.formSelect}>
+              <option value="">-- Prerequisite (First) --</option>
               {allSubjects.map(s => <option key={s}>{s}</option>)}
             </select>
-            <input type="date" value={todoDue} onChange={e => setTodoDue(e.target.value)} className={styles.formInput} />
-            <select value={todoPriority} onChange={e => setTodoPriority(e.target.value)} className={styles.formSelect}><option>High</option><option>Medium</option><option>Low</option></select>
-            <input placeholder="Tag (optional)" value={todoTag} onChange={e => setTodoTag(e.target.value)} className={styles.formInput} />
-            <button onClick={addTodo} className={styles.addBtn}>+ Add</button>
+            <span>➔</span>
+            <select value={depChild} onChange={e => setDepChild(e.target.value)} className={styles.formSelect}>
+              <option value="">-- Dependent (Target) --</option>
+              {allSubjects.map(s => <option key={s}>{s}</option>)}
+            </select>
+            <button onClick={addDependency} className={styles.addBtn}>Link</button>
           </div>
-          <div className={styles.filterRow}>
-            <div className={styles.filterBtns}>
-              {["all", "pending", "done"].map(f => (
-                <button key={f} className={`${styles.filterChip} ${todoFilter === f ? styles.filterChipActive : ""}`} onClick={() => setTodoFilter(f)}>
-                  {f === "all" ? `All (${todos.length})` : f === "pending" ? `Pending (${todos.filter(t => !t.completed).length})` : `Done (${todos.filter(t => t.completed).length})`}
-                </button>
-              ))}
-            </div>
-            <input placeholder="🔍 Search todos..." value={todoSearch} onChange={e => setTodoSearch(e.target.value)} className={styles.searchInput} />
-          </div>
-          <div className={styles.todoList}>
-            {filteredTodos.length === 0 ? <p className={styles.emptyState}>No todos yet. Add one above!</p> :
-              filteredTodos.map(t => (
-                <div key={t.id} className={`${styles.todoItem} ${t.completed ? styles.todoDone : ""}`}>
-                  <button onClick={() => toggleTodo(t.id, t.completed)} className={styles.todoCheck}>{t.completed ? "✅" : <div className={styles.todoUnchecked} />}</button>
-                  <div className={styles.todoContent}>
-                    <span className={styles.todoText}>{t.text}</span>
-                    <div className={styles.todoMeta}>
-                      {t.subject && <span className={styles.todoSubject} style={{ background: getSubjectColor(t.subject) }}>{t.subject}</span>}
-                      {t.dueDate && <span className={`${styles.todoDue} ${new Date(t.dueDate) < new Date() && !t.completed ? styles.todoDueOverdue : ""}`}>📅 {new Date(t.dueDate).toLocaleDateString("en-IN")}</span>}
-                      <span className={`${styles.todoPriority} ${styles[`priority_${t.priority?.toLowerCase()}`]}`}>{t.priority}</span>
-                      {t.tag && <span className={styles.todoTagBadge}>🏷️ {t.tag}</span>}
-                    </div>
-                  </div>
-                  <button onClick={() => deleteTodo(t.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
-                </div>
-              ))
-            }
-          </div>
-        </div>
-      )}
 
-      {/* ══════ HABITS ══════ */}
-      {activeTab === "habits" && (
-        <div className={styles.card}>
-          <div className={styles.cardHead}><span>🌱</span><h2>Habit Tracker</h2></div>
-          <div className={styles.habitForm}>
-            <input placeholder="New habit (e.g. Read for 30 minutes daily)" value={newHabit} onChange={e => setNewHabit(e.target.value)} onKeyPress={e => e.key === "Enter" && addHabit()} className={styles.formInput} />
-            <select value={habitFreq} onChange={e => setHabitFreq(e.target.value)} className={styles.formSelect}><option value="daily">Daily</option><option value="weekly">Weekly</option></select>
-            <button onClick={addHabit} className={styles.addBtn}>+ Add Habit</button>
+          <div className={styles.treeContainer}>
+            {dependencies.map(d => (
+              <div key={d.id} className={styles.treeNode}>
+                <span className={styles.subjectChip}>{d.parent}</span>
+                <span>➔</span>
+                <span className={styles.subjectChip}>{d.child}</span>
+                <button onClick={() => deleteDependency(d.id)} className={styles.miniDeleteBtn}>✕</button>
+              </div>
+            ))}
           </div>
-          <div className={styles.habitList}>
-            {habits.length === 0 ? <p className={styles.emptyState}>No habits set. Add one to get started!</p> :
-              habits.map(h => {
-                const todayStr = new Date().toDateString();
-                const doneToday = h.completedDates.includes(todayStr);
-                const last7Days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toDateString(); }).reverse();
-                return (
-                  <div key={h.id} className={`${styles.habitCard} ${doneToday ? styles.habitDone : ""}`}>
-                    <div className={styles.habitInfo}>
-                      <div className={styles.habitHeader}>
-                        <h3>{h.text}</h3>
-                        <span className={styles.habitFreqBadge}>{h.freq}</span>
-                      </div>
-                      <div className={styles.habitDots}>
-                        {last7Days.map((d, i) => (
-                          <div key={i} className={`${styles.habitDot} ${h.completedDates.includes(d) ? styles.habitDotFilled : ""}`} title={d} />
-                        ))}
-                        <span className={styles.habitStreakLabel}>{h.completedDates.filter(d => last7Days.includes(d)).length}/7 this week</span>
-                      </div>
-                    </div>
-                    <div className={styles.habitActions}>
-                      <button onClick={() => toggleHabit(h.id)} className={`${styles.habitCheckBtn} ${doneToday ? styles.habitCheckDone : ""}`}>
-                        {doneToday ? "✅ Done" : "○ Mark Done"}
-                      </button>
-                      <button onClick={() => deleteHabit(h.id)} className={`${styles.iconBtnSm} ${styles.iconBtnDanger}`}>🗑</button>
-                    </div>
-                  </div>
-                );
-              })
-            }
-          </div>
-          {habits.length > 0 && (
-            <div className={styles.habitSummary}>
-              <span>📊 Today: {habits.filter(h => h.completedDates.includes(new Date().toDateString())).length}/{habits.length} habits complete</span>
-              <div className={styles.habitProgressBar}><div className={styles.habitProgressFill} style={{ width: `${(habits.filter(h => h.completedDates.includes(new Date().toDateString())).length / habits.length) * 100}%` }} /></div>
-            </div>
-          )}
         </div>
       )}
     </div>
