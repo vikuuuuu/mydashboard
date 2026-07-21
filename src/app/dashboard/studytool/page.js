@@ -95,6 +95,19 @@ const ACHIEVEMENT_PROGRESS = {
 const LEVEL_THRESHOLDS = [0, 100, 250, 500, 900, 1400, 2000, 2800, 3800, 5000];
 const LEVEL_TITLES = ["Novice", "Learner", "Scholar", "Achiever", "Focused Mind", "Consistent Grinder", "Knowledge Seeker", "Study Master", "Elite Learner", "Legend"];
 const LEVEL_STEP_AFTER_MAX = 1500;
+// Flavor text shown on the new Level Roadmap card — one per LEVEL_TITLES entry.
+const LEVEL_PERKS = [
+  "Just getting started — every session counts",
+  "The basics are clicking",
+  "Consistency is starting to show",
+  "You're building real momentum",
+  "Distractions don't stand a chance",
+  "Study time is a habit now, not a chore",
+  "You actively hunt down what you don't know",
+  "Mock tests fear you",
+  "Elite consistency and elite accuracy",
+  "The grind became the identity",
+];
 
 // ─── AUTO NEXT-YEAR TARGET ────────────────────────────────────────────────────
 const getNextYearTarget = () => {
@@ -117,6 +130,19 @@ const getWeekKey = (d = new Date()) => {
 
 // Mood emoji -> label used for the mood/accuracy analytics card (keeps the emoji, drops the word)
 const moodEmoji = (mood) => (mood || "").split(" ")[0];
+
+// Formats a Firestore Timestamp (or JS Date/ISO string) into a friendly "unlocked on" string.
+// Firestore serverTimestamp() writes resolve to `null` locally until the server value arrives,
+// so we fall back to "Just now" for the brief window between the optimistic write and the echo.
+const formatUnlockDate = (ts) => {
+  if (!ts) return "Just now";
+  const d = ts?.toDate?.() ? ts.toDate() : new Date(ts);
+  if (Number.isNaN(d.getTime())) return "Just now";
+  return d.toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+};
 
 export default function UltraStudyHub() {
   const router = useRouter();
@@ -701,15 +727,19 @@ export default function UltraStudyHub() {
 
   const calculateStats = (sessions) => {
     const today = new Date();
+    // Single pass over sessions to build a date-string -> minutes map, instead of
+    // filtering the full session list once per day (was O(7 * N), now O(N + 7)).
+    const minutesByDateString = new Map();
+    sessions.forEach(s => {
+      const sd = s.createdAt?.toDate?.() || new Date(s.createdAt);
+      const key = sd.toLocaleDateString();
+      minutesByDateString.set(key, (minutesByDateString.get(key) || 0) + (s.actualTime || 0));
+    });
     const last7 = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today); d.setDate(d.getDate() - i);
       const ds = d.toLocaleDateString();
-      const mins = sessions.filter(s => {
-        const sd = s.createdAt?.toDate?.() || new Date(s.createdAt);
-        return sd.toLocaleDateString() === ds;
-      }).reduce((sum, s) => sum + (s.actualTime || 0), 0);
-      last7.push({ day: DAYS[d.getDay()].slice(0, 3), minutes: mins });
+      last7.push({ day: DAYS[d.getDay()].slice(0, 3), minutes: minutesByDateString.get(ds) || 0 });
     }
     setWeeklyProgress(last7);
 
@@ -1060,18 +1090,60 @@ export default function UltraStudyHub() {
     return { level, title, pct, xpToNext: Math.max(nextThreshold - totalXP, 0), currentThreshold, nextThreshold };
   }, [totalXP]);
 
+  // ─── NEW FEATURE: Level-Up Celebration + Level Roadmap ────────────────────
+  // Fires a distinct celebration toast the moment `levelInfo.level` increases, instead of
+  // the level-up being a silent number change the user might not even notice. `prevLevelRef`
+  // starts as `null` so the very first render (page load, level already N) never fires one.
+  const prevLevelRef = useRef(null);
+  useEffect(() => {
+    if (prevLevelRef.current !== null && levelInfo.level > prevLevelRef.current) {
+      showToast(`🎉 Level Up! You're now Level ${levelInfo.level} — ${levelInfo.title}`, "success");
+      if (user) {
+        logToolUsage({ userId: user.uid, tool: "Study Hub", action: "level_up", resourceName: levelInfo.title, metadata: { level: levelInfo.level } });
+      }
+    }
+    prevLevelRef.current = levelInfo.level;
+  }, [levelInfo.level, levelInfo.title, user, showToast]);
+
+  // Full level roadmap (all named levels + a placeholder for what lies beyond) so the
+  // Level/XP system has the same "what's coming next" visibility that achievements already
+  // have via `upNextAchievements`. Purely derived from XP — no new Firestore reads/writes.
+  const levelRoadmap = useMemo(() => {
+    const rows = LEVEL_TITLES.map((title, i) => ({
+      level: i + 1,
+      title,
+      perk: LEVEL_PERKS[i] || "Keep going!",
+      threshold: LEVEL_THRESHOLDS[i],
+      unlocked: totalXP >= LEVEL_THRESHOLDS[i],
+      isCurrent: levelInfo.level === i + 1,
+    }));
+    rows.push({
+      level: LEVEL_TITLES.length + 1,
+      title: "Legend +1 and beyond",
+      perk: `Every ${LEVEL_STEP_AFTER_MAX} XP past Legend earns another "+1"`,
+      threshold: 5000 + LEVEL_STEP_AFTER_MAX,
+      unlocked: totalXP >= 5000 + LEVEL_STEP_AFTER_MAX,
+      isCurrent: levelInfo.level > LEVEL_TITLES.length,
+    });
+    return rows;
+  }, [totalXP, levelInfo.level]);
+
   // Last 12 weeks of daily study minutes, GitHub-style.
+  // Builds a single date-string -> minutes map in one pass over studySessions, then looks
+  // each of the 84 days up in that map (was O(84 * N) via per-day filter, now O(N + 84)).
   const heatmapData = useMemo(() => {
+    const minutesByDateString = new Map();
+    studySessions.forEach(s => {
+      const sd = s.createdAt?.toDate?.() || new Date(s.createdAt);
+      const key = sd.toDateString();
+      minutesByDateString.set(key, (minutesByDateString.get(key) || 0) + (s.actualTime || 0));
+    });
     const days = [];
     const today = new Date(); today.setHours(0, 0, 0, 0);
     for (let i = 83; i >= 0; i--) {
       const d = new Date(today); d.setDate(d.getDate() - i);
       const ds = d.toDateString();
-      const mins = studySessions.filter(s => {
-        const sd = s.createdAt?.toDate?.() || new Date(s.createdAt);
-        return sd.toDateString() === ds;
-      }).reduce((a, s) => a + (s.actualTime || 0), 0);
-      days.push({ date: d, mins });
+      days.push({ date: d, mins: minutesByDateString.get(ds) || 0 });
     }
     return days;
   }, [studySessions]);
@@ -1191,6 +1263,14 @@ export default function UltraStudyHub() {
       .slice(0, 4);
   }, [achievements, combinedStats]);
 
+  // Achievements sorted most-recently-unlocked first, for display in the Achievements grid.
+  // Docs whose serverTimestamp hasn't echoed back yet (createdAt still null) are treated as
+  // "now" so a just-unlocked achievement appears at the top instead of jumping around later.
+  const sortedAchievements = useMemo(() => {
+    const toMillis = (a) => a.createdAt?.toDate?.() ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : Date.now());
+    return [...achievements].sort((a, b) => toMillis(b) - toMillis(a));
+  }, [achievements]);
+
   // ─── COMPUTED VALUES (memoized — these previously recalculated on every 500ms timer tick) ──
   const totalStudiedMins = combinedStats.totalMins;
   const avgAccuracy = combinedStats.avgAccuracy;
@@ -1224,8 +1304,14 @@ export default function UltraStudyHub() {
   const filteredFlashcards = useMemo(() => (
     cardSubjectFilter === "all" ? flashcards : flashcards.filter(f => f.subject === cardSubjectFilter)
   ), [flashcards, cardSubjectFilter]);
-  const avgExamDays = useMemo(() => getExamAvgDaysRemaining(), [exams, currentTime]);
-  const upcomingExams = useMemo(() => exams.filter(e => new Date(e.examDate) > new Date()), [exams, currentTime]);
+
+  // avgExamDays / upcomingExams only need day-level precision, but `currentTime` (their old
+  // dependency) ticks every second for the header clock — that was forcing both to recompute
+  // 60x more often than needed. Keying off a once-per-minute value fixes that without touching
+  // the per-second countdown UI, which still reads `currentTime` directly and unmemoized.
+  const currentMinuteKey = Math.floor(currentTime.getTime() / 60000);
+  const avgExamDays = useMemo(() => getExamAvgDaysRemaining(), [exams, currentMinuteKey]);
+  const upcomingExams = useMemo(() => exams.filter(e => new Date(e.examDate) > new Date()), [exams, currentMinuteKey]);
 
   // ─── SYLLABUS COMPUTED ────────────────────────────────────────────────────
   const filteredSyllabus = useMemo(() => syllabusItems.filter(s => {
@@ -2053,14 +2139,39 @@ export default function UltraStudyHub() {
               )}
             </div>
           </div>
+
+          {/* ── LEVEL ROADMAP (new) — shows every level, current one highlighted, locked ones dimmed ── */}
+          <div className={styles.card}>
+            <div className={styles.cardHead}><span>🧬</span><h2>Level Roadmap</h2></div>
+            <div className={styles.levelRoadmapList}>
+              {levelRoadmap.map(lv => (
+                <div
+                  key={lv.level}
+                  className={`${styles.levelRoadmapItem} ${lv.isCurrent ? styles.levelRoadmapItemCurrent : ""} ${!lv.unlocked ? styles.levelRoadmapItemLocked : ""}`}
+                >
+                  <div className={styles.levelRoadmapBadge}>{lv.unlocked ? `Lv${lv.level}` : "🔒"}</div>
+                  <div className={styles.levelRoadmapBody}>
+                    <div className={styles.levelRoadmapRow}>
+                      <strong>{lv.title}</strong>
+                      <span className={styles.levelRoadmapXp}>{lv.threshold} XP</span>
+                    </div>
+                    <p className={styles.levelRoadmapPerk}>{lv.perk}</p>
+                  </div>
+                  {lv.isCurrent && <span className={styles.levelRoadmapHereTag}>You are here</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className={`${styles.card} ${styles.spanFull}`}>
             <div className={styles.cardHead}><span>🏆</span><h2>Achievements ({achievements.length})</h2></div>
             <div className={styles.achievementsGrid}>
-              {achievements.length === 0 ? <p className={styles.emptyState}>Keep studying to unlock achievements!</p> :
-                achievements.map(a => (
+              {sortedAchievements.length === 0 ? <p className={styles.emptyState}>Keep studying to unlock achievements!</p> :
+                sortedAchievements.map(a => (
                   <div key={a.id} className={styles.achievementCard}>
                     <span className={styles.achievementIcon}>{a.icon}</span>
                     <h4>{a.title}</h4><p>{a.description}</p>
+                    <span className={styles.achievementDate}>🕒 {formatUnlockDate(a.createdAt)}</span>
                   </div>
                 ))
               }
