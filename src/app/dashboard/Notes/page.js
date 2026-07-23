@@ -503,14 +503,14 @@ export default function NotesDashboard() {
     document.documentElement.setAttribute("data-notes-theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  // ── Auth Listener (Fix for SSR) ───────────────────────────
+  // ── Auth Listener ─────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (!u) {
         router.replace("/login");
       } else {
         setUser(u);
-        logToolUsage({ userId: u.uid, tool: "Notes Dashboard - Page Visit" });
+        logToolUsage({ userId: u.uid, tool: "Notes", action: "visit" });
       }
     });
     return () => unsub();
@@ -627,7 +627,17 @@ export default function NotesDashboard() {
   const createFolder = async () => {
     const name = prompt("Folder name:");
     if (!name?.trim()) return;
-    await addDoc(collection(db, "folders"), { userId:user.uid, name:name.trim(), createdAt:serverTimestamp() });
+    const ref = await addDoc(collection(db, "folders"), { userId:user.uid, name:name.trim(), createdAt:serverTimestamp() });
+    
+    // Log Folder Creation
+    logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "create_folder",
+      resourceId: ref.id,
+      resourceName: name.trim()
+    });
+
     loadFolders();
   };
 
@@ -636,11 +646,22 @@ export default function NotesDashboard() {
     const name = prompt("New folder name:", folder.name);
     if (!name?.trim() || name === folder.name) return;
     await updateDoc(doc(db, "folders", folder.id), { name:name.trim() });
+    
+    // Log Folder Rename
+    logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "rename_folder",
+      resourceId: folder.id,
+      resourceName: name.trim()
+    });
+
     loadFolders();
   };
 
   const deleteFolder = async (folderId, e) => {
     e.stopPropagation();
+    const folderObj = folders.find(f => f.id === folderId);
     setConfirmDialog({
       message:"Delete this folder? Notes inside will be moved to All Notes.",
       onConfirm: async () => {
@@ -648,6 +669,16 @@ export default function NotesDashboard() {
         const q    = query(collection(db,"notes"), where("folderId","==",folderId));
         const snap = await getDocs(q);
         await Promise.all(snap.docs.map(d => updateDoc(doc(db,"notes",d.id), { folderId:null })));
+        
+        // Log Folder Deletion
+        logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "delete_folder",
+          resourceId: folderId,
+          resourceName: folderObj?.name || "Folder"
+        });
+
         if (activeFolder===folderId) { setActiveFolder(null); loadNotes(); }
         loadFolders(); setConfirmDialog(null);
       },
@@ -674,6 +705,16 @@ export default function NotesDashboard() {
         await updateDoc(doc(db,"notes",activeNote.id), { isLocked:false, pinHash:null });
         setActiveNote(p => ({ ...p, isLocked:false, pinHash:null }));
         setIsNoteUnlocked(false);
+        
+        // Log Remove Lock
+        logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "unlock_note_security",
+          resourceId: activeNote.id,
+          resourceName: activeNote.title || "Untitled"
+        });
+
         loadNotes(activeFolder);
         setConfirmDialog(null);
       },
@@ -689,6 +730,16 @@ export default function NotesDashboard() {
       await updateDoc(doc(db,"notes",activeNote.id), { isLocked:true, pinHash:hash });
       setActiveNote(p => ({ ...p, isLocked:true, pinHash:hash }));
       setIsNoteUnlocked(true);
+      
+      // Log Lock Note
+      logToolUsage({
+        userId: user.uid,
+        tool: "Notes",
+        action: "lock_note",
+        resourceId: activeNote.id,
+        resourceName: activeNote.title || "Untitled"
+      });
+
       loadNotes(activeFolder);
       setShowSecurityDialog(false);
       setSecurityError("");
@@ -698,6 +749,15 @@ export default function NotesDashboard() {
         setIsNoteUnlocked(true);
         setShowSecurityDialog(false);
         setSecurityError("");
+
+        // Log Unlock Access
+        logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "access_locked_note",
+          resourceId: activeNote.id,
+          resourceName: activeNote.title || "Untitled"
+        });
       } else {
         setSecurityError("Incorrect PIN. Please try again.");
       }
@@ -716,6 +776,16 @@ export default function NotesDashboard() {
     setIsNewNote(false);
     setIsDirty(false);
     setReadOnly(false);
+    
+    // Log Select Note View
+    logToolUsage({
+      userId: user?.uid,
+      tool: "Notes",
+      action: "view_note",
+      resourceId: n.id,
+      resourceName: n.title || "Untitled"
+    });
+
     if (n.isLocked) {
       setIsNoteUnlocked(false);
       setSecurityMode("unlock");
@@ -740,6 +810,15 @@ export default function NotesDashboard() {
       if (activeNote) {
         await updateDoc(doc(db,"notes",activeNote.id), payload);
         setActiveNote(prev => ({ ...prev, ...payload }));
+        
+        // Log Update Action
+        logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: auto ? "auto_save_note" : "edit_note",
+          resourceId: activeNote.id,
+          resourceName: title || "Untitled"
+        });
       } else {
         const ref = await addDoc(collection(db,"notes"), {
           userId:user.uid, folderId:activeFolder||null,
@@ -751,6 +830,15 @@ export default function NotesDashboard() {
         setActiveNote(newNote);
         setIsNoteUnlocked(true);
         setIsNewNote(false);
+
+        // Log Create Action
+        logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "create_note",
+          resourceId: ref.id,
+          resourceName: title || "Untitled"
+        });
       }
       setLastSaved(new Date());
       setIsDirty(false);
@@ -766,8 +854,18 @@ export default function NotesDashboard() {
     const newVal = !note.pinned;
     await updateDoc(doc(db,"notes",note.id), { pinned:newVal });
     if (activeNote?.id===note.id) setActiveNote(p => ({ ...p, pinned:newVal }));
+    
+    // Log Pin Action
+    logToolUsage({
+      userId: user?.uid,
+      tool: "Notes",
+      action: newVal ? "pin_note" : "unpin_note",
+      resourceId: note.id,
+      resourceName: note.title || "Untitled"
+    });
+
     loadNotes(activeFolder);
-  }, [activeNote, activeFolder, loadNotes]);
+  }, [activeNote, activeFolder, loadNotes, user]);
 
   // ── MOOD ──────────────────────────────────────────────────
   const saveMood = async (moodId) => {
@@ -776,6 +874,16 @@ export default function NotesDashboard() {
     if (activeNote) {
       await updateDoc(doc(db,"notes",activeNote.id), { mood:moodId });
       setActiveNote(p => ({ ...p, mood:moodId }));
+      
+      logToolUsage({
+        userId: user?.uid,
+        tool: "Notes",
+        action: "set_mood",
+        resourceId: activeNote.id,
+        resourceName: activeNote.title || "Untitled",
+        metadata: { mood: moodId }
+      });
+
       loadNotes(activeFolder);
     }
   };
@@ -787,6 +895,16 @@ export default function NotesDashboard() {
     if (activeNote) {
       await updateDoc(doc(db,"notes",activeNote.id), { dueDate:dateStr||null });
       setActiveNote(p => ({ ...p, dueDate:dateStr||null }));
+      
+      logToolUsage({
+        userId: user?.uid,
+        tool: "Notes",
+        action: dateStr ? "set_reminder" : "remove_reminder",
+        resourceId: activeNote.id,
+        resourceName: activeNote.title || "Untitled",
+        metadata: { dueDate: dateStr }
+      });
+
       loadNotes(activeFolder);
     }
   };
@@ -797,8 +915,16 @@ export default function NotesDashboard() {
     setShowAISummary(true);
     setAiLoading(true);
     setAiSummary("");
+
+    logToolUsage({
+      userId: user?.uid,
+      tool: "Notes",
+      action: "generate_ai_summary",
+      resourceId: activeNote?.id || null,
+      resourceName: title || "Untitled"
+    });
+
     try {
-      // Yahan external URL ki jagah internal Next.js API Route ko hit karein
       const plain = getHtmlToText(content);
       const res = await fetch("/api/summarize", {
         method: "POST",
@@ -816,7 +942,7 @@ export default function NotesDashboard() {
 
   // ── QUICK CAPTURE ─────────────────────────────────────────
   const saveQuickCapture = async (qTitle, qText) => {
-    await addDoc(collection(db,"notes"), {
+    const ref = await addDoc(collection(db,"notes"), {
       userId:user.uid, folderId:activeFolder||null,
       title:qTitle||"Quick Note",
       content:`<p>${qText.replace(/\n/g,"</p><p>")}</p>`,
@@ -826,6 +952,16 @@ export default function NotesDashboard() {
       isLocked:false, pinHash:null,
       tags:[], createdAt:serverTimestamp(), updatedAt:serverTimestamp(),
     });
+
+    // Log Quick Capture Action
+    logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "quick_capture_note",
+      resourceId: ref.id,
+      resourceName: qTitle || "Quick Note"
+    });
+
     loadNotes(activeFolder);
     setShowQuickCapture(false);
   };
@@ -837,6 +973,16 @@ export default function NotesDashboard() {
       message:"Move this note to Trash?",
       onConfirm: async () => {
         await updateDoc(doc(db,"notes",activeNote.id), { deleted:true, deletedAt:serverTimestamp() });
+        
+        // Log Soft Delete Action
+        logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "trash_note",
+          resourceId: activeNote.id,
+          resourceName: activeNote.title || "Untitled"
+        });
+
         resetEditor();
         loadNotes(activeFolder);
         loadNotes(null, true);
@@ -844,10 +990,20 @@ export default function NotesDashboard() {
       },
       onCancel: () => setConfirmDialog(null),
     });
-  }, [activeNote, activeFolder, loadNotes]);
+  }, [activeNote, activeFolder, loadNotes, user]);
 
   const restoreNote = async (note) => {
     await updateDoc(doc(db,"notes",note.id), { deleted:false, deletedAt:null });
+    
+    // Log Restore Action
+    logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "restore_note",
+      resourceId: note.id,
+      resourceName: note.title || "Untitled"
+    });
+
     loadNotes(activeFolder);
     loadNotes(null, true);
   };
@@ -857,6 +1013,16 @@ export default function NotesDashboard() {
       message:"Permanently delete this note? This cannot be undone.",
       onConfirm: async () => {
         await deleteDoc(doc(db,"notes",note.id));
+        
+        // Log Hard Delete Action
+        logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "delete_note_permanently",
+          resourceId: note.id,
+          resourceName: note.title || "Untitled"
+        });
+
         loadNotes(null, true);
         if (activeNote?.id===note.id) resetEditor();
         setConfirmDialog(null);
@@ -870,6 +1036,15 @@ export default function NotesDashboard() {
       message:`Permanently delete all ${trashedNotes.length} trashed notes?`,
       onConfirm: async () => {
         await Promise.all(trashedNotes.map(n => deleteDoc(doc(db,"notes",n.id))));
+        
+        // Log Empty Trash
+        logToolUsage({
+          userId: user.uid,
+          tool: "Notes",
+          action: "empty_trash",
+          metadata: { count: trashedNotes.length }
+        });
+
         loadNotes(null, true);
         setConfirmDialog(null);
       },
@@ -880,7 +1055,7 @@ export default function NotesDashboard() {
   // ── DUPLICATE ─────────────────────────────────────────────
   const duplicateNote = useCallback(async () => {
     if (!activeNote) return;
-    await addDoc(collection(db,"notes"), {
+    const ref = await addDoc(collection(db,"notes"), {
       userId:user.uid, folderId:activeNote.folderId||activeFolder||null,
       title:`${activeNote.title||"Untitled"} (copy)`,
       content:activeNote.content||"",
@@ -893,6 +1068,16 @@ export default function NotesDashboard() {
       tags:activeNote.tags||[],
       createdAt:serverTimestamp(), updatedAt:serverTimestamp(),
     });
+
+    // Log Duplicate Note
+    logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "duplicate_note",
+      resourceId: ref.id,
+      resourceName: `${activeNote.title||"Untitled"} (copy)`
+    });
+
     loadNotes(activeFolder);
   }, [activeNote, activeFolder, user, loadNotes]);
 
@@ -901,6 +1086,17 @@ export default function NotesDashboard() {
     if (!activeNote) return;
     await updateDoc(doc(db,"notes",activeNote.id), { folderId:folderId||null });
     setActiveNote(p => ({ ...p, folderId:folderId||null }));
+    
+    const folderObj = folders.find(f => f.id === folderId);
+    logToolUsage({
+      userId: user.uid,
+      tool: "Notes",
+      action: "move_note_folder",
+      resourceId: activeNote.id,
+      resourceName: activeNote.title || "Untitled",
+      metadata: { folderName: folderObj?.name || "All Notes" }
+    });
+
     loadNotes(activeFolder);
     setShowMoveFolder(false);
   };
@@ -913,10 +1109,17 @@ export default function NotesDashboard() {
     if (template) {
       setTitle(template.title);
       setContent(template.content);
+      
+      logToolUsage({
+        userId: user?.uid,
+        tool: "Notes",
+        action: "create_from_template",
+        metadata: { templateId: template.id, templateName: template.label }
+      });
     }
     setShowTemplates(false);
     setTimeout(() => titleRef.current?.focus(), 100);
-  }, []);
+  }, [user]);
 
   const resetEditor = () => {
     setTitle(""); setContent(""); setActiveNote(null);
@@ -940,12 +1143,30 @@ export default function NotesDashboard() {
     pdf.text(lines, 14, 32);
     pdf.save(`${title||"note"}.pdf`);
     setShowExport(false);
+
+    logToolUsage({
+      userId: user?.uid,
+      tool: "Notes",
+      action: "export_note",
+      resourceId: activeNote?.id || null,
+      resourceName: title || "Untitled",
+      metadata: { format: "pdf" }
+    });
   };
 
   const exportTXT = () => {
     const blob = new Blob([`${title}\n\n${getHtmlToText(content)}`], { type:"text/plain" });
     const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`${title||"note"}.txt`; a.click();
     setShowExport(false);
+
+    logToolUsage({
+      userId: user?.uid,
+      tool: "Notes",
+      action: "export_note",
+      resourceId: activeNote?.id || null,
+      resourceName: title || "Untitled",
+      metadata: { format: "txt" }
+    });
   };
 
   const exportHTML = () => {
@@ -953,6 +1174,15 @@ export default function NotesDashboard() {
     const blob = new Blob([html], { type:"text/html" });
     const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`${title||"note"}.html`; a.click();
     setShowExport(false);
+
+    logToolUsage({
+      userId: user?.uid,
+      tool: "Notes",
+      action: "export_note",
+      resourceId: activeNote?.id || null,
+      resourceName: title || "Untitled",
+      metadata: { format: "html" }
+    });
   };
 
   const exportMD = () => {
@@ -960,6 +1190,15 @@ export default function NotesDashboard() {
     const blob = new Blob([md], { type:"text/markdown" });
     const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`${title||"note"}.md`; a.click();
     setShowExport(false);
+
+    logToolUsage({
+      userId: user?.uid,
+      tool: "Notes",
+      action: "export_note",
+      resourceId: activeNote?.id || null,
+      resourceName: title || "Untitled",
+      metadata: { format: "markdown" }
+    });
   };
 
   const exportFormats = [
@@ -1374,6 +1613,16 @@ export default function NotesDashboard() {
                   const newTags = [...new Set([...(activeNote.tags||[]), tag])];
                   await updateDoc(doc(db,"notes",activeNote.id), { tags:newTags });
                   setActiveNote(p=>({...p,tags:newTags}));
+                  
+                  logToolUsage({
+                    userId: user.uid,
+                    tool: "Notes",
+                    action: "add_tag",
+                    resourceId: activeNote.id,
+                    resourceName: activeNote.title || "Untitled",
+                    metadata: { tag }
+                  });
+
                   loadNotes(activeFolder);
                 }}
                 onRemove={async (tag) => {
@@ -1381,6 +1630,16 @@ export default function NotesDashboard() {
                   const newTags = (activeNote.tags||[]).filter(t=>t!==tag);
                   await updateDoc(doc(db,"notes",activeNote.id), { tags:newTags });
                   setActiveNote(p=>({...p,tags:newTags}));
+                  
+                  logToolUsage({
+                    userId: user.uid,
+                    tool: "Notes",
+                    action: "remove_tag",
+                    resourceId: activeNote.id,
+                    resourceName: activeNote.title || "Untitled",
+                    metadata: { tag }
+                  });
+
                   loadNotes(activeFolder);
                 }}
               />
