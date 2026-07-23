@@ -8,9 +8,9 @@ import {
   getFirestore, collection, addDoc, query, where,
   getDocs, updateDoc, deleteDoc, doc, serverTimestamp, orderBy,
 } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import jsPDF from "jspdf";
-import { app } from "@/lib/firebase";
-import { getCurrentUser } from "@/lib/firebaseAuth";
+import { app, auth } from "@/lib/firebase";
 import RichEditor from "@/components/RichEditor";
 import styles from "./notes.module.css";
 
@@ -30,13 +30,13 @@ const db = getFirestore(app);
 // ─── Constants ───────────────────────────────────────────────
 const LABEL_COLORS = [
   { id:"none",    hex:"transparent", label:"None"    },
-  { id:"rose",    hex:"#fda4af",     label:"Rose"    },
-  { id:"amber",   hex:"#fcd34d",     label:"Amber"   },
-  { id:"emerald", hex:"#6ee7b7",     label:"Emerald" },
-  { id:"sky",     hex:"#7dd3fc",     label:"Sky"     },
-  { id:"violet",  hex:"#c4b5fd",     label:"Violet"  },
-  { id:"orange",  hex:"#fdba74",     label:"Orange"  },
-  { id:"pink",    hex:"#f9a8d4",     label:"Pink"    },
+  { id:"rose",    hex:"#fda4af",      label:"Rose"    },
+  { id:"amber",   hex:"#fcd34d",      label:"Amber"   },
+  { id:"emerald", hex:"#6ee7b7",      label:"Emerald" },
+  { id:"sky",     hex:"#7dd3fc",      label:"Sky"     },
+  { id:"violet",  hex:"#c4b5fd",      label:"Violet"  },
+  { id:"orange",  hex:"#fdba74",      label:"Orange"  },
+  { id:"pink",    hex:"#f9a8d4",      label:"Pink"    },
 ];
 
 const NOTE_BG_COLORS = [
@@ -51,7 +51,7 @@ const NOTE_BG_COLORS = [
 ];
 
 const MOOD_OPTIONS = [
-  { id:"none",      emoji:"",   label:"No mood"    },
+  { id:"none",      emoji:"",    label:"No mood"    },
   { id:"happy",     emoji:"😊", label:"Happy"      },
   { id:"focused",   emoji:"🎯", label:"Focused"    },
   { id:"creative",  emoji:"🎨", label:"Creative"   },
@@ -63,9 +63,9 @@ const MOOD_OPTIONS = [
 ];
 
 const TEMPLATES = [
-  { id:"blank",   label:"Blank Note",      icon:"📄", title:"", content:"" },
+  { id:"blank",    label:"Blank Note",      icon:"📄", title:"", content:"" },
   { id:"meeting", label:"Meeting Notes",   icon:"📋", title:"Meeting Notes", content:"<h2>Attendees</h2><p></p><h2>Agenda</h2><ul><li></li></ul><h2>Action Items</h2><ul><li></li></ul><h2>Next Steps</h2><p></p>" },
-  { id:"todo",    label:"To-Do List",      icon:"✅", title:"To-Do List", content:"<h2>Tasks</h2><ul><li>[ ] </li><li>[ ] </li><li>[ ] </li></ul>" },
+  { id:"todo",     label:"To-Do List",      icon:"✅", title:"To-Do List", content:"<h2>Tasks</h2><ul><li>[ ] </li><li>[ ] </li><li>[ ] </li></ul>" },
   { id:"journal", label:"Daily Journal",   icon:"📖", title:`Journal - ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"long",year:"numeric"})}`, content:"<h2>Today's Highlights</h2><p></p><h2>What I Learned</h2><p></p><h2>Gratitude</h2><p></p>" },
   { id:"idea",    label:"Idea Brainstorm", icon:"💡", title:"Idea: ", content:"<h2>The Idea</h2><p></p><h2>Why It Matters</h2><p></p><h2>Next Steps</h2><ul><li></li></ul>" },
   { id:"research",label:"Research Note",   icon:"🔬", title:"Research: ", content:"<h2>Overview</h2><p></p><h2>Key Points</h2><ul><li></li></ul><h2>Sources</h2><ul><li></li></ul><h2>Conclusions</h2><p></p>" },
@@ -103,7 +103,6 @@ const formatTime = (ts) => {
 const getLabelColor = (id) => LABEL_COLORS.find(c => c.id === id)?.hex || "transparent";
 const getNoteBg    = (id) => NOTE_BG_COLORS.find(c => c.id === id)?.hex || "#fdfaf5";
 
-// Hash PIN to store (simple sha-256-like via btoa)
 const hashPin = async (pin) => {
   const enc = new TextEncoder();
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(pin + "notes_salt_mydashboard"));
@@ -433,7 +432,7 @@ function LockedNoteOverlay({ onUnlock }) {
 // ─── Main Component ───────────────────────────────────────────
 export default function NotesDashboard() {
   const router = useRouter();
-  const user   = getCurrentUser();
+  const [user, setUser] = useState(null);
 
   // Data
   const [folders,      setFolders     ] = useState([]);
@@ -458,33 +457,33 @@ export default function NotesDashboard() {
   // Security
   const [isNoteUnlocked,     setIsNoteUnlocked     ] = useState(false);
   const [showSecurityDialog, setShowSecurityDialog ] = useState(false);
-  const [securityMode,       setSecurityMode       ] = useState("set"); // set | unlock | change
+  const [securityMode,       setSecurityMode       ] = useState("set");
   const [securityError,      setSecurityError      ] = useState("");
 
   // UI
-  const [search,         setSearch        ] = useState("");
-  const [showSearch,     setShowSearch    ] = useState(false);
-  const [viewMode,       setViewMode      ] = useState("list");
-  const [sortBy,         setSortBy        ] = useState("updated_desc");
-  const [showLabels,     setShowLabels    ] = useState(false);
-  const [showBgPicker,   setShowBgPicker  ] = useState(false);
-  const [showSortMenu,   setShowSortMenu  ] = useState(false);
-  const [showExport,     setShowExport    ] = useState(false);
-  const [showTemplates,  setShowTemplates ] = useState(false);
-  const [showMoveFolder, setShowMoveFolder] = useState(false);
-  const [showShortcuts,  setShowShortcuts ] = useState(false);
-  const [showMoodPicker, setShowMoodPicker] = useState(false);
-  const [showReminder,   setShowReminder  ] = useState(false);
-  const [showAISummary,  setShowAISummary ] = useState(false);
-  const [showAnalytics,  setShowAnalytics ] = useState(false);
+  const [search,           setSearch        ] = useState("");
+  const [showSearch,       setShowSearch    ] = useState(false);
+  const [viewMode,         setViewMode      ] = useState("list");
+  const [sortBy,           setSortBy        ] = useState("updated_desc");
+  const [showLabels,       setShowLabels    ] = useState(false);
+  const [showBgPicker,     setShowBgPicker  ] = useState(false);
+  const [showSortMenu,     setShowSortMenu  ] = useState(false);
+  const [showExport,       setShowExport    ] = useState(false);
+  const [showTemplates,    setShowTemplates ] = useState(false);
+  const [showMoveFolder,   setShowMoveFolder] = useState(false);
+  const [showShortcuts,    setShowShortcuts ] = useState(false);
+  const [showMoodPicker,   setShowMoodPicker] = useState(false);
+  const [showReminder,     setShowReminder  ] = useState(false);
+  const [showAISummary,    setShowAISummary ] = useState(false);
+  const [showAnalytics,    setShowAnalytics ] = useState(false);
   const [showQuickCapture, setShowQuickCapture] = useState(false);
-  const [aiSummary,      setAiSummary     ] = useState("");
-  const [aiLoading,      setAiLoading     ] = useState(false);
-  const [focusMode,      setFocusMode     ] = useState(false);
-  const [readOnly,       setReadOnly      ] = useState(false);
-  const [showTrash,      setShowTrash     ] = useState(false);
-  const [confirmDialog,  setConfirmDialog ] = useState(null);
-  const [darkMode,       setDarkMode      ] = useState(false);
+  const [aiSummary,        setAiSummary     ] = useState("");
+  const [aiLoading,        setAiLoading     ] = useState(false);
+  const [focusMode,        setFocusMode     ] = useState(false);
+  const [readOnly,         setReadOnly      ] = useState(false);
+  const [showTrash,        setShowTrash     ] = useState(false);
+  const [confirmDialog,    setConfirmDialog ] = useState(null);
+  const [darkMode,         setDarkMode      ] = useState(false);
 
   // Stats
   const [wordCount, setWordCount] = useState(0);
@@ -504,11 +503,18 @@ export default function NotesDashboard() {
     document.documentElement.setAttribute("data-notes-theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  // ── Auth ──────────────────────────────────────────────────
+  // ── Auth Listener (Fix for SSR) ───────────────────────────
   useEffect(() => {
-    if (!user) router.replace("/login");
-    else logToolUsage({ userId:user.uid, tool:"Notes Dashboard - Page Visit" });
-  }, [user, router]);
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (!u) {
+        router.replace("/login");
+      } else {
+        setUser(u);
+        logToolUsage({ userId: u.uid, tool: "Notes Dashboard - Page Visit" });
+      }
+    });
+    return () => unsub();
+  }, [router]);
 
   // ── Load data ─────────────────────────────────────────────
   const loadFolders = useCallback(async () => {
@@ -549,7 +555,7 @@ export default function NotesDashboard() {
   useEffect(() => {
     if (activeNote?.id !== prevNoteId.current) {
       prevNoteId.current = activeNote?.id || null;
-      return; // Don't mark dirty on note switch
+      return;
     }
     setIsDirty(true);
   }, [title, content, activeLabel, noteBg, mood, dueDate]);
@@ -566,15 +572,15 @@ export default function NotesDashboard() {
 
   // ── Keyboard shortcuts ────────────────────────────────────
   useHotkeys({
-    "mod+s":       () => saveNote(),
-    "mod+n":       () => newNote(),
+    "mod+s":        () => saveNote(),
+    "mod+n":        () => newNote(),
     "mod+shift+f": () => setShowSearch(s => !s),
-    "mod+d":       () => duplicateNote(),
-    "mod+p":       () => activeNote && togglePin(activeNote),
-    "mod+e":       () => activeNote && exportPDF(),
-    "mod+l":       () => activeNote && handleLockToggle(),
-    "mod+q":       () => setShowQuickCapture(true),
-    "escape":      () => {
+    "mod+d":        () => duplicateNote(),
+    "mod+p":        () => activeNote && togglePin(activeNote),
+    "mod+e":        () => activeNote && exportPDF(),
+    "mod+l":        () => activeNote && handleLockToggle(),
+    "mod+q":        () => setShowQuickCapture(true),
+    "escape":       () => {
       setShowSearch(false); setShowLabels(false); setShowBgPicker(false);
       setShowSortMenu(false); setShowExport(false); setFocusMode(false);
       setShowMoodPicker(false);
@@ -710,7 +716,6 @@ export default function NotesDashboard() {
     setIsNewNote(false);
     setIsDirty(false);
     setReadOnly(false);
-    // If locked, show unlock dialog
     if (n.isLocked) {
       setIsNoteUnlocked(false);
       setSecurityMode("unlock");
@@ -793,22 +798,15 @@ export default function NotesDashboard() {
     setAiLoading(true);
     setAiSummary("");
     try {
+      // Yahan external URL ki jagah internal Next.js API Route ko hit karein
       const plain = getHtmlToText(content);
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: `Please provide a concise summary of this note in 3-5 bullet points. Note title: "${title}"\n\nContent:\n${plain}\n\nReturn only the summary bullets, no preamble.`
-          }]
-        })
+        body: JSON.stringify({ title, content: plain })
       });
       const data = await res.json();
-      const text = data.content?.map(b => b.text||"").join("") || "Unable to generate summary.";
-      setAiSummary(text);
+      setAiSummary(data.summary || "Unable to generate summary.");
     } catch {
       setAiSummary("Error generating summary. Please try again.");
     } finally {
@@ -971,7 +969,6 @@ export default function NotesDashboard() {
     { label:"Markdown", icon:"#️⃣", fn:exportMD   },
   ];
 
-  // ── Due date helpers ──────────────────────────────────────
   const isOverdue = (note) => note.dueDate && new Date(note.dueDate) < new Date();
   const isDueSoon = (note) => {
     if (!note.dueDate) return false;
@@ -1031,11 +1028,9 @@ export default function NotesDashboard() {
             <button className={`${styles.iconBtn} ${viewMode==="grid"?styles.iconBtnActive:""}`} onClick={() => setViewMode(v => v==="list"?"grid":"list")} title="Toggle view">
               {viewMode==="list" ? <Grid size={16}/> : <List size={16}/>}
             </button>
-            {/* Dark mode toggle */}
             <button className={`${styles.iconBtn} ${darkMode?styles.iconBtnActive:""}`} onClick={() => setDarkMode(d=>!d)} title="Toggle dark mode">
               {darkMode ? <Sun size={16}/> : <Moon size={16}/>}
             </button>
-            {/* Sort */}
             <div className={styles.dropWrap}>
               <button className={styles.iconBtn} onClick={() => setShowSortMenu(s=>!s)} title="Sort"><SortAsc size={16}/></button>
               {showSortMenu && (
@@ -1069,7 +1064,6 @@ export default function NotesDashboard() {
       )}
 
       <div className={`${styles.layout} ${focusMode ? styles.layoutFocus : ""}`}>
-
         {/* ── SIDEBAR ── */}
         {!focusMode && (
           <aside className={styles.sidebar}>
@@ -1182,7 +1176,6 @@ export default function NotesDashboard() {
                         )}
                       </div>
 
-                      {/* Locked preview */}
                       {n.isLocked ? (
                         <p className={styles.notePreview} style={{ color:isDark?"#aaa":"", fontStyle:"italic", opacity:0.6 }}>
                           🔒 Content locked — click to unlock
@@ -1199,7 +1192,6 @@ export default function NotesDashboard() {
                         </div>
                       )}
 
-                      {/* Due date badge */}
                       {n.dueDate && (
                         <div className={`${styles.dueBadge} ${overdue?styles.dueBadgeOverdue:dueSoon?styles.dueBadgeSoon:""}`}>
                           <Bell size={9}/>
@@ -1245,7 +1237,6 @@ export default function NotesDashboard() {
                     <span className={styles.savedBadge}>✓ Saved {lastSaved.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}</span>
                   )}
                   {isSaving && <span className={styles.savingBadge}>Saving…</span>}
-                  {/* Due date display */}
                   {dueDate && (
                     <span className={`${styles.dueDateBadge} ${isOverdue(activeNote)?styles.dueDateBadgeOverdue:""}`}>
                       <Calendar size={10}/> {new Date(dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
@@ -1254,7 +1245,6 @@ export default function NotesDashboard() {
                 </div>
 
                 <div className={styles.editorToolbar}>
-                  {/* AI Summarize */}
                   <button
                     className={styles.toolbarBtn}
                     onClick={generateAISummary}
@@ -1265,7 +1255,6 @@ export default function NotesDashboard() {
                     <Sparkles size={14}/>
                   </button>
 
-                  {/* Mood picker */}
                   <div className={styles.dropWrap}>
                     <button className={`${styles.toolbarBtn} ${mood!=="none"?styles.toolbarBtnActive:""}`} onClick={()=>{setShowMoodPicker(s=>!s);}} title="Set mood">
                       {currentMoodEmoji ? <span style={{ fontSize:14 }}>{currentMoodEmoji}</span> : <Smile size={14}/>}
@@ -1282,7 +1271,6 @@ export default function NotesDashboard() {
                     )}
                   </div>
 
-                  {/* Reminder */}
                   <button
                     className={`${styles.toolbarBtn} ${dueDate?styles.toolbarBtnActive:""}`}
                     onClick={()=>setShowReminder(true)}
@@ -1291,7 +1279,6 @@ export default function NotesDashboard() {
                     {dueDate ? <BellOff size={14}/> : <Bell size={14}/>}
                   </button>
 
-                  {/* Security lock */}
                   {activeNote && (
                     <button
                       className={`${styles.toolbarBtn} ${activeNote.isLocked?styles.toolbarBtnLocked:""}`}
@@ -1302,23 +1289,17 @@ export default function NotesDashboard() {
                     </button>
                   )}
 
-                  {/* Read-only toggle */}
                   <button className={`${styles.toolbarBtn} ${readOnly?styles.toolbarBtnActive:""}`} onClick={()=>setReadOnly(r=>!r)} title={readOnly?"Edit":"Read Only"}>
                     {readOnly?<EyeOff size={14}/>:<Eye size={14}/>}
                   </button>
 
-                  {/* Focus mode */}
                   <button className={`${styles.toolbarBtn} ${focusMode?styles.toolbarBtnActive:""}`} onClick={()=>setFocusMode(f=>!f)} title="Focus Mode">
                     {focusMode?<Minimize2 size={14}/>:<Maximize2 size={14}/>}
                   </button>
 
-                  {/* Duplicate */}
                   {activeNote && <button className={styles.toolbarBtn} onClick={duplicateNote} title="Duplicate (Ctrl+D)"><Copy size={14}/></button>}
-
-                  {/* Move to folder */}
                   {activeNote && <button className={styles.toolbarBtn} onClick={()=>setShowMoveFolder(true)} title="Move to folder"><FolderInput size={14}/></button>}
 
-                  {/* Label picker */}
                   <div className={styles.dropWrap}>
                     <button className={styles.toolbarBtn} onClick={()=>{setShowLabels(s=>!s);setShowBgPicker(false);}} title="Label color">
                       <Tag size={14}/>
@@ -1337,7 +1318,6 @@ export default function NotesDashboard() {
                     )}
                   </div>
 
-                  {/* Note background */}
                   <div className={styles.dropWrap}>
                     <button className={styles.toolbarBtn} onClick={()=>{setShowBgPicker(s=>!s);setShowLabels(false);}} title="Note background">
                       <AlignLeft size={14}/>
@@ -1355,7 +1335,6 @@ export default function NotesDashboard() {
                     )}
                   </div>
 
-                  {/* Export */}
                   <div className={styles.dropWrap}>
                     <button className={styles.toolbarBtn} onClick={()=>setShowExport(s=>!s)} title="Export">
                       <Download size={14}/>
@@ -1406,7 +1385,7 @@ export default function NotesDashboard() {
                 }}
               />
 
-              {/* Editor body — show locked overlay if needed */}
+              {/* Editor body */}
               <div className={styles.editorBody} style={{ position:"relative" }}>
                 {activeNote?.isLocked && !isNoteUnlocked ? (
                   <LockedNoteOverlay onUnlock={() => { setSecurityMode("unlock"); setSecurityError(""); setShowSecurityDialog(true); }}/>
