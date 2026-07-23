@@ -1,10 +1,5 @@
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  serverTimestamp
-} from "firebase/firestore";
-
+// @/lib/firestore.js
+import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { app } from "./firebase";
 
 export async function logToolUsage({
@@ -16,7 +11,6 @@ export async function logToolUsage({
   metadata = {}
 }) {
   const db = getFirestore(app);
-
   await addDoc(collection(db, "tool_usage"), {
     userId,
     tool,
