@@ -41,7 +41,7 @@ ChartJS.register(
   BarElement,
   PointElement,
   LineElement,
-  Filler,
+  Filler
 );
 
 const CHARGE_FIELDS = {
@@ -138,15 +138,24 @@ export default function FinancialsPage() {
   const khataModalRef = useRef(null);
   const router = useRouter();
 
+  // Page Visit Logging
   useEffect(() => {
     const u = getCurrentUser();
     if (u) {
       setUser(u);
       fetchStockData(u.uid);
       fetchKhataData(u.uid);
+
+      logToolUsage({
+        userId: u.uid,
+        tool: "My Financials",
+        action: "visit",
+      });
+    } else {
+      router.replace("/login");
     }
     setLoading(false);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const h = (e) => {
@@ -163,7 +172,7 @@ export default function FinancialsPage() {
     const q = query(
       collection(db, "transactions"),
       where("userId", "==", uid),
-      orderBy("createdAt", "asc"),
+      orderBy("createdAt", "asc")
     );
     const snap = await getDocs(q);
     setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -172,7 +181,7 @@ export default function FinancialsPage() {
     const q = query(
       collection(db, "khataEntries"),
       where("userId", "==", uid),
-      orderBy("createdAt", "desc"),
+      orderBy("createdAt", "desc")
     );
     const snap = await getDocs(q);
     setKhataEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -235,9 +244,9 @@ export default function FinancialsPage() {
           acc.totalCharges += h.totalCharges;
           return acc;
         },
-        { currentInvest: 0, totalPL: 0, totalStocks: 0, totalCharges: 0 },
+        { currentInvest: 0, totalPL: 0, totalStocks: 0, totalCharges: 0 }
       ),
-    [holdings],
+    [holdings]
   );
 
   const totalInvest = transactions
@@ -245,7 +254,7 @@ export default function FinancialsPage() {
     .reduce((s, t) => s + Number(t.qty) * Number(t.price), 0);
   const totalChargesAll = transactions.reduce(
     (s, t) => s + sumAllCharges(t),
-    0,
+    0
   );
   const netPL = totals.totalPL - totalChargesAll;
 
@@ -268,7 +277,7 @@ export default function FinancialsPage() {
     const byContact = {};
     khataEntries
       .filter(
-        (e) => e.type === "PAYMENT_GIVEN" || e.type === "PAYMENT_RECEIVED",
+        (e) => e.type === "PAYMENT_GIVEN" || e.type === "PAYMENT_RECEIVED"
       )
       .forEach((e) => {
         if (!e.contactName) return;
@@ -281,7 +290,7 @@ export default function FinancialsPage() {
     const byMonth = {};
     khataEntries.forEach((e) => {
       const d = new Date(
-        e.createdAt?.seconds ? e.createdAt.seconds * 1000 : e.createdAt,
+        e.createdAt?.seconds ? e.createdAt.seconds * 1000 : e.createdAt
       );
       const key = d.toLocaleDateString("en-IN", {
         month: "short",
@@ -311,6 +320,7 @@ export default function FinancialsPage() {
     });
     return m;
   }, [transactions]);
+
   const closeStockModal = () => {
     setStockModalOpen(false);
     setStockForm(EMPTY_STOCK_FORM);
@@ -319,6 +329,18 @@ export default function FinancialsPage() {
   const closeKhataModal = () => {
     setKhataModalOpen(false);
     setKhataForm(EMPTY_KHATA_FORM);
+  };
+
+  const handleModuleSwitch = (moduleName) => {
+    setActiveModule(moduleName);
+    if (user) {
+      logToolUsage({
+        userId: user.uid,
+        tool: "My Financials",
+        action: "switch_module",
+        metadata: { module: moduleName },
+      });
+    }
   };
 
   const saveStock = async (e) => {
@@ -337,7 +359,7 @@ export default function FinancialsPage() {
     const chargePayload = {};
     ALL_CHARGE_KEYS.forEach((k) => {
       chargePayload[k] = CHARGE_FIELDS[stockForm.action].some(
-        (f) => f.key === k,
+        (f) => f.key === k
       )
         ? Number(stockForm[k] || 0)
         : 0;
@@ -352,29 +374,50 @@ export default function FinancialsPage() {
       ...chargePayload,
       createdAt: stockForm.date ? new Date(stockForm.date) : serverTimestamp(),
     };
-    if (stockForm.id)
+
+    let docId = stockForm.id;
+    if (stockForm.id) {
       await updateDoc(doc(db, "transactions", stockForm.id), payload);
-    else
-      await addDoc(collection(db, "transactions"), {
+    } else {
+      const ref = await addDoc(collection(db, "transactions"), {
         userId: user.uid,
         ...payload,
       });
+      docId = ref.id;
+    }
+
     closeStockModal();
     fetchStockData(user.uid);
-    if (user)
+
+    if (user) {
       await logToolUsage({
         userId: user.uid,
-        tool: stockForm.id
-          ? "My Financials - Edit Trade"
-          : "My Financials - Add Trade",
+        tool: "My Financials",
+        action: stockForm.id ? "edit_trade" : "add_trade",
+        resourceId: docId,
+        resourceName: `${stockForm.action} ${symbol}`,
+        metadata: { qty, price, stockType: stockForm.stockType },
       });
+    }
   };
 
   const deleteStock = async (id) => {
     if (!window.confirm("Delete this trade?")) return;
+    const deletedTrade = transactions.find((t) => t.id === id);
     await deleteDoc(doc(db, "transactions", id));
     fetchStockData(user.uid);
+
+    if (user) {
+      await logToolUsage({
+        userId: user.uid,
+        tool: "My Financials",
+        action: "delete_trade",
+        resourceId: id,
+        resourceName: deletedTrade ? `${deletedTrade.action} ${deletedTrade.symbol}` : "Trade",
+      });
+    }
   };
+
   const editStock = (t) => {
     setStockForm({
       symbol: t.symbol,
@@ -410,26 +453,50 @@ export default function FinancialsPage() {
       notes: khataForm.notes,
       createdAt: khataForm.date ? new Date(khataForm.date) : serverTimestamp(),
     };
-    if (khataForm.id)
+
+    let docId = khataForm.id;
+    if (khataForm.id) {
       await updateDoc(doc(db, "khataEntries", khataForm.id), payload);
-    else
-      await addDoc(collection(db, "khataEntries"), {
+    } else {
+      const ref = await addDoc(collection(db, "khataEntries"), {
         userId: user.uid,
         ...payload,
       });
+      docId = ref.id;
+    }
+
     closeKhataModal();
     fetchKhataData(user.uid);
-    if (user)
+
+    if (user) {
       await logToolUsage({
         userId: user.uid,
-        tool: "My Financials - Khata Entry",
+        tool: "My Financials",
+        action: khataForm.id ? "edit_khata_entry" : "add_khata_entry",
+        resourceId: docId,
+        resourceName: khataForm.description || "Khata Entry",
+        metadata: { type: khataForm.type, amount: Number(khataForm.amount) },
       });
+    }
   };
+
   const deleteKhata = async (id) => {
     if (!window.confirm("Delete this entry?")) return;
+    const deletedEntry = khataEntries.find((k) => k.id === id);
     await deleteDoc(doc(db, "khataEntries", id));
     fetchKhataData(user.uid);
+
+    if (user) {
+      await logToolUsage({
+        userId: user.uid,
+        tool: "My Financials",
+        action: "delete_khata_entry",
+        resourceId: id,
+        resourceName: deletedEntry ? deletedEntry.description : "Khata Entry",
+      });
+    }
   };
+
   const editKhata = (e) => {
     setKhataForm({
       type: e.type,
@@ -467,7 +534,7 @@ export default function FinancialsPage() {
   const byMonthStock = {};
   transactions.forEach((t) => {
     const d = new Date(
-      t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt,
+      t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt
     );
     const k = d.toLocaleDateString("en-IN", {
       month: "short",
@@ -528,7 +595,7 @@ export default function FinancialsPage() {
   };
   const formChargesTotal = CHARGE_FIELDS[stockForm.action].reduce(
     (s, f) => s + Number(stockForm[f.key] || 0),
-    0,
+    0
   );
 
   if (loading) return <div className={styles.loader}>Loading portfolio…</div>;
@@ -544,7 +611,7 @@ export default function FinancialsPage() {
       <div className={styles.moduleSwitcher}>
         <button
           className={`${styles.moduleBtn} ${activeModule === "portfolio" ? styles.moduleBtnActive : ""}`}
-          onClick={() => setActiveModule("portfolio")}
+          onClick={() => handleModuleSwitch("portfolio")}
         >
           <span className={styles.moduleIcon}>📈</span>
           <div>
@@ -556,7 +623,7 @@ export default function FinancialsPage() {
         </button>
         <button
           className={`${styles.moduleBtn} ${activeModule === "khata" ? styles.moduleBtnActiveGreen : ""}`}
-          onClick={() => setActiveModule("khata")}
+          onClick={() => handleModuleSwitch("khata")}
         >
           <span className={styles.moduleIcon}>📒</span>
           <div>
@@ -638,7 +705,7 @@ export default function FinancialsPage() {
                             data: activeHoldings.map((h) => h.invested),
                             backgroundColor: CHART_COLORS.slice(
                               0,
-                              activeHoldings.length,
+                              activeHoldings.length
                             ),
                             borderWidth: 2,
                             borderColor: "#fff",
@@ -678,7 +745,7 @@ export default function FinancialsPage() {
                           backgroundColor: plHoldings.map((h) =>
                             h.realized >= 0
                               ? "rgba(15,157,110,0.75)"
-                              : "rgba(230,57,70,0.75)",
+                              : "rgba(230,57,70,0.75)"
                           ),
                           borderRadius: 6,
                         },
@@ -779,13 +846,13 @@ export default function FinancialsPage() {
                             .filter((t) => t.action === "BUY")
                             .reduce(
                               (s, t) => s + Number(t.qty) * Number(t.price),
-                              0,
+                              0
                             ),
                           transactions
                             .filter((t) => t.action === "SELL")
                             .reduce(
                               (s, t) => s + Number(t.qty) * Number(t.price),
-                              0,
+                              0
                             ),
                         ],
                         backgroundColor: [
@@ -857,6 +924,7 @@ export default function FinancialsPage() {
             </>
           )}
           <StockTable
+            user={user}
             transactions={transactions}
             holdings={holdings}
             editTrade={editStock}
@@ -937,7 +1005,7 @@ export default function FinancialsPage() {
                         labels: Object.keys(khataStats.byCat).map(
                           (k) =>
                             EXPENSE_CATEGORIES.find((c) => c.id === k)?.label ||
-                            k,
+                            k
                         ),
                         datasets: [
                           {
@@ -945,7 +1013,7 @@ export default function FinancialsPage() {
                             backgroundColor: Object.keys(khataStats.byCat).map(
                               (k) =>
                                 EXPENSE_CATEGORIES.find((c) => c.id === k)
-                                  ?.color || "#aaa",
+                                  ?.color || "#aaa"
                             ),
                             borderWidth: 2,
                             borderColor: "#fff",
@@ -987,7 +1055,7 @@ export default function FinancialsPage() {
                         {
                           label: "Expense",
                           data: Object.values(khataStats.byMonth).map(
-                            (m) => m.expense,
+                            (m) => m.expense
                           ),
                           borderColor: "#e63946",
                           backgroundColor: "rgba(230,57,70,0.08)",
@@ -998,7 +1066,7 @@ export default function FinancialsPage() {
                         {
                           label: "Given",
                           data: Object.values(khataStats.byMonth).map(
-                            (m) => m.given,
+                            (m) => m.given
                           ),
                           borderColor: "#f77f00",
                           backgroundColor: "rgba(247,127,0,0.06)",
@@ -1009,7 +1077,7 @@ export default function FinancialsPage() {
                         {
                           label: "Received",
                           data: Object.values(khataStats.byMonth).map(
-                            (m) => m.received,
+                            (m) => m.received
                           ),
                           borderColor: "#0f9d6e",
                           backgroundColor: "rgba(15,157,110,0.06)",
@@ -1119,6 +1187,7 @@ export default function FinancialsPage() {
             </>
           )}
           <KhataTable
+            user={user}
             entries={khataEntries}
             editEntry={editKhata}
             deleteEntry={deleteKhata}
@@ -1475,6 +1544,7 @@ export default function FinancialsPage() {
 }
 
 function StockTable({
+  user,
   transactions,
   holdings,
   editTrade,
@@ -1489,6 +1559,7 @@ function StockTable({
   const [dateTo, setDateTo] = useState("");
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
+
   const filtered = useMemo(() => {
     let list = [...transactions];
     if (tab !== "ALL") list = list.filter((t) => t.action === tab);
@@ -1497,7 +1568,7 @@ function StockTable({
       list = list.filter(
         (t) =>
           t.companyName?.toLowerCase().includes(q) ||
-          t.symbol?.toLowerCase().includes(q),
+          t.symbol?.toLowerCase().includes(q)
       );
     }
     if (dateFrom) {
@@ -1505,8 +1576,8 @@ function StockTable({
       list = list.filter(
         (t) =>
           new Date(
-            t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt,
-          ) >= f,
+            t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt
+          ) >= f
       );
     }
     if (dateTo) {
@@ -1515,8 +1586,8 @@ function StockTable({
       list = list.filter(
         (t) =>
           new Date(
-            t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt,
-          ) <= to,
+            t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt
+          ) <= to
       );
     }
     list.sort((a, b) => {
@@ -1543,6 +1614,7 @@ function StockTable({
     });
     return list;
   }, [transactions, tab, search, dateFrom, dateTo, sortKey, sortDir]);
+
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -1558,6 +1630,7 @@ function StockTable({
     ) : (
       <span className={styles.sortActive}>↓</span>
     );
+
   const exportCSV = () => {
     const headers = [
       "Action",
@@ -1583,7 +1656,7 @@ function StockTable({
         tv = Number(t.qty) * Number(t.price),
         net = t.action === "BUY" ? tv + ch : tv - ch,
         d = new Date(
-          t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt,
+          t.createdAt?.seconds ? t.createdAt.seconds * 1000 : t.createdAt
         );
       return [
         t.action,
@@ -1612,7 +1685,17 @@ function StockTable({
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = `trades_${Date.now()}.csv`;
     a.click();
+
+    if (user) {
+      logToolUsage({
+        userId: user.uid,
+        tool: "My Financials",
+        action: "export_stock_csv",
+        metadata: { recordCount: filtered.length },
+      });
+    }
   };
+
   return (
     <div className={styles.tableWrapper}>
       <div className={styles.tableTopBar}>
@@ -1923,7 +2006,7 @@ function StockTable({
   );
 }
 
-function KhataTable({ entries, editEntry, deleteEntry, formatDate }) {
+function KhataTable({ user, entries, editEntry, deleteEntry, formatDate }) {
   const [tab, setTab] = useState("ALL");
   const [search, setSearch] = useState("");
   const filtered = useMemo(() => {
@@ -1934,11 +2017,12 @@ function KhataTable({ entries, editEntry, deleteEntry, formatDate }) {
       list = list.filter(
         (e) =>
           e.description?.toLowerCase().includes(q) ||
-          e.contactName?.toLowerCase().includes(q),
+          e.contactName?.toLowerCase().includes(q)
       );
     }
     return list;
   }, [entries, tab, search]);
+
   const typeLabel = (type) => {
     if (type === "EXPENSE")
       return <span className={styles.badgeExpense}>💸 Expense</span>;
@@ -1946,6 +2030,7 @@ function KhataTable({ entries, editEntry, deleteEntry, formatDate }) {
       return <span className={styles.badgeGiven}>🔴 Given</span>;
     return <span className={styles.badgeReceived}>🟢 Received</span>;
   };
+
   const exportCSV = () => {
     const headers = [
       "Type",
@@ -1958,7 +2043,7 @@ function KhataTable({ entries, editEntry, deleteEntry, formatDate }) {
     ];
     const rows = filtered.map((e) => {
       const d = new Date(
-        e.createdAt?.seconds ? e.createdAt.seconds * 1000 : e.createdAt,
+        e.createdAt?.seconds ? e.createdAt.seconds * 1000 : e.createdAt
       );
       return [
         e.type,
@@ -1977,7 +2062,17 @@ function KhataTable({ entries, editEntry, deleteEntry, formatDate }) {
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = `khata_${Date.now()}.csv`;
     a.click();
+
+    if (user) {
+      logToolUsage({
+        userId: user.uid,
+        tool: "My Financials",
+        action: "export_khata_csv",
+        metadata: { recordCount: filtered.length },
+      });
+    }
   };
+
   return (
     <div className={styles.tableWrapper}>
       <div className={styles.tableTopBar}>
