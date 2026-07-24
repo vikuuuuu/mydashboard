@@ -35,6 +35,125 @@ const FILTERS = [
   { id: "warm", label: "Warm" },
 ];
 
+const MAX_UPLOAD_MB = 30;
+
+// ─── DPI / SIZE HELPERS (real metadata handling — this is the core bugfix) ───
+
+// Accurate byte length from a base64 data URL (previous code used a hardcoded
+// header-length offset of 22, which is wrong for every MIME type — jpeg's
+// "data:image/jpeg;base64," prefix alone is 24 chars, png's is 23 — so every
+// size estimate during compression was off, and the binary search in
+// smartCompress was chasing the wrong target).
+function dataUrlBytes(dataUrl) {
+  const comma = dataUrl.indexOf(",");
+  const base64 = dataUrl.slice(comma + 1);
+  let padding = 0;
+  if (base64.endsWith("==")) padding = 2;
+  else if (base64.endsWith("=")) padding = 1;
+  return Math.floor((base64.length * 3) / 4) - padding;
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToDataUrl(bytes, mime) {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
+// Canvas's toDataURL() never writes DPI/density metadata — that's the actual
+// root cause of "DPI does nothing". We patch the JFIF APP0 header in-place
+// (Chromium's JPEG encoder always emits a standard JFIF segment right after
+// the SOI marker) so the exported file reports the DPI the user asked for.
+function setJpegDPI(dataUrl, dpi) {
+  try {
+    const base64 = dataUrl.split(",")[1];
+    const bytes = base64ToBytes(base64);
+    if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return dataUrl; // not a JPEG
+    if (bytes[2] !== 0xff || bytes[3] !== 0xe0) return dataUrl; // no APP0/JFIF segment found
+    // APP0 marker starts at offset 2: FF E0 [len:2] "JFIF\0"(5) [ver:2] [units:1] [xden:2] [yden:2]
+    const unitsOffset = 2 + 4 + 5 + 2; // = 13
+    bytes[unitsOffset] = 1; // 1 = dots per inch
+    bytes[unitsOffset + 1] = (dpi >> 8) & 0xff;
+    bytes[unitsOffset + 2] = dpi & 0xff;
+    bytes[unitsOffset + 3] = (dpi >> 8) & 0xff;
+    bytes[unitsOffset + 4] = dpi & 0xff;
+    return bytesToDataUrl(bytes, "image/jpeg");
+  } catch {
+    return dataUrl;
+  }
+}
+
+let _crcTable = null;
+function crc32(bytes) {
+  if (!_crcTable) {
+    _crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      _crcTable[n] = c >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) crc = _crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+// Inserts a pHYs chunk (pixel density) right after IHDR, which must be the
+// first chunk in a PNG. Needs a real CRC32 over "pHYs" + data, or viewers
+// that validate chunk integrity will reject the file.
+function setPngDPI(dataUrl, dpi) {
+  try {
+    const base64 = dataUrl.split(",")[1];
+    const bytes = base64ToBytes(base64);
+    // PNG signature (8) + IHDR chunk: length(4) + "IHDR"(4) + data(13) + crc(4) = 25
+    const ihdrEnd = 8 + 4 + 4 + 13 + 4; // 33
+    const pxPerMeter = Math.round(dpi / 0.0254);
+
+    const chunkData = new Uint8Array(9); // 4 (x) + 4 (y) + 1 (unit)
+    const dv = new DataView(chunkData.buffer);
+    dv.setUint32(0, pxPerMeter);
+    dv.setUint32(4, pxPerMeter);
+    chunkData[8] = 1; // 1 = meters
+
+    const typeAndData = new Uint8Array(4 + 9);
+    typeAndData.set([0x70, 0x48, 0x59, 0x73], 0); // "pHYs"
+    typeAndData.set(chunkData, 4);
+    const crc = crc32(typeAndData);
+
+    const chunk = new Uint8Array(4 + typeAndData.length + 4);
+    const cv = new DataView(chunk.buffer);
+    cv.setUint32(0, 9); // data length
+    chunk.set(typeAndData, 4);
+    cv.setUint32(4 + typeAndData.length, crc);
+
+    const out = new Uint8Array(bytes.length + chunk.length);
+    out.set(bytes.subarray(0, ihdrEnd), 0);
+    out.set(chunk, ihdrEnd);
+    out.set(bytes.subarray(ihdrEnd), ihdrEnd + chunk.length);
+    return bytesToDataUrl(out, "image/png");
+  } catch {
+    return dataUrl;
+  }
+}
+
+// WebP DPI would require rebuilding the RIFF container with an XMP/EXIF
+// chunk — not worth the complexity here. We're explicit about that
+// limitation in the UI rather than silently pretending it's embedded.
+function stampDPI(dataUrl, mime, dpi) {
+  if (mime === "image/jpeg") return setJpegDPI(dataUrl, dpi);
+  if (mime === "image/png") return setPngDPI(dataUrl, dpi);
+  return dataUrl;
+}
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const S = {
   page: { minHeight: "100vh", background: "linear-gradient(160deg,#f8fbff 0%,#eef2ff 100%)", fontFamily: "'DM Sans',sans-serif", color: "#1a2147", display: "flex", flexDirection: "column" },
@@ -79,7 +198,7 @@ const S = {
   applyBtn: (dis) => ({ width: "100%", padding: 12, border: "none", borderRadius: 10, background: dis ? "#a8b4e8" : "#4361ee", color: "#fff", fontFamily: "'Syne',sans-serif", fontSize: 14, fontWeight: 700, cursor: dis ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.15s", marginTop: 12, boxShadow: dis ? "none" : "0 4px 14px rgba(67,97,238,0.28)" }),
   resultCard: { background: "rgba(15,157,110,0.06)", border: "1px solid rgba(15,157,110,0.22)", borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 12 },
   resultImgBg: { background: "#f4f7fe", borderRadius: 10, display: "flex", justifyContent: "center", padding: 10 },
-  resultMeta: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 },
+  resultMeta: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 },
   rMeta: { background: "#fff", border: "1px solid rgba(99,120,200,0.10)", borderRadius: 8, padding: "6px 8px", textAlign: "center" },
   rMetaV: { fontSize: 13, fontWeight: 600, color: "#0f9d6e" },
   rMetaL: { fontSize: 10, color: "#9ca8d0", marginTop: 1 },
@@ -93,6 +212,7 @@ const S = {
   fmtWrap: { display: "flex", flexWrap: "wrap", gap: 5 },
   spinner: { display: "inline-block", width: 14, height: 14, border: "2px solid rgba(255,255,255,0.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" },
   changeLink: { background: "none", border: "none", color: "#4361ee", fontSize: 11, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" },
+  resetLink: { background: "none", border: "none", color: "#9ca8d0", fontSize: 11, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", textDecoration: "underline" },
   // Image Studio styles
   tabBar: { display: "flex", borderBottom: "1px solid rgba(99,120,200,0.13)", background: "#f4f7fe", overflowX: "auto", flexShrink: 0, scrollbarWidth: "thin" },
   tabBtn: (active) => ({ display: "flex", alignItems: "center", gap: 5, padding: "10px 14px", border: "none", borderBottom: `2.5px solid ${active ? "#4361ee" : "transparent"}`, background: active ? "#ffffff" : "none", color: active ? "#4361ee" : "#6b7ab5", fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }),
@@ -139,6 +259,22 @@ const STUDIO_TABS = [
   { id: "denoise", icon: "✨", label: "Denoise" },
 ];
 
+// CSS filter map used for the studio Filter tab (both the live preview and
+// the swatch thumbnails), kept as one source of truth instead of duplicating
+// the map inline in JSX.
+const FILTER_CSS = {
+  none: "none",
+  grayscale: (v) => `grayscale(${v}%)`,
+  sepia: (v) => `sepia(${v}%)`,
+  invert: (v) => `invert(${v}%)`,
+  brightness: (v) => `brightness(${v + 50}%)`,
+  contrast: (v) => `contrast(${v + 50}%)`,
+  saturate: (v) => `saturate(${v * 3}%)`,
+  vintage: () => "sepia(60%) contrast(110%)",
+  cool: () => "hue-rotate(200deg) saturate(120%)",
+  warm: () => "sepia(30%) saturate(130%)",
+};
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function GovtFormPhotoTool() {
   const router = useRouter();
@@ -163,6 +299,7 @@ export default function GovtFormPhotoTool() {
   const [isDrag, setIsDrag] = useState(false);
   const [preview, setPreview] = useState(null);
   const [history, setHistory] = useState([]);
+  const [uploadErr, setUploadErr] = useState("");
 
   // Convert options
   const [resizeMode, setResizeMode] = useState("contain");
@@ -184,6 +321,7 @@ export default function GovtFormPhotoTool() {
   const [pipelineMode, setPipelineMode] = useState(false);
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [studioResult, setStudioResult] = useState(null);
+  const [studioErr, setStudioErr] = useState("");
 
   // Studio controls
   const [brightness, setBrightness] = useState(100);
@@ -240,6 +378,13 @@ export default function GovtFormPhotoTool() {
     return null;
   };
 
+  const resetRequirements = () => {
+    setReqW("480"); setReqH("672"); setReqMin("50"); setReqMax("300");
+    setReqUnit("KB"); setReqDPI("96"); setReqColor("rgb");
+    setReqFmts(["jpg", "jpeg"]); setFormName(""); setActivePreset(0);
+    setFormErr("");
+  };
+
   const getChecks = () => {
     if (!imgData) return null;
     const [minKB, maxKB] = getMinMaxKB();
@@ -254,9 +399,11 @@ export default function GovtFormPhotoTool() {
 
   const checks = getChecks();
 
-  const getImg = (url) => new Promise((res) => {
+  const getImg = (url) => new Promise((res, rej) => {
     const img = new window.Image(); img.crossOrigin = "anonymous";
-    img.onload = () => res(img); img.src = url;
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error("Could not load image data — it may be corrupted."));
+    img.src = url;
   });
 
   const pushHistory = (dataUrl, label) => {
@@ -265,18 +412,23 @@ export default function GovtFormPhotoTool() {
 
   // ── Load file ──
   const loadFile = (file) => {
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) return;
+    setUploadErr("");
+    if (!file.type.startsWith("image/")) { setUploadErr("Please choose an image file (JPG, PNG, WEBP, etc.)."); return; }
+    if (file.size / (1024 * 1024) > MAX_UPLOAD_MB) { setUploadErr(`File is too large — please keep uploads under ${MAX_UPLOAD_MB}MB.`); return; }
     const err = mode === "convert" ? validateReqs() : null;
     if (err) { setFormErr("Fill in requirements first: " + err); return; }
     setFormErr("");
     const reader = new FileReader();
+    reader.onerror = () => setUploadErr("Couldn't read that file — please try again.");
     reader.onload = (e) => {
       const img = new window.Image();
+      img.onerror = () => setUploadErr("That file doesn't look like a valid image.");
       img.onload = () => {
         setImgData({ src: e.target.result, w: img.width, h: img.height, kb: file.size / 1024, type: file.type, name: file.name });
         setPreview(e.target.result);
         setCropW(String(img.width)); setCropH(String(img.height));
-        setResult(null); setStudioResult(null); setHistory([]); setPipeline([]);
+        setResult(null); setStudioResult(null); setHistory([]); setPipeline([]); setStudioErr("");
       };
       img.src = e.target.result;
     };
@@ -284,6 +436,9 @@ export default function GovtFormPhotoTool() {
   };
 
   const handleDrop = (e) => { e.preventDefault(); setIsDrag(false); loadFile(e.dataTransfer.files?.[0]); };
+
+  const openFilePicker = () => fileInputRef.current?.click();
+  const dropZoneKeyHandler = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFilePicker(); } };
 
   const applyPreset = (i) => {
     const p = PRESETS[i];
@@ -324,50 +479,76 @@ export default function GovtFormPhotoTool() {
     return c;
   };
 
+  // Fixed: accurate byte sizing (was reading 22 bytes off, which corrupted
+  // the binary search target), and PNG is now handled honestly — the
+  // `quality` argument to toDataURL is simply ignored for PNG by every
+  // browser, so looping 16 times on it was wasted work that always produced
+  // the same file. We export once for PNG and say so in the result.
   const smartCompress = (canvas) => {
     const [minKB, maxKB] = getMinMaxKB();
     const minB = minKB * 1024, maxB = maxKB * 1024;
     const midB = minB + (maxB - minB) * compPct;
-    let lo = 0.05, hi = 0.99, best = null, iters = 0;
-    while (iters < 16) {
+
+    if (outFmt === "image/png") {
+      const data = canvas.toDataURL(outFmt);
+      return { data, bytes: dataUrlBytes(data), qualityAdjustable: false };
+    }
+
+    let lo = 0.02, hi = 0.99, best = null, bestDiff = Infinity;
+    for (let i = 0; i < 18; i++) {
       const q = (lo + hi) / 2;
       const data = canvas.toDataURL(outFmt, q);
-      const bytes = Math.round((data.length - 22) / 4 * 3);
+      const bytes = dataUrlBytes(data);
       if (bytes >= minB && bytes <= maxB) {
-        if (!best || Math.abs(bytes - midB) < Math.abs(Math.round((best.length - 22) / 4 * 3) - midB)) best = data;
-        if (bytes > midB) hi = q; else lo = q;
-      } else if (bytes > maxB) { hi = q; } else { lo = q; }
-      iters++;
+        const diff = Math.abs(bytes - midB);
+        if (diff < bestDiff) { best = data; bestDiff = diff; }
+      }
+      if (bytes > midB) hi = q; else lo = q;
     }
     if (!best) best = canvas.toDataURL(outFmt, (lo + hi) / 2);
-    return { data: best, bytes: Math.round((best.length - 22) / 4 * 3) };
+    return { data: best, bytes: dataUrlBytes(best), qualityAdjustable: true };
   };
 
   const handleProcess = async () => {
     const err = validateReqs();
     if (err) { setProcErr(err); return; }
     setProcErr(""); setProcessing(true); setProgress(0);
-    await new Promise(r => setTimeout(r, 20));
-    setProgress(15); setProgLbl("Loading image…");
-    await new Promise(r => setTimeout(r, 40));
-    const img = new window.Image();
-    img.onload = async () => {
+    try {
+      await new Promise(r => setTimeout(r, 20));
+      setProgress(15); setProgLbl("Loading image…");
+      await new Promise(r => setTimeout(r, 40));
+      const img = await getImg(preview || imgData.src);
       setProgress(35); setProgLbl(`Resizing to ${reqW}×${reqH}…`);
       await new Promise(r => setTimeout(r, 40));
       const canvas = buildCanvas(img);
       setProgress(60); setProgLbl("Compressing…");
       await new Promise(r => setTimeout(r, 40));
-      const { data, bytes } = smartCompress(canvas);
-      const kb = bytes / 1024;
+      const { data: rawData, qualityAdjustable } = smartCompress(canvas);
+
+      // Actually stamp the requested DPI into the file's own metadata
+      // (JFIF header for JPEG, pHYs chunk for PNG) instead of just holding
+      // it in component state and hoping.
+      const dpiVal = Math.max(1, parseInt(reqDPI) || 96);
+      const dpiSupported = outFmt === "image/jpeg" || outFmt === "image/png";
+      const finalData = dpiSupported ? stampDPI(rawData, outFmt, dpiVal) : rawData;
+
       setProgress(90); setProgLbl("Verifying…");
       await new Promise(r => setTimeout(r, 30));
+      const bytes = dataUrlBytes(finalData);
+      const kb = bytes / 1024;
       const ext = outFmt === "image/jpeg" ? "jpg" : outFmt === "image/png" ? "png" : "webp";
       const [minKB, maxKB] = getMinMaxKB();
-      setResult({ data, kb, ext, w: parseInt(reqW), h: parseInt(reqH), inRange: kb >= minKB && kb <= maxKB, minKB, maxKB });
+      setResult({
+        data: finalData, kb, ext, w: parseInt(reqW), h: parseInt(reqH),
+        inRange: kb >= minKB && kb <= maxKB, minKB, maxKB,
+        dpi: dpiVal, dpiEmbedded: dpiSupported, qualityAdjustable,
+      });
       setProgress(100); setProgLbl("Done!");
       setTimeout(() => { setProcessing(false); setProgress(0); }, 700);
-    };
-    img.src = preview || imgData.src;
+    } catch (e) {
+      setProcErr(e?.message || "Something went wrong while processing that image. Please try a different file.");
+      setProcessing(false); setProgress(0);
+    }
   };
 
   const handleDownload = () => {
@@ -421,16 +602,20 @@ export default function GovtFormPhotoTool() {
         for (let i = 0; i < d.data.length; i += 4) { d.data[i] = Math.min(255, d.data[i] + 30); d.data[i + 2] = Math.max(0, d.data[i + 2] - 20); }
         ctx.putImageData(d, 0, 0);
       } else {
-        const map = { grayscale: `grayscale(${v}%)`, sepia: `sepia(${v}%)`, invert: `invert(${v}%)`, brightness: `brightness(${v + 50}%)`, contrast: `contrast(${v + 50}%)`, saturate: `saturate(${v * 3}%)`, none: "none" };
-        ctx.filter = map[activeFilter] || "none"; ctx.drawImage(img, 0, 0);
+        const fn = FILTER_CSS[activeFilter];
+        ctx.filter = activeFilter === "none" ? "none" : (fn ? fn(v) : "none");
+        ctx.drawImage(img, 0, 0);
       }
       return c.toDataURL("image/png");
     },
     async crop(src) {
       const img = await getImg(src);
+      const cw = Number(cropW) || img.width, ch = Number(cropH) || img.height;
+      const cx = Math.min(Number(cropX) || 0, Math.max(0, img.width - 1));
+      const cy = Math.min(Number(cropY) || 0, Math.max(0, img.height - 1));
       const c = document.createElement("canvas");
-      c.width = Number(cropW); c.height = Number(cropH);
-      c.getContext("2d").drawImage(img, Number(cropX), Number(cropY), Number(cropW), Number(cropH), 0, 0, Number(cropW), Number(cropH));
+      c.width = Math.min(cw, img.width - cx); c.height = Math.min(ch, img.height - cy);
+      c.getContext("2d").drawImage(img, cx, cy, c.width, c.height, 0, 0, c.width, c.height);
       return c.toDataURL("image/png");
     },
     async rotate(src) {
@@ -548,13 +733,15 @@ export default function GovtFormPhotoTool() {
 
   const applyStudioTab = async () => {
     if (!preview) return;
-    setProcessing(true);
+    setProcessing(true); setStudioErr("");
     try {
       const fn = studioProcessors[studioTab];
       if (!fn) return;
       const out = await fn(preview);
       pushHistory(preview, studioTab);
       setPreview(out); setStudioResult(out);
+    } catch (e) {
+      setStudioErr(e?.message || "Couldn't apply that edit — please try again.");
     } finally { setProcessing(false); }
   };
 
@@ -562,7 +749,7 @@ export default function GovtFormPhotoTool() {
 
   const runPipeline = async () => {
     if (!imgData || pipeline.length === 0) return;
-    setPipelineRunning(true);
+    setPipelineRunning(true); setStudioErr("");
     let src = preview;
     try {
       for (const step of pipeline) {
@@ -571,6 +758,8 @@ export default function GovtFormPhotoTool() {
       }
       pushHistory(preview, "pipeline");
       setPreview(src); setStudioResult(src);
+    } catch (e) {
+      setStudioErr(e?.message || "Pipeline failed partway through — try removing the last step.");
     } finally { setPipelineRunning(false); }
   };
 
@@ -583,6 +772,21 @@ export default function GovtFormPhotoTool() {
   const downloadStudio = () => {
     if (!studioResult) return;
     const a = document.createElement("a"); a.href = studioResult; a.download = `edited-photo-${Date.now()}.png`; a.click();
+  };
+
+  // Live CSS-only preview for Adjust/Filter tabs, so sliders show their
+  // effect immediately instead of the user being blind until they click
+  // Apply. This never touches the underlying pixel data — Apply still runs
+  // the real canvas pipeline that gets committed to history/downloads.
+  const getLivePreviewCSS = () => {
+    if (studioTab === "adjust") {
+      return `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
+    }
+    if (studioTab === "filter" && activeFilter !== "none") {
+      const fn = FILTER_CSS[activeFilter];
+      return fn ? fn(filterVal) : "none";
+    }
+    return "none";
   };
 
   // ── SliderField helper ──
@@ -609,6 +813,7 @@ export default function GovtFormPhotoTool() {
         .dl-btn:hover { opacity: 0.88; }
         .apply-btn:not([disabled]):hover { opacity: 0.9; transform: translateY(-1px); }
         .add-pipeline-btn:hover { background: rgba(67,97,238,0.08) !important; }
+        .drop-zone:focus-visible { outline: 2px solid #4361ee; outline-offset: 2px; }
         @media (max-width: 560px) {
           .g2 { grid-template-columns: 1fr !important; }
           .g3 { grid-template-columns: 1fr 1fr !important; }
@@ -648,7 +853,7 @@ export default function GovtFormPhotoTool() {
 
         {imgData && (
           <button style={{ marginLeft: "auto", ...S.alertErr, cursor: "pointer", padding: "4px 10px", borderRadius: 999, fontSize: 11, border: "1px solid rgba(230,57,70,0.2)" }}
-            onClick={() => { setImgData(null); setPreview(null); setResult(null); setStudioResult(null); setHistory([]); setPipeline([]); fileInputRef.current.value = ""; }}>
+            onClick={() => { setImgData(null); setPreview(null); setResult(null); setStudioResult(null); setHistory([]); setPipeline([]); setUploadErr(""); setStudioErr(""); fileInputRef.current.value = ""; }}>
             ✕ Clear
           </button>
         )}
@@ -661,7 +866,10 @@ export default function GovtFormPhotoTool() {
 
           {/* STEP 1 */}
           <div style={S.card}>
-            <div style={S.cardHdr}><span>📋</span><span style={S.cardHdrTitle}>Step 1 — Set Photo Requirements</span></div>
+            <div style={S.cardHdr}>
+              <span>📋</span><span style={S.cardHdrTitle}>Step 1 — Set Photo Requirements</span>
+              <button style={{ ...S.resetLink, marginLeft: "auto" }} onClick={resetRequirements}>Reset to default</button>
+            </div>
             <div style={S.cardBody}>
 
               <div style={S.sectionMini}>Quick presets</div>
@@ -686,9 +894,16 @@ export default function GovtFormPhotoTool() {
               </div>
 
               <div className="g2" style={{ ...S.g2, marginBottom: 12 }}>
-                <div style={S.field}><span style={S.label}>DPI <span style={S.opt}>(optional)</span></span><input style={S.input} type="number" value={reqDPI} min={72} max={600} placeholder="96" onChange={e => setReqDPI(e.target.value)} /></div>
+                <div style={S.field}>
+                  <span style={S.label}>DPI <span style={S.opt}>(embedded in file metadata)</span></span>
+                  <input style={S.input} type="number" value={reqDPI} min={72} max={1200} placeholder="96" onChange={e => setReqDPI(e.target.value)} />
+                </div>
                 <div style={S.field}><span style={S.label}>Color mode</span><select style={S.select} value={reqColor} onChange={e => setReqColor(e.target.value)}><option value="rgb">RGB (Color)</option><option value="gray">Grayscale</option></select></div>
               </div>
+
+              {(outFmt === "image/webp") && (
+                <div style={{ ...S.alertWarn, marginBottom: 12 }}>⚠ WEBP output can't carry DPI metadata in the browser — switch to JPG or PNG if the form checks DPI.</div>
+              )}
 
               <div style={{ marginBottom: 12 }}>
                 <span style={S.label}>Allowed formats <span style={S.req}>*</span></span>
@@ -716,17 +931,19 @@ export default function GovtFormPhotoTool() {
             <div style={S.cardHdr}><span>📤</span><span style={S.cardHdrTitle}>Step 2 — Upload Your Photo</span></div>
             <div style={S.cardBody}>
               {!imgData ? (
-                <div style={S.dropZone(isDrag)} onDragOver={e => { e.preventDefault(); setIsDrag(true); }} onDragLeave={() => setIsDrag(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
+                <div className="drop-zone" role="button" tabIndex={0} aria-label="Upload photo" style={S.dropZone(isDrag)}
+                  onDragOver={e => { e.preventDefault(); setIsDrag(true); }} onDragLeave={() => setIsDrag(false)} onDrop={handleDrop}
+                  onClick={openFilePicker} onKeyDown={dropZoneKeyHandler}>
                   <span style={{ fontSize: 32 }}>🖼️</span>
                   <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 14, fontWeight: 700, color: "#1a2147", margin: 0 }}>Drop photo here or click to browse</p>
-                  <small style={{ fontSize: 11, color: "#9ca8d0" }}>{reqFmts.length > 0 ? reqFmts.map(f => f.toUpperCase()).join(" · ") : "JPG · PNG · WEBP · BMP · GIF"}</small>
+                  <small style={{ fontSize: 11, color: "#9ca8d0" }}>{reqFmts.length > 0 ? reqFmts.map(f => f.toUpperCase()).join(" · ") : "JPG · PNG · WEBP · BMP · GIF"} · up to {MAX_UPLOAD_MB}MB</small>
                 </div>
               ) : (
                 <>
                   <div style={S.previewBox}>
                     <img src={preview} alt="preview" style={{ maxHeight: 180, objectFit: "contain", borderRadius: 8 }} />
                     <span style={{ fontSize: 11, color: "#9ca8d0", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{imgData.name}</span>
-                    <button style={S.changeLink} onClick={() => { setImgData(null); setPreview(null); setResult(null); fileInputRef.current.value = ""; }}>Change photo</button>
+                    <button style={S.changeLink} onClick={() => { setImgData(null); setPreview(null); setResult(null); setUploadErr(""); fileInputRef.current.value = ""; }}>Change photo</button>
                   </div>
                   <div style={S.statGrid}>
                     <div style={S.stat}><div style={S.statV}>{imgData.w}px</div><div style={S.statL}>Width</div></div>
@@ -750,6 +967,7 @@ export default function GovtFormPhotoTool() {
                   )}
                 </>
               )}
+              {uploadErr && <div style={{ ...S.alertErr, marginTop: 10 }}>⚠ {uploadErr}</div>}
               <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={e => loadFile(e.target.files?.[0])} />
             </div>
           </div>
@@ -787,13 +1005,14 @@ export default function GovtFormPhotoTool() {
               </div>
 
               <div style={{ marginBottom: 4 }}>
-                <span style={S.label}>Compression target</span>
+                <span style={S.label}>Compression target {outFmt === "image/png" && <span style={S.opt}>(PNG size isn't adjustable — see note below)</span>}</span>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {[["Lightest", 0.2], ["Balanced", 0.5], ["High quality", 0.75], ["Max quality", 0.9]].map(([lbl, pct]) => (
-                    <button key={lbl} className="preset-btn" style={S.presetBtn(compPct === pct)} onClick={() => setCompPct(pct)}>{lbl}</button>
+                    <button key={lbl} className="preset-btn" style={S.presetBtn(compPct === pct)} disabled={outFmt === "image/png"} onClick={() => setCompPct(pct)}>{lbl}</button>
                   ))}
                 </div>
                 {reqMin && reqMax && <small style={{ fontSize: 10, color: "#9ca8d0", marginTop: 4, display: "block" }}>Target within {reqMin}–{reqMax} {reqUnit}</small>}
+                {outFmt === "image/png" && <div style={{ ...S.alertInfo, marginTop: 8 }}>ℹ PNG is lossless — browsers ignore a "quality" setting for it, so file size can't be tuned this way. Switch to JPG if you need a tight size window.</div>}
               </div>
 
               {processing && (
@@ -824,7 +1043,10 @@ export default function GovtFormPhotoTool() {
                 <div style={S.rMeta}><div style={S.rMetaV}>{result.w} × {result.h}</div><div style={S.rMetaL}>Dimensions</div></div>
                 <div style={S.rMeta}><div style={S.rMetaV}>{result.kb.toFixed(1)} KB</div><div style={S.rMetaL}>File size</div></div>
                 <div style={S.rMeta}><div style={S.rMetaV}>{result.ext.toUpperCase()}</div><div style={S.rMetaL}>Format</div></div>
+                <div style={S.rMeta}><div style={S.rMetaV}>{result.dpi} DPI</div><div style={S.rMetaL}>{result.dpiEmbedded ? "Embedded ✓" : "Not embeddable"}</div></div>
               </div>
+              {!result.qualityAdjustable && <div style={S.alertInfo}>ℹ Exported as lossless PNG — size wasn't tunable via compression.</div>}
+              {!result.dpiEmbedded && <div style={S.alertWarn}>⚠ {result.ext.toUpperCase()} can't store DPI metadata in-browser — the pixel dimensions are still exact, but DPI wasn't written to the file.</div>}
               {!result.inRange && <div style={S.alertWarn}>⚠ Output ({result.kb.toFixed(1)} KB) slightly outside {result.minKB}–{result.maxKB} KB. Try PNG or adjust compression.</div>}
               <button className="dl-btn" style={S.dlBtn} onClick={handleDownload}>↓ Download ({result.ext.toUpperCase()})</button>
             </div>
@@ -839,11 +1061,14 @@ export default function GovtFormPhotoTool() {
             {/* Upload if no image */}
             {!imgData && (
               <div style={{ padding: 16 }}>
-                <div style={S.dropZone(isDrag)} onDragOver={e => { e.preventDefault(); setIsDrag(true); }} onDragLeave={() => setIsDrag(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
+                <div className="drop-zone" role="button" tabIndex={0} aria-label="Upload image to edit" style={S.dropZone(isDrag)}
+                  onDragOver={e => { e.preventDefault(); setIsDrag(true); }} onDragLeave={() => setIsDrag(false)} onDrop={handleDrop}
+                  onClick={openFilePicker} onKeyDown={dropZoneKeyHandler}>
                   <span style={{ fontSize: 32 }}>🖼️</span>
                   <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 14, fontWeight: 700, color: "#1a2147", margin: 0 }}>Drop image to edit</p>
-                  <small style={{ fontSize: 11, color: "#9ca8d0" }}>JPG · PNG · WEBP · BMP · GIF</small>
+                  <small style={{ fontSize: 11, color: "#9ca8d0" }}>JPG · PNG · WEBP · BMP · GIF · up to {MAX_UPLOAD_MB}MB</small>
                 </div>
+                {uploadErr && <div style={{ ...S.alertErr, marginTop: 10 }}>⚠ {uploadErr}</div>}
                 <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={e => loadFile(e.target.files?.[0])} />
               </div>
             )}
@@ -853,7 +1078,7 @@ export default function GovtFormPhotoTool() {
                 {/* Preview */}
                 <div style={{ padding: "12px 16px 0" }}>
                   <div style={{ ...S.previewBox, padding: 8 }}>
-                    <img src={preview} alt="preview" style={{ maxHeight: 200, objectFit: "contain", borderRadius: 8, width: "100%" }} />
+                    <img src={preview} alt="preview" style={{ maxHeight: 200, objectFit: "contain", borderRadius: 8, width: "100%", filter: getLivePreviewCSS(), transition: "filter 0.15s" }} />
                   </div>
                   <div style={S.statGrid}>
                     <div style={S.stat}><div style={S.statV}>{imgData.w}px</div><div style={S.statL}>Width</div></div>
@@ -875,6 +1100,7 @@ export default function GovtFormPhotoTool() {
                 <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
 
                   {studioTab === "adjust" && <>
+                    <div style={S.alertInfo}>ℹ Preview updates live — click Apply to bake it into the image.</div>
                     <SliderField label="Brightness" val={brightness} min={10} max={300} onChange={setBrightness} unit="%" left="Dark" right="Bright" />
                     <SliderField label="Contrast" val={contrast} min={10} max={300} onChange={setContrast} unit="%" left="Flat" right="Punchy" />
                     <SliderField label="Saturation" val={saturation} min={0} max={300} onChange={setSaturation} unit="%" left="B&W" right="Vivid" />
@@ -886,7 +1112,7 @@ export default function GovtFormPhotoTool() {
                     <div className="filter-grid" style={S.filterGrid}>
                       {FILTERS.map(f => (
                         <button key={f.id} style={S.filterChip(activeFilter === f.id)} onClick={() => setActiveFilter(f.id)}>
-                          {preview && <img src={preview} style={{ ...S.filterThumb, filter: f.id === "none" ? "none" : f.id === "vintage" ? "sepia(60%) contrast(110%)" : f.id === "cool" ? "hue-rotate(200deg) saturate(120%)" : f.id === "warm" ? "sepia(30%) saturate(130%)" : `${f.id}(80%)` }} alt={f.label} />}
+                          {preview && <img src={preview} style={{ ...S.filterThumb, filter: f.id === "none" ? "none" : (FILTER_CSS[f.id] ? FILTER_CSS[f.id](80) : "none") }} alt={f.label} />}
                           <span>{f.label}</span>
                         </button>
                       ))}
@@ -901,7 +1127,7 @@ export default function GovtFormPhotoTool() {
                       <div style={S.field}><span style={S.label}>Width</span><input style={S.input} type="number" value={cropW} onChange={e => setCropW(e.target.value)} /></div>
                       <div style={S.field}><span style={S.label}>Height</span><input style={S.input} type="number" value={cropH} onChange={e => setCropH(e.target.value)} /></div>
                     </div>
-                    <div style={S.alertInfo}>ℹ Image is {imgData.w}×{imgData.h}px</div>
+                    <div style={S.alertInfo}>ℹ Image is {imgData.w}×{imgData.h}px — out-of-bounds crops are automatically clamped.</div>
                   </>}
 
                   {studioTab === "rotate" && <>
@@ -1017,6 +1243,8 @@ export default function GovtFormPhotoTool() {
                       {[[2, "Light"], [4, "Medium"], [7, "Heavy"], [10, "Max"]].map(([v, l]) => <button key={v} style={S.chip(denoiseLevel === v)} onClick={() => setDenoiseLevel(v)}>{l}</button>)}
                     </div>
                   </>}
+
+                  {studioErr && <div style={S.alertErr}>⚠ {studioErr}</div>}
 
                   {/* Pipeline box */}
                   {pipelineMode && (
