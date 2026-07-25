@@ -144,6 +144,17 @@ const formatUnlockDate = (ts) => {
   });
 };
 
+// ─── AUTO-SAVE / CRASH-RECOVERY CONSTANTS ──────────────────────────────────
+// Study sessions live only in memory while running. If the tab is closed, the
+// browser crashes, or the user logs out mid-session, we'd otherwise lose the
+// whole session. We snapshot progress to localStorage on an interval and on
+// unload/visibility-change events (both are synchronous, unlike Firestore
+// writes, which are NOT guaranteed to complete during unload). On the next
+// successful login, any leftover snapshot is committed to Firestore and
+// cleared automatically.
+const SESSION_RECOVERY_KEY = "studyhub_pending_session";
+const MIN_RECOVERABLE_SECONDS = 15; // ignore accidental/near-instant starts
+
 export default function UltraStudyHub() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -308,9 +319,109 @@ export default function UltraStudyHub() {
     return () => clearInterval(i);
   }, []);
 
+  // ─── SESSION AUTO-SAVE / CRASH RECOVERY ────────────────────────────────────
+  // Live snapshot ref — updated whenever session-relevant state changes, so
+  // unload/visibility handlers (which fire outside React's render cycle) always
+  // read fresh data without needing to be re-bound on every keystroke.
+  const activeSessionSnapshotRef = useRef(null);
+  useEffect(() => {
+    activeSessionSnapshotRef.current = isStudyMode ? {
+      uid: user?.uid || null,
+      subjectName: activeSubject,
+      targetTime: parseInt(targetMinutes) || 1,
+      mood: studyMood,
+      notes: sessionNote,
+      tags: sessionTags,
+      startedAt: studyStartTimestamp.current,
+    } : null;
+  }, [isStudyMode, activeSubject, targetMinutes, studyMood, sessionNote, sessionTags, user]);
+
+  const persistSessionSnapshot = useCallback(() => {
+    const snap = activeSessionSnapshotRef.current;
+    if (!snap || !snap.startedAt || !snap.uid) return;
+    const elapsedSecs = Math.floor((Date.now() - snap.startedAt) / 1000);
+    if (elapsedSecs < MIN_RECOVERABLE_SECONDS) return;
+    try {
+      localStorage.setItem(SESSION_RECOVERY_KEY, JSON.stringify({ ...snap, elapsedSecs, savedAt: Date.now() }));
+    } catch (e) { /* storage unavailable/full — nothing more we can do client-side */ }
+  }, []);
+
+  const clearSessionSnapshot = useCallback(() => {
+    try { localStorage.removeItem(SESSION_RECOVERY_KEY); } catch (e) { /* ignore */ }
+  }, []);
+
+  // Snapshot on an interval while actively studying — covers hard crashes/OS
+  // kills that never fire any DOM event at all.
+  useEffect(() => {
+    if (!isStudyMode) return;
+    persistSessionSnapshot();
+    const i = setInterval(persistSessionSnapshot, 10000);
+    return () => clearInterval(i);
+  }, [isStudyMode, persistSessionSnapshot]);
+
+  // Tab close / refresh / navigation-away / tab-hidden — all synchronous paths.
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (!isStudyMode) return;
+      persistSessionSnapshot();
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const handleVisChange = () => {
+      if (document.visibilityState === "hidden" && isStudyMode) persistSessionSnapshot();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", handleVisChange);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisChange);
+    };
+  }, [isStudyMode, persistSessionSnapshot]);
+
+  // On login, recover + commit any snapshot left behind by a session that never
+  // got the chance to save normally (crash, force-close, logout mid-session).
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const raw = localStorage.getItem(SESSION_RECOVERY_KEY);
+        if (!raw) return;
+        const pending = JSON.parse(raw);
+        if (!pending?.uid || pending.uid !== user.uid || !pending.elapsedSecs || pending.elapsedSecs < MIN_RECOVERABLE_SECONDS) {
+          clearSessionSnapshot();
+          return;
+        }
+        const actualMins = Math.round(pending.elapsedSecs / 60);
+        const accuracy = Math.min(Math.round((actualMins / (pending.targetTime || 1)) * 100), 100);
+        await addDoc(collection(db, "study_sessions"), {
+          userId: user.uid,
+          subjectName: pending.subjectName || "Unknown",
+          targetTime: pending.targetTime || 1,
+          actualTime: actualMins,
+          accuracyPercentage: accuracy,
+          mood: pending.mood || "",
+          notes: (pending.notes ? pending.notes + " " : "") + "(Auto-saved — session ended unexpectedly)",
+          tags: pending.tags || "",
+          autoSaved: true,
+          createdAt: serverTimestamp(),
+        });
+        await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "auto_save_recovered_session", resourceName: pending.subjectName, metadata: { actualMins } });
+        clearSessionSnapshot();
+        showToast(`💾 Recovered your last session: ${pending.subjectName} (${actualMins} min) auto-saved!`, "info");
+      } catch (e) {
+        console.error("Session recovery failed", e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
-      if (!u) { router.replace("/login"); return; }
+      if (!u) {
+        persistSessionSnapshot(); // best-effort save before navigating away on logout
+        router.replace("/login");
+        return;
+      }
       setUser(u);
       setDarkMode(localStorage.getItem("studyDarkMode") === "true");
       loadCustomSubjects(u.uid);
@@ -685,6 +796,7 @@ export default function UltraStudyHub() {
         mood: studyMood, notes: sessionNote, tags: sessionTags, createdAt: serverTimestamp(),
       });
       await logToolUsage({ userId: user.uid, tool: "Study Hub", action: "stop_study_session", resourceName: activeSubject, metadata: { actualMins, accuracy, mood: studyMood } });
+      clearSessionSnapshot(); // saved cleanly — discard any pending crash-recovery snapshot
       showToast(`🎉 Session saved! ${actualMins} min • Accuracy: ${accuracy}%`);
     } catch (e) { showToast("Error saving session", "error"); }
     studyStartTimestamp.current = null;
@@ -1349,6 +1461,8 @@ export default function UltraStudyHub() {
   const readinessLabel = { "done": "✅ Syllabus complete", "on-track": "🟢 On track", "manageable": "🟡 Manageable pace", "at-risk": "🔴 At risk" };
   // Maps a readiness status to the CSS class-name suffix used by the .readiness* / .examReadinessPill* variants below.
   const READINESS_KEY = { "done": "Done", "on-track": "OnTrack", "manageable": "Manageable", "at-risk": "AtRisk" };
+  // Maps a readiness/priority-style status to the semantic badge tone class (badgeSuccess/Warning/Danger/Neutral).
+  const TONE_KEY = { "done": "Success", "on-track": "Success", "manageable": "Warning", "at-risk": "Danger" };
 
   // ─── YEAR PROGRESS ────────────────────────────────────────────────────────
   const currentYear = currentTime.getFullYear();
@@ -1369,7 +1483,7 @@ export default function UltraStudyHub() {
               📚 {activeSubject}
             </div>
             <div className={styles.studyFsMoodBadge}>{studyMood}</div>
-            <div className={styles.studyFsAccurateBadge} title="Timer is background-tab accurate">⚡ Accurate Timer</div>
+            <div className={styles.studyFsAccurateBadge} title="Timer is background-tab accurate, and auto-saves every 10s">⚡ Accurate + Auto-Saved</div>
             <button className={styles.studyFsEsc} onClick={() => setStudyFullScreen(false)} title="Minimize (Esc)">⤡ Minimize</button>
           </div>
 
@@ -1557,35 +1671,41 @@ export default function UltraStudyHub() {
       </div>
 
       {/* ── YEAR COUNTDOWN BANNER ── */}
-      <div className={styles.yearCountdownBanner}>
-        <div className={styles.yearCountdownLeft}>
+      <details className={styles.yearCountdownDetails} open>
+        <summary className={styles.yearCountdownSummary}>
           <span className={styles.yearIcon}>🗓️</span>
-          <div>
-            <div className={styles.yearLabel}>{currentYear} → {yearCountdown.targetYear} Countdown</div>
-            <div className={styles.yearSub}>Days remaining until New Year {yearCountdown.targetYear}</div>
-          </div>
-        </div>
-        <div className={styles.yearCountdownUnits}>
-          {[
-            { v: yearCountdown.d, l: "Days" },
-            { v: yearCountdown.h, l: "Hours" },
-            { v: yearCountdown.m, l: "Mins" },
-            { v: yearCountdown.s, l: "Secs" },
-          ].map(({ v, l }) => (
-            <div key={l} className={styles.yearUnit}>
-              <span className={styles.yearUnitNum}>{String(v).padStart(2, "0")}</span>
-              <span className={styles.yearUnitLabel}>{l}</span>
+          <span className={styles.yearSummaryText}>{currentYear} → {yearCountdown.targetYear} Countdown • {yearPct}% of {currentYear} complete</span>
+          <span className={styles.yearSummaryChevron}>▾</span>
+        </summary>
+        <div className={styles.yearCountdownBanner}>
+          <div className={styles.yearCountdownLeft}>
+            <div>
+              <div className={styles.yearLabel}>{currentYear} → {yearCountdown.targetYear} Countdown</div>
+              <div className={styles.yearSub}>Days remaining until New Year {yearCountdown.targetYear}</div>
             </div>
-          ))}
-        </div>
-        <div className={styles.yearProgress}>
-          <div className={styles.yearProgressLabel}>{currentYear} Progress</div>
-          <div className={styles.yearProgressBar}>
-            <div className={styles.yearProgressFill} style={{ width: `${yearPct}%` }} />
           </div>
-          <div className={styles.yearProgressPct}>{yearPct}% of {currentYear} complete</div>
+          <div className={styles.yearCountdownUnits}>
+            {[
+              { v: yearCountdown.d, l: "Days" },
+              { v: yearCountdown.h, l: "Hours" },
+              { v: yearCountdown.m, l: "Mins" },
+              { v: yearCountdown.s, l: "Secs" },
+            ].map(({ v, l }) => (
+              <div key={l} className={styles.yearUnit}>
+                <span className={styles.yearUnitNum}>{String(v).padStart(2, "0")}</span>
+                <span className={styles.yearUnitLabel}>{l}</span>
+              </div>
+            ))}
+          </div>
+          <div className={styles.yearProgress}>
+            <div className={styles.yearProgressLabel}>{currentYear} Progress</div>
+            <div className={styles.yearProgressBar}>
+              <div className={styles.yearProgressFill} style={{ width: `${yearPct}%` }} />
+            </div>
+            <div className={styles.yearProgressPct}>{yearPct}% of {currentYear} complete</div>
+          </div>
         </div>
-      </div>
+      </details>
 
       {/* ── ALERTS ── */}
       {upcomingClasses.length > 0 && (
@@ -1667,26 +1787,28 @@ export default function UltraStudyHub() {
       )}
 
       {/* ── TAB NAV ── */}
-      <div className={styles.tabNav}>
-        {[
-          { id: "timetable",  label: "📅 Timetable"  },
-          { id: "study",      label: "⏱️ Study Mode"  },
-          { id: "analytics",  label: "📊 Analytics"   },
-          { id: "exams",      label: "🎯 Exams"       },
-          { id: "syllabus",   label: "📖 Syllabus"    },
-          { id: "notes",      label: "📝 Notes"       },
-          { id: "flashcards", label: "🗂️ Flashcards"  },
-          { id: "todo",       label: "✅ Todo"         },
-          { id: "habits",     label: "🌱 Habits"      },
-        ].map(t => (
-          <button
-            key={t.id}
-            className={`${styles.tabBtn} ${activeTab === t.id ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className={styles.tabNavWrap}>
+        <div className={styles.tabNav}>
+          {[
+            { id: "timetable",  label: "📅 Timetable"  },
+            { id: "study",      label: "⏱️ Study Mode"  },
+            { id: "analytics",  label: "📊 Analytics"   },
+            { id: "exams",      label: "🎯 Exams"       },
+            { id: "syllabus",   label: "📖 Syllabus"    },
+            { id: "notes",      label: "📝 Notes"       },
+            { id: "flashcards", label: "🗂️ Flashcards"  },
+            { id: "todo",       label: "✅ Todo"         },
+            { id: "habits",     label: "🌱 Habits"      },
+          ].map(t => (
+            <button
+              key={t.id}
+              className={`${styles.tabBtn} ${activeTab === t.id ? styles.tabActive : ""}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ══════ TIMETABLE ══════ */}
@@ -1804,7 +1926,7 @@ export default function UltraStudyHub() {
                 <button className={styles.fsBtnInline} onClick={() => setStudyFullScreen(true)}>⤢ Fullscreen</button>
               )}
             </div>
-            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate timer — switch tabs freely, timer stays correct</div>
+            <div className={styles.timerAccuracyNote}>✅ Background-tab accurate timer • Auto-saves every 10s, even if the tab closes or you log out</div>
             {!isStudyMode ? (
               <div className={styles.studySetupForm}>
                 <select value={activeSubject} onChange={e => setActiveSubject(e.target.value)} className={styles.formSelect}>
@@ -1888,7 +2010,7 @@ export default function UltraStudyHub() {
                       <strong>{s.subjectName}</strong>
                       <span className={s.accuracyPercentage >= 80 ? styles.goodScore : styles.badScore}>{s.accuracyPercentage}%</span>
                     </div>
-                    <p>{s.actualTime}min / {s.targetTime}min {s.mood && `• ${s.mood.split(" ")[0]}`}</p>
+                    <p>{s.actualTime}min / {s.targetTime}min {s.mood && `• ${s.mood.split(" ")[0]}`}{s.autoSaved && " • 💾 auto-saved"}</p>
                     {s.notes && <p className={styles.sessionNoteDisplay}>📝 {s.notes}</p>}
                     {s.tags && <p className={styles.sessionTags}>🏷️ {s.tags}</p>}
                   </div>
@@ -1947,23 +2069,23 @@ export default function UltraStudyHub() {
           {/* ── STUDY HEATMAP ── */}
           <div className={styles.card}>
             <div className={styles.cardHead}><span>🗓️</span><h2>Study Heatmap (12 weeks)</h2></div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 4, padding: "6px 2px" }}>
+            <div className={styles.heatmapGrid}>
               {heatmapData.map((d, i) => (
                 <div
                   key={i}
                   title={`${d.date.toLocaleDateString("en-IN")} — ${d.mins} min`}
+                  className={styles.heatmapCell}
                   style={{
-                    width: "100%", aspectRatio: "1", borderRadius: 3,
                     background: heatColor(d.mins),
-                    outline: d.date.toDateString() === new Date().toDateString() ? "2px solid #4361ee" : "none",
+                    outline: d.date.toDateString() === new Date().toDateString() ? "2px solid var(--accent)" : "none",
                   }}
                 />
               ))}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: "0.75rem", color: "var(--text2, #6b7280)" }}>
+            <div className={styles.heatmapLegend}>
               Less
               {[0, 15, 45, 90, 150].map(m => (
-                <div key={m} style={{ width: 12, height: 12, borderRadius: 2, background: heatColor(m) }} />
+                <div key={m} className={styles.heatmapLegendSwatch} style={{ background: heatColor(m) }} />
               ))}
               More
             </div>
@@ -2009,7 +2131,7 @@ export default function UltraStudyHub() {
                     <span className={styles.moodLabel}>{mood.split(" ").slice(1).join(" ")}</span>
                     <div className={styles.moodBarTrack}>
                       <div
-                        className={`${styles.moodBarFill} ${avg >= 80 ? styles.moodBarFillHigh : avg >= 50 ? styles.moodBarFillMid : styles.moodBarFillLow}`}
+                        className={`${styles.moodBarFill} ${avg >= 80 ? styles.badgeSuccessFill : avg >= 50 ? styles.badgeWarningFill : styles.badgeDangerFill}`}
                         style={{ width: `${avg}%` }}
                       />
                     </div>
@@ -2043,7 +2165,7 @@ export default function UltraStudyHub() {
                 Object.entries(subjectStats).sort((a, b) => b[1].avgAccuracy - a[1].avgAccuracy).map(([sub, st]) => (
                   <div key={sub} className={styles.subjectStatItem}>
                     <div className={styles.subjectStatHeader}><span className={styles.subjectName}>{sub}</span><span className={styles.subjectAccuracy}>{st.avgAccuracy}%</span></div>
-                    <div className={styles.subjectStatBar}><div className={styles.subjectStatFill} style={{ width: `${st.avgAccuracy}%`, background: st.avgAccuracy >= 80 ? "#0f9d6e" : st.avgAccuracy >= 50 ? "#f77f00" : "#ef4444" }} /></div>
+                    <div className={styles.subjectStatBar}><div className={`${styles.subjectStatFill} ${st.avgAccuracy >= 80 ? styles.badgeSuccessFill : st.avgAccuracy >= 50 ? styles.badgeWarningFill : styles.badgeDangerFill}`} style={{ width: `${st.avgAccuracy}%` }} /></div>
                     <div className={styles.subjectStatMeta}>{st.totalTime} min • {st.sessions} sessions</div>
                   </div>
                 ))
@@ -2086,15 +2208,15 @@ export default function UltraStudyHub() {
                       {ex.examName}: no syllabus chapters added yet
                     </div>
                   );
-                  const key = READINESS_KEY[r.status];
+                  const tone = TONE_KEY[r.status];
                   return (
                     <div key={ex.id} className={styles.readinessItem}>
                       <div className={styles.readinessRow}>
                         <strong className={styles.readinessName}>{ex.examName}</strong>
-                        <span className={`${styles.readinessBadge} ${styles[`readiness${key}`]}`}>{readinessLabel[r.status]}</span>
+                        <span className={`${styles.badge} ${styles[`badge${tone}`]}`}>{readinessLabel[r.status]}</span>
                       </div>
                       <div className={styles.readinessBarTrack}>
-                        <div className={`${styles.readinessBarFill} ${styles[`readinessBarFill${key}`]}`} style={{ width: `${r.pct}%` }} />
+                        <div className={`${styles.readinessBarFill} ${styles[`badge${tone}Fill`]}`} style={{ width: `${r.pct}%` }} />
                       </div>
                       <p className={styles.readinessDetail}>
                         {r.status === "done"
@@ -2227,7 +2349,7 @@ export default function UltraStudyHub() {
                     <div className={styles.examCountdownInfo}>
                       <div className={styles.examHeader}>
                         <h4>{ex.examName}</h4>
-                        <span className={`${styles.priorityBadge} ${styles[`priority_${ex.priority?.toLowerCase()}`]}`}>{ex.priority}</span>
+                        <span className={`${styles.badge} ${styles[`badge${ex.priority === "High" ? "Danger" : ex.priority === "Medium" ? "Warning" : "Success"}`]}`}>{ex.priority}</span>
                         {ex.targetScore && <span className={styles.examTargetScoreBadge}>🎯 Target: {ex.targetScore}</span>}
                         {sylSt.total > 0 && (
                           <button
@@ -2238,7 +2360,7 @@ export default function UltraStudyHub() {
                           </button>
                         )}
                         {readiness && (
-                          <span className={`${styles.examReadinessPill} ${styles[`examReadinessPill${READINESS_KEY[readiness.status]}`]}`}>
+                          <span className={`${styles.badge} ${styles.badgeSm} ${styles[`badge${TONE_KEY[readiness.status]}`]}`}>
                             {readinessLabel[readiness.status]}
                           </span>
                         )}
@@ -2344,7 +2466,7 @@ export default function UltraStudyHub() {
                     >
                       <div className={styles.examProgressHeader}>
                         <h4>{ex.examName}</h4>
-                        <span className={`${styles.priorityBadge} ${styles[`priority_${ex.priority?.toLowerCase()}`]}`}>{ex.priority}</span>
+                        <span className={`${styles.badge} ${styles[`badge${ex.priority === "High" ? "Danger" : ex.priority === "Medium" ? "Warning" : "Success"}`]}`}>{ex.priority}</span>
                       </div>
                       {st.total > 0 ? (
                         <>
@@ -2452,10 +2574,10 @@ export default function UltraStudyHub() {
                               {item.subject}
                             </span>
                           )}
-                          <span className={`${styles.priorityBadge} ${styles[`priority_${item.priority?.toLowerCase()}`]}`}>
+                          <span className={`${styles.badge} ${styles.badgeSm} ${styles[`badge${item.priority === "High" ? "Danger" : item.priority === "Medium" ? "Warning" : "Success"}`]}`}>
                             {item.priority}
                           </span>
-                          <span className={`${styles.scStatusLabel} ${styles[`scStatus_${item.status}`]}`}>
+                          <span className={`${styles.badge} ${styles.badgeSm} ${styles[`badge${item.status === "done" ? "Success" : item.status === "in_progress" ? "Warning" : "Neutral"}`]}`}>
                             {item.status === "in_progress" ? "In Progress" : item.status === "done" ? "Done" : "Pending"}
                           </span>
                         </div>
@@ -2631,7 +2753,7 @@ export default function UltraStudyHub() {
                     <div className={styles.todoMeta}>
                       {t.subject && <span className={styles.todoSubject} style={{ background: getSubjectColor(t.subject) }}>{t.subject}</span>}
                       {t.dueDate && <span className={`${styles.todoDue} ${new Date(t.dueDate) < new Date() && !t.completed ? styles.todoDueOverdue : ""}`}>📅 {new Date(t.dueDate).toLocaleDateString("en-IN")}</span>}
-                      <span className={`${styles.todoPriority} ${styles[`priority_${t.priority?.toLowerCase()}`]}`}>{t.priority}</span>
+                      <span className={`${styles.badge} ${styles.badgeSm} ${styles[`badge${t.priority === "High" ? "Danger" : t.priority === "Medium" ? "Warning" : "Success"}`]}`}>{t.priority}</span>
                       {t.tag && <span className={styles.todoTagBadge}>🏷️ {t.tag}</span>}
                     </div>
                   </div>
