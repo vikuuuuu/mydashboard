@@ -16,11 +16,13 @@
   --success:  #10b981;
   --warning:  #f59e0b;
   --danger:   #ef4444;
+  --neutral:  #9ca8d0;
   --live:     #ef4444;
   --radius:   16px;
   --radiusSm: 10px;
   --shadow:   0 4px 20px rgba(67,97,238,0.07);
   --shadowMd: 0 8px 32px rgba(67,97,238,0.14);
+  --focusRing: 0 0 0 3px rgba(67,97,238,0.35);
 }
 :global([data-theme="dark"]) {
   --bg:       #0f172a;
@@ -36,10 +38,27 @@
   --text:     #f1f5f9;
   --text2:    #94a3b8;
   --text3:    #64748b;
+  --neutral:  #64748b;
   --shadow:   0 4px 20px rgba(0,0,0,0.3);
   --shadowMd: 0 8px 32px rgba(0,0,0,0.4);
+  --focusRing: 0 0 0 3px rgba(96,165,250,0.4);
 }
 :global(*) { margin:0; padding:0; box-sizing:border-box; }
+
+/* ─── ACCESSIBILITY: focus-visible everywhere ───────────────────────────────
+   Every interactive element gets a visible keyboard-focus ring. This was
+   previously missing entirely, which is both an accessibility gap and reads
+   as "unfinished" for anyone tabbing through the app. */
+.page :global(button:focus-visible),
+.page :global(a:focus-visible),
+.page :global(input:focus-visible),
+.page :global(select:focus-visible),
+.page :global(textarea:focus-visible),
+.page :global([tabindex]:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 
 /* ─── PAGE ───────────────────────────────────────────────────────────────── */
 .page {
@@ -56,7 +75,7 @@
   padding: 11px 20px; border-radius: var(--radiusSm);
   font-weight: 600; font-size: 0.88rem; box-shadow: var(--shadowMd);
   animation: toastIn 0.3s ease, toastOut 0.3s ease 2.9s forwards;
-  max-width: 300px; pointer-events: none;
+  max-width: 320px; pointer-events: none;
 }
 .toast_success { background:#10b981; color:#fff; }
 .toast_error   { background:#ef4444; color:#fff; }
@@ -107,7 +126,7 @@
 }
 .subtitle { color:var(--text2); font-size:0.85rem; margin-top:2px; }
 
-/* ─── XP / LEVEL BANNER (was inline, now themed) ─────────────────────────── */
+/* ─── XP / LEVEL BANNER ──────────────────────────────────────────────────── */
 .xpBanner {
   display: flex; align-items: center; gap: 16px; padding: 14px 18px;
   border-radius: var(--radius); margin: 0 0 14px; flex-wrap: wrap;
@@ -136,24 +155,38 @@
 .xpWeeklyFill { height: 100%; border-radius: 4px; background: #fff; }
 .xpWeeklyFillComplete { background: #06d6a0; }
 
-/* ─── YEAR COUNTDOWN BANNER ──────────────────────────────────────────────── */
+/* ─── YEAR COUNTDOWN (now collapsible via <details>) ─────────────────────── */
+/* Previously this was a permanently-expanded hero banner stacked right below
+   the XP banner and above the streak banner — three "hero" sections in a row
+   before any real content. Making it a <details> keeps the info one click
+   away without dominating the top of the page, and it stays a native,
+   keyboard/screen-reader friendly disclosure widget. */
+.yearCountdownDetails {
+  margin-bottom: 14px; border-radius: var(--radius);
+  background: linear-gradient(135deg,#0f172a,#1e293b);
+  border: 1px solid rgba(96,165,250,0.25);
+  overflow: hidden;
+}
+:global([data-theme="dark"]) .yearCountdownDetails { background: linear-gradient(135deg,#020617,#0f172a); border-color: rgba(96,165,250,0.2); }
+.yearCountdownSummary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px; color: #e2e8f0; font-weight: 700; font-size: 0.86rem;
+}
+.yearCountdownSummary::-webkit-details-marker { display: none; }
+.yearIcon { font-size: 18px; flex-shrink: 0; }
+.yearSummaryText { flex: 1; }
+.yearSummaryChevron { color: #60a5fa; transition: transform 0.2s ease; flex-shrink: 0; }
+.yearCountdownDetails[open] .yearSummaryChevron { transform: rotate(180deg); }
 .yearCountdownBanner {
   display:flex; align-items:center; gap:20px;
-  background:linear-gradient(135deg,#0f172a,#1e293b);
-  border:1px solid rgba(96,165,250,0.25); border-radius:var(--radius);
-  padding:14px 20px; margin-bottom:14px; flex-wrap:wrap;
+  padding: 4px 20px 16px; flex-wrap:wrap;
   position:relative; overflow:hidden;
 }
-.yearCountdownBanner::before {
-  content:''; position:absolute; inset:0;
-  background:linear-gradient(90deg,transparent,rgba(96,165,250,0.05),transparent);
-  animation:shimmer 4s infinite;
-}
 .yearCountdownLeft { display:flex; align-items:center; gap:12px; z-index:1; }
-.yearIcon { font-size:24px; }
 .yearLabel { font-size:0.95rem; font-weight:800; color:#e2e8f0; letter-spacing:-0.01em; }
 .yearSub   { font-size:0.78rem; color:#94a3b8; margin-top:2px; }
-.yearCountdownUnits { display:flex; gap:10px; z-index:1; }
+.yearCountdownUnits { display:flex; gap:10px; z-index:1; flex-wrap: wrap; }
 .yearUnit {
   display:flex; flex-direction:column; align-items:center;
   background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);
@@ -176,7 +209,6 @@
   border-radius:99px; transition:width 1s ease;
 }
 .yearProgressPct { font-size:0.75rem; color:#60a5fa; font-weight:700; }
-:global([data-theme="dark"]) .yearCountdownBanner { background:linear-gradient(135deg,#020617,#0f172a); border-color:rgba(96,165,250,0.2); }
 
 /* ─── ALERTS ─────────────────────────────────────────────────────────────── */
 .upcomingAlert {
@@ -247,27 +279,48 @@
   background:var(--surface); border:1px solid var(--border);
   border-radius:13px; padding:12px 14px;
   display:flex; align-items:center; gap:10px;
-  box-shadow:var(--shadow); transition:all 0.2s;
+  box-shadow:var(--shadow); transition:box-shadow 0.2s, border-color 0.2s;
 }
-.statCard:hover { transform:translateY(-3px); box-shadow:var(--shadowMd); }
+/* Stat cards are read-only displays, not clickable — dropped the hover-lift
+   (transform) that was previously applied to every card regardless of
+   whether it was actionable, which made static content feel like buttons. */
+.statCard:hover { border-color: var(--border2); box-shadow:var(--shadowMd); }
 .statIcon  { font-size:20px; flex-shrink:0; }
 .statValue { font-size:1.15rem; font-weight:800; color:var(--text); display:block; }
 .statLabel { font-size:0.74rem; color:var(--text2); display:block; margin-top:1px; }
 
 /* ─── TAB NAV ────────────────────────────────────────────────────────────── */
+/* Wrapper adds an edge fade-mask so horizontal overflow is visually obvious
+   on mobile, plus scroll-snap so tabs land cleanly when swiped. */
+.tabNavWrap {
+  position: relative; margin-bottom: 18px;
+}
 .tabNav {
-  display:flex; gap:4px; margin-bottom:18px;
+  display:flex; gap:4px;
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); padding:5px;
   overflow-x:auto; flex-wrap:nowrap;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
 }
+.tabNav::-webkit-scrollbar { height: 0; }
 .tabBtn {
   flex-shrink:0; padding:8px 14px; border-radius:10px; border:none;
   background:transparent; color:var(--text2); font-family:inherit;
   font-size:12.5px; font-weight:600; cursor:pointer; transition:all 0.2s; white-space:nowrap;
+  scroll-snap-align: start;
 }
 .tabBtn:hover { background:var(--surface2); color:var(--text); }
 .tabActive { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff !important; box-shadow:0 3px 10px rgba(67,97,238,0.3); }
+/* Fade masks on the scrollable edges — only visible where content can actually
+   scroll further, thanks to mask-image following the scroll container edges. */
+@media (max-width: 900px) {
+  .tabNavWrap::after {
+    content: ''; position: absolute; top: 5px; right: 0; bottom: 5px; width: 28px;
+    background: linear-gradient(to right, transparent, var(--surface));
+    pointer-events: none; border-radius: 0 var(--radius) var(--radius) 0;
+  }
+}
 
 /* ─── CARD ───────────────────────────────────────────────────────────────── */
 .card {
@@ -352,6 +405,42 @@
 }
 .filterChip:hover { border-color:var(--accent); color:var(--accent); }
 .filterChipActive { background:var(--accent); color:#fff !important; border-color:var(--accent); }
+
+/* ─── SEMANTIC BADGES (new, centralized) ─────────────────────────────────────
+   Every "priority", "status", or "readiness" indicator in the app now shares
+   these 4 tone classes instead of each feature defining its own near-duplicate
+   colors (previously: .priority_high, .scStatus_done, .readinessAtRisk,
+   .examReadinessPillManageable, etc. — 6+ places, slightly different values
+   for the same 3-4 semantic meanings). Compose as:
+     `${styles.badge} ${styles.badgeDanger}`      — pill badge
+     `${styles.badge} ${styles.badgeSm} ${...}`   — smaller inline variant
+     `${styles.badgeSuccessFill}` etc.            — for progress-bar fills
+   ---------------------------------------------------------------------- */
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 10px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; line-height: 1.6;
+  white-space: nowrap;
+}
+.badgeSm { padding: 2px 8px; font-size: 10px; }
+
+.badgeDanger  { background: rgba(239,68,68,0.12);  color: #ef4444; }
+.badgeWarning { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.badgeSuccess { background: rgba(16,185,129,0.12); color: #10b981; }
+.badgeNeutral { background: rgba(156,163,208,0.15); color: var(--text3); }
+
+/* Solid variants — used where a badge sits on a colored/dark background and
+   needs full contrast rather than a tinted pill (e.g. exam countdown cards). */
+.badgeDangerSolid  { background:#ef4444; color:#fff; }
+.badgeWarningSolid { background:#f59e0b; color:#fff; }
+.badgeSuccessSolid { background:#10b981; color:#fff; }
+
+/* Fill variants for progress bars that need to convey the same tone
+   (subject accuracy bars, mood-vs-accuracy bars, readiness bars). */
+.badgeDangerFill  { background: #ef4444; }
+.badgeWarningFill { background: #f59e0b; }
+.badgeSuccessFill { background: #10b981; }
+.badgeNeutralFill { background: var(--text3); }
 
 /* ─── TIMETABLE ──────────────────────────────────────────────────────────── */
 .timetableForm { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
@@ -582,14 +671,13 @@
 .achievementIcon { font-size:2rem; display:block; margin-bottom:7px; }
 .achievementCard h4 { color:var(--text); font-size:0.83rem; margin-bottom:3px; }
 .achievementCard p  { color:var(--text2); font-size:0.74rem; }
-/* New: "unlocked on" date/time badge shown on each achievement card */
 .achievementDate {
   display:block; margin-top:8px; padding-top:7px;
   border-top:1px dashed var(--border2);
   font-size:0.66rem; color:var(--text3); font-weight:600; letter-spacing:0.2px;
 }
 
-/* ─── LEVEL ROADMAP (new) ─────────────────────────────────────────────────── */
+/* ─── LEVEL ROADMAP ──────────────────────────────────────────────────────── */
 .levelRoadmapList { display: flex; flex-direction: column; gap: 9px; max-height: 420px; overflow-y: auto; padding-right: 3px; }
 .levelRoadmapItem {
   display: flex; align-items: center; gap: 12px;
@@ -619,7 +707,7 @@
   font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
 }
 
-/* ─── WEEK-OVER-WEEK COMPARISON (new) ────────────────────────────────────── */
+/* ─── WEEK-OVER-WEEK COMPARISON ──────────────────────────────────────────── */
 .weekCompareGrid { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .weekCompareCol { text-align: center; flex: 1; min-width: 100px; }
 .weekCompareValue { font-size: 1.6rem; font-weight: 900; color: var(--accent); line-height: 1; }
@@ -632,8 +720,15 @@
 .weekCompareDeltaValueUp { color: #10b981; }
 .weekCompareDeltaValueDown { color: #ef4444; }
 
-/* ─── TIME-OF-DAY PRODUCTIVITY MAP (new) ─────────────────────────────────── */
-.timeOfDayScroll { overflow-x: auto; padding-bottom: 4px; }
+/* ─── STUDY HEATMAP (extracted from inline styles) ───────────────────────── */
+.heatmapGrid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; padding: 6px 2px; }
+.heatmapCell { width: 100%; aspect-ratio: 1; border-radius: 3px; transition: transform 0.15s ease; }
+.heatmapCell:hover { transform: scale(1.15); }
+.heatmapLegend { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 0.75rem; color: var(--text2); }
+.heatmapLegendSwatch { width: 12px; height: 12px; border-radius: 2px; }
+
+/* ─── TIME-OF-DAY PRODUCTIVITY MAP ───────────────────────────────────────── */
+.timeOfDayScroll { overflow-x: auto; padding-bottom: 4px; position: relative; }
 .timeOfDayGrid { display: grid; grid-template-columns: 30px repeat(24, minmax(16px, 1fr)); gap: 2px; min-width: 560px; }
 .timeOfDayRow { display: contents; }
 .timeOfDayDayLabel { font-size: 0.65rem; color: var(--text2); align-self: center; font-weight: 600; }
@@ -642,20 +737,17 @@
 .timeOfDayInsight { font-size: 0.78rem; color: var(--text2); margin-top: 10px; padding: 8px 12px; background: var(--surface2); border-radius: 8px; border: 1px dashed var(--border2); }
 .timeOfDayInsight strong { color: var(--text); }
 
-/* ─── MOOD VS ACCURACY (new) ──────────────────────────────────────────────── */
+/* ─── MOOD VS ACCURACY ───────────────────────────────────────────────────── */
 .moodList { display: flex; flex-direction: column; gap: 9px; }
 .moodRow { display: flex; align-items: center; gap: 10px; }
 .moodEmoji { font-size: 1.1rem; width: 26px; flex-shrink: 0; text-align: center; }
 .moodLabel { font-size: 0.82rem; color: var(--text2); min-width: 70px; flex-shrink: 0; }
 .moodBarTrack { flex: 1; height: 8px; border-radius: 5px; background: var(--surface3); overflow: hidden; }
 .moodBarFill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
-.moodBarFillHigh { background: #10b981; }
-.moodBarFillMid  { background: #f59e0b; }
-.moodBarFillLow  { background: #ef4444; }
 .moodPct { font-size: 0.85rem; font-weight: 800; color: var(--text); min-width: 40px; text-align: right; flex-shrink: 0; }
 .moodCount { font-size: 0.7rem; color: var(--text3); min-width: 44px; flex-shrink: 0; }
 
-/* ─── UP NEXT MILESTONE ROADMAP (restyled) ───────────────────────────────── */
+/* ─── UP NEXT MILESTONE ROADMAP ──────────────────────────────────────────── */
 .milestoneList { display: flex; flex-direction: column; gap: 10px; }
 .milestoneItem { padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); transition: all 0.2s; }
 .milestoneItem:hover { border-color: var(--border2); transform: translateX(2px); }
@@ -666,34 +758,16 @@
 .milestoneBarFill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.4s ease; }
 .milestoneDesc { font-size: 0.76rem; color: var(--text2); margin: 4px 0 0; }
 
-/* ─── EXAM READINESS (new) ───────────────────────────────────────────────── */
+/* ─── EXAM READINESS ─────────────────────────────────────────────────────── */
 .readinessList { display: flex; flex-direction: column; gap: 10px; }
 .readinessEmpty { font-size: 0.82rem; color: var(--text2); padding: 4px 2px; }
 .readinessItem { padding: 10px 12px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); transition: all 0.2s; }
 .readinessItem:hover { border-color: var(--border2); }
 .readinessRow { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 6px; }
 .readinessName { font-size: 0.88rem; color: var(--text); }
-.readinessBadge { font-size: 0.78rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
-.readinessDone        { color: #10b981; background: rgba(16,185,129,0.12); }
-.readinessOnTrack     { color: #10b981; background: rgba(16,185,129,0.12); }
-.readinessManageable  { color: #f59e0b; background: rgba(245,158,11,0.12); }
-.readinessAtRisk      { color: #ef4444; background: rgba(239,68,68,0.12); }
 .readinessBarTrack { height: 6px; border-radius: 4px; background: var(--accentS); overflow: hidden; margin-bottom: 5px; }
-.readinessBarFillDone       { background: #10b981; }
-.readinessBarFillOnTrack    { background: #10b981; }
-.readinessBarFillManageable { background: #f59e0b; }
-.readinessBarFillAtRisk     { background: #ef4444; }
 .readinessBarFill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
 .readinessDetail { font-size: 0.76rem; color: var(--text2); margin: 0; }
-
-/* Small readiness pill used inline inside the Exams tab card */
-.examReadinessPill {
-  font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; color: #fff;
-}
-.examReadinessPillDone       { background: #10b981; }
-.examReadinessPillOnTrack    { background: #10b981; }
-.examReadinessPillManageable { background: #f59e0b; }
-.examReadinessPillAtRisk     { background: #ef4444; }
 .examReadinessNote { font-size: 0.76rem; color: var(--text2); margin: 2px 0 8px; }
 
 /* ─── EXAMS ──────────────────────────────────────────────────────────────── */
@@ -709,7 +783,7 @@
   background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 12px;
   display:flex; flex-direction:column; align-items:center; gap:4px; transition:all 0.2s;
 }
-.examSummaryCard:hover { transform:translateY(-2px); box-shadow:var(--shadowMd); }
+.examSummaryCard:hover { border-color: var(--border2); box-shadow:var(--shadowMd); }
 .examSummaryIcon { font-size:20px; }
 .examSummaryNum  { font-size:1.6rem; font-weight:900; color:var(--accent); line-height:1; }
 .examSummaryLabel { font-size:0.72rem; color:var(--text2); font-weight:600; text-align:center; }
@@ -730,22 +804,17 @@
   font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid rgba(239,68,68,0.3);
 }
 :global([data-theme="dark"]) .examTargetScoreBadge { background:rgba(252,165,165,0.15); color:#fca5a5; border-color:rgba(252,165,165,0.3); }
-
-/* Syllabus button inside exam card */
 .examSyllabusBtn {
   background:rgba(67,97,238,0.12); color:var(--accent);
   border:1px solid rgba(67,97,238,0.25); border-radius:999px;
   padding:3px 10px; font-size:10.5px; font-weight:700; cursor:pointer; transition:all 0.2s;
 }
 .examSyllabusBtn:hover { background:var(--accent); color:#fff; }
-
-/* Inline syllabus progress inside exam card */
 .examInlineSyllabus { display:flex; align-items:center; gap:9px; margin-bottom:10px; }
 .examInlineSyllabusBar { flex:1; height:5px; background:rgba(220,38,38,0.15); border-radius:99px; overflow:hidden; }
 .examInlineSyllabusFill { height:100%; background:linear-gradient(to right,#10b981,#3b82f6); border-radius:99px; transition:width 0.5s ease; }
 .examInlineSyllabusText { font-size:0.75rem; color:#b91c1c; font-weight:600; white-space:nowrap; }
 :global([data-theme="dark"]) .examInlineSyllabusText { color:#f87171; }
-
 .examCountdownInfo { flex:1; }
 .countdownGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
 .countdownUnit { background:rgba(220,38,38,0.1); padding:7px; border-radius:8px; text-align:center; }
@@ -754,26 +823,17 @@
 .countdownLabel { display:block; font-size:0.62rem; color:#991b1b; font-weight:700; text-transform:uppercase; margin-top:1px; }
 :global([data-theme="dark"]) .countdownLabel { color:#fca5a5; }
 .examCompletedText { color:#059669; font-weight:700; font-size:0.95rem; }
-.priorityBadge { padding:2px 9px; border-radius:999px; font-size:10.5px; font-weight:700; }
-.priority_high   { background:rgba(239,68,68,0.12); color:#ef4444; }
-.priority_medium { background:rgba(245,158,11,0.12); color:#f59e0b; }
-.priority_low    { background:rgba(16,185,129,0.12); color:#10b981; }
 
 /* ─── SYLLABUS ───────────────────────────────────────────────────────────── */
 .syllabusWrap { display:flex; flex-direction:column; gap:14px; }
-
 .syllabusForm { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .syllabusForm .formSelect,
 .syllabusForm .formInput { flex:1; min-width:140px; }
-
-/* Stat badge in card head */
 .syllabusStatBadge {
   background:rgba(16,185,129,0.1); color:#10b981;
   border:1px solid rgba(16,185,129,0.25); border-radius:999px;
   padding:4px 12px; font-size:12px; font-weight:700;
 }
-
-/* Exam progress grid */
 .examProgressGrid {
   display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px;
 }
@@ -801,15 +861,12 @@
 }
 .epPct   { font-size:0.8rem; font-weight:800; color:var(--accent); min-width:34px; text-align:right; }
 .epEmpty { font-size:0.78rem; color:var(--text3); margin-top:6px; }
-
-/* Chapter list */
 .syllabusChapterList {
   display:flex; flex-direction:column; gap:9px;
   max-height:580px; overflow-y:auto; padding-right:3px;
 }
 .syllabusChapterList::-webkit-scrollbar { width:4px; }
 .syllabusChapterList::-webkit-scrollbar-thumb { background:var(--accent); border-radius:99px; }
-
 .syllabusChapterCard {
   display:flex; align-items:center; gap:12px;
   background:var(--surface2); border:1px solid var(--border);
@@ -817,7 +874,6 @@
   border-radius:12px; padding:12px 14px; transition:all 0.2s;
 }
 .syllabusChapterCard:hover { transform:translateX(3px); box-shadow:0 3px 12px rgba(67,97,238,0.1); }
-
 .scDone {
   border-left-color:#10b981;
   background:rgba(16,185,129,0.04);
@@ -827,8 +883,6 @@
   border-left-color:#f59e0b;
   background:rgba(245,158,11,0.05);
 }
-
-/* Cycle-status emoji button */
 .scStatusBtn {
   font-size:1.4rem; background:none; border:none; cursor:pointer;
   flex-shrink:0; width:34px; height:34px;
@@ -836,10 +890,8 @@
   border-radius:8px; transition:all 0.15s;
 }
 .scStatusBtn:hover { background:var(--accentS); transform:scale(1.18); }
-
 .scBody { flex:1; min-width:0; }
 .scTop  { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:5px; }
-
 .scExamTag {
   background:var(--accentS); color:var(--accent);
   border:1px solid rgba(67,97,238,0.2);
@@ -849,21 +901,11 @@
   color:#fff; font-size:10px; font-weight:700;
   padding:2px 8px; border-radius:999px;
 }
-.scStatusLabel {
-  font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px;
-}
-.scStatus_pending     { background:rgba(156,163,208,0.15); color:var(--text3); }
-.scStatus_in_progress { background:rgba(245,158,11,0.12);  color:#f59e0b; }
-.scStatus_done        { background:rgba(16,185,129,0.12);  color:#10b981; }
-
 .scChapterName {
   font-size:0.95rem; font-weight:700; color:var(--text); margin-bottom:3px;
 }
 .scDone .scChapterName { text-decoration:line-through; color:var(--text2); }
-
 .scNotes { font-size:0.77rem; color:var(--text3); font-style:italic; margin-top:2px; }
-
-/* Quick action buttons row */
 .scActions { display:flex; gap:5px; flex-shrink:0; flex-wrap:wrap; align-items:center; }
 .scActionBtn {
   padding:5px 9px; border-radius:7px; border:1px solid var(--border2);
@@ -936,7 +978,6 @@
 .todoSubject { color:#fff; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px; }
 .todoDue { font-size:10.5px; color:var(--text3); display:flex; align-items:center; gap:2px; }
 .todoDueOverdue { color:#ef4444; font-weight:700; }
-.todoPriority { font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px; }
 .todoTagBadge { font-size:10px; color:var(--text3); }
 
 /* ─── HABITS ─────────────────────────────────────────────────────────────── */
@@ -1001,6 +1042,13 @@
 .emptyState { text-align:center; color:var(--text2); padding:22px; background:var(--surface2); border-radius:10px; border:1px dashed var(--border2); font-size:0.87rem; }
 
 /* ─── RESPONSIVE ─────────────────────────────────────────────────────────── */
+/* Ultra-wide desktops: previously statsGrid jumped straight from 7 columns to
+   4 at 1400px with nothing in between, making cards unnecessarily wide on
+   1600–1900px monitors. Added a step at 1800px. */
+@media (min-width:1800px) {
+  .page { padding: 20px 48px; }
+  .statsGrid { grid-template-columns:repeat(7,1fr); }
+}
 @media (max-width:1400px) {
   .statsGrid { grid-template-columns:repeat(4,1fr); }
 }
@@ -1055,4 +1103,5 @@
   .weekCompareCol, .weekCompareDeltaBox { width: 100%; }
   .moodLabel { min-width: 56px; font-size: 0.76rem; }
   .moodCount { display: none; }
+  .yearCountdownSummary { padding: 10px 14px; font-size: 0.8rem; }
 }
