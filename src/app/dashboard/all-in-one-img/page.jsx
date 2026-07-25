@@ -825,7 +825,7 @@ export default function GovtFormPhotoTool() {
       {/* ── TOP BAR ── */}
       <div style={S.topBar}>
         <button className="back-btn" style={S.backBtn} onClick={() => router.push("/dashboard")}>
-          ← Back to Dashboard
+          ← Back
         </button>
         <div style={S.brand}>
           <div style={S.brandIcon}>🖼</div>
