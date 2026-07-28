@@ -23,9 +23,11 @@ function usePdfJs() {
 }
 
 const TABS = [
-  { id: "resize",   icon: "⤢", label: "PDF Resize"   },
-  { id: "toimg",    icon: "🖼", label: "PDF → Image"  },
-  { id: "wordtopdf",icon: "📝", label: "Word → PDF"   },
+  { id: "resize",     icon: "⤢", label: "PDF Resize"    },
+  { id: "toimg",      icon: "🖼", label: "Export"         },
+  { id: "editpages",  icon: "🗂", label: "Edit Pages"     },
+  { id: "imgresize",  icon: "🖌", label: "Image Resize"   },
+  { id: "wordtopdf",  icon: "📝", label: "Word → PDF"     },
 ];
 
 const PAGE_SIZES_PT = {
@@ -42,6 +44,9 @@ export default function PdfToolsPage() {
   const pdfReady = usePdfJs();
   const fileRef  = useRef();
   const wordRef  = useRef();
+  const mergeFileRef = useRef();
+  const imgFileRef   = useRef();
+  const dragIdx  = useRef(null);
 
   const [tab,         setTab        ] = useState("resize");
   const [pdfFile,     setPdfFile    ] = useState(null);
@@ -62,9 +67,10 @@ export default function PdfToolsPage() {
   const [fitMode,     setFitMode    ] = useState("fit");
   const [outName,     setOutName    ] = useState("resized");
 
-  // to image
+  // export: to image / to text
   const [resultPages, setResultPages] = useState([]);
-  const [imgFormat,   setImgFormat  ] = useState("png");
+  const [resultText,  setResultText ] = useState(null); // { fullText, pages:[{pageNum,text}] }
+  const [imgFormat,   setImgFormat  ] = useState("png"); // png | jpg | webp | txt
   const [imgScale,    setImgScale   ] = useState(2);
   const [pageRange,   setPageRange  ] = useState("all");
   const [customPages, setCustomPages] = useState("");
@@ -75,13 +81,39 @@ export default function PdfToolsPage() {
   const [wordResult,  setWordResult ] = useState(null);
   const [wordDrag,    setWordDrag   ] = useState(false);
 
+  // edit pages
+  const [pageItems,   setPageItems  ] = useState([]); // {uid, kind:'page'|'blank', srcKey, srcPageIndex, thumb, w, h}
+  const [editBusy,    setEditBusy   ] = useState(false);
+  const [editOutName, setEditOutName] = useState("edited");
+  const [editResult,  setEditResult ] = useState(null);
+  const [mergeFile,   setMergeFile  ] = useState(null);
+  const [mergeName,   setMergeName  ] = useState("");
+  const [mergeBusy,   setMergeBusy  ] = useState(false);
+
+  // image resize
+  const [imgItems,      setImgItems     ] = useState([]); // {uid,name,srcUrl,origW,origH}
+  const [imgDrag2,      setImgDrag2     ] = useState(false);
+  const [imgResizeMode, setImgResizeMode] = useState("percent"); // percent | exact | maxdim
+  const [imgPercent,    setImgPercent   ] = useState(50);
+  const [imgWidth,      setImgWidth     ] = useState(800);
+  const [imgHeight,     setImgHeight    ] = useState(600);
+  const [imgLockAspect, setImgLockAspect] = useState(true);
+  const [imgMaxDim,     setImgMaxDim    ] = useState(1024);
+  const [imgOutFormat,  setImgOutFormat ] = useState("jpg");
+  const [imgQuality,    setImgQuality   ] = useState(0.85);
+  const [imgNoUpscale,  setImgNoUpscale ] = useState(true);
+  const [imgBusy,       setImgBusy      ] = useState(false);
+  const [imgResults,    setImgResults   ] = useState([]);
+
   const loadPdf = async (file) => {
     if (!file || file.type !== "application/pdf") return;
     setPdfFile(file);
     setPdfName(file.name.replace(".pdf", ""));
     setOutName(file.name.replace(".pdf", "") + "-resized");
+    setEditOutName(file.name.replace(".pdf", "") + "-edited");
     setPdfSizeKB(Math.round(file.size / 1024));
-    setResultUrl(null); setResultPages([]); setResultInfo(null);
+    setResultUrl(null); setResultPages([]); setResultInfo(null); setResultText(null);
+    setPageItems([]); setEditResult(null); setMergeFile(null); setMergeName("");
     if (pdfReady) {
       const buf = await file.arrayBuffer();
       const doc = await window.pdfjsLib.getDocument({ data: buf }).promise;
@@ -154,10 +186,10 @@ export default function PdfToolsPage() {
     finally { setProcessing(false); }
   };
 
-  /* ── PDF TO IMAGE ── */
-  const doToImage = async () => {
+  /* ── EXPORT: PDF → IMAGE / TEXT ── */
+  const doExport = async () => {
     if (!pdfFile || !pdfReady) return;
-    setProcessing(true); setProgress(0); setResultPages([]);
+    setProcessing(true); setProgress(0); setResultPages([]); setResultText(null);
     try {
       const buf  = await pdfFile.arrayBuffer();
       const src  = await window.pdfjsLib.getDocument({ data: buf }).promise;
@@ -166,6 +198,23 @@ export default function PdfToolsPage() {
         : parsePages(customPages, src.numPages);
 
       if (!pages.length) { alert("No valid pages."); setProcessing(false); return; }
+
+      if (imgFormat === "txt") {
+        const textPages = [];
+        for (let idx = 0; idx < pages.length; idx++) {
+          setProgress(Math.round((idx / pages.length) * 95));
+          const page    = await src.getPage(pages[idx]);
+          const content = await page.getTextContent();
+          const text    = content.items.map((it) => it.str).join(" ");
+          textPages.push({ pageNum: pages[idx], text });
+        }
+        const fullText = textPages.map((p) => `--- Page ${p.pageNum} ---\n${p.text}`).join("\n\n");
+        setResultText({ fullText, pages: textPages });
+        setResultInfo({ pages: textPages.length, format: "TXT" });
+        setProgress(100);
+        if (user) logToolUsage({ userId: user.uid, tool: "pdf-to-text", pageCount: textPages.length, totalSizeKB: pdfSizeKB });
+        return;
+      }
 
       const results = [];
       for (let idx = 0; idx < pages.length; idx++) {
@@ -185,7 +234,7 @@ export default function PdfToolsPage() {
       setResultInfo({ pages: results.length, format: imgFormat.toUpperCase(), scale: `${imgScale}x` });
       setProgress(100);
       if (user) logToolUsage({ userId: user.uid, tool: "pdf-to-image", pageCount: results.length, totalSizeKB: pdfSizeKB });
-    } catch (err) { console.error(err); alert("Conversion failed: " + err.message); }
+    } catch (err) { console.error(err); alert("Export failed: " + err.message); }
     finally { setProcessing(false); }
   };
 
@@ -206,6 +255,13 @@ export default function PdfToolsPage() {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob); a.download = `${pdfName}-images.zip`; a.click();
     } catch { resultPages.forEach(({ dataUrl, pageNum }) => downloadImg(dataUrl, pageNum)); }
+  };
+
+  const downloadText = () => {
+    if (!resultText) return;
+    const blob = new Blob([resultText.fullText], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `${pdfName}-extracted.txt`; a.click();
   };
 
   /* ── WORD TO PDF ── */
@@ -299,9 +355,194 @@ export default function PdfToolsPage() {
     finally { setProcessing(false); }
   };
 
+  /* ── EDIT PAGES: reorder / delete / insert blank / merge ── */
+  const genPageThumbs = async (file, srcKey) => {
+    const buf = await file.arrayBuffer();
+    const doc = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const items = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const vp   = page.getViewport({ scale: 0.35 });
+      const canvas = document.createElement("canvas");
+      canvas.width = vp.width; canvas.height = vp.height;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      items.push({
+        uid: `${srcKey}-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        kind: "page",
+        srcKey,
+        srcPageIndex: i - 1,
+        thumb: canvas.toDataURL("image/jpeg", 0.7),
+        w: vp.width / 0.35,
+        h: vp.height / 0.35,
+      });
+    }
+    return items;
+  };
+
+  useEffect(() => {
+    if (tab === "editpages" && pdfFile && pdfReady && pageItems.length === 0 && !editBusy) {
+      (async () => {
+        setEditBusy(true);
+        try {
+          const items = await genPageThumbs(pdfFile, "main");
+          setPageItems(items);
+        } catch (err) { console.error(err); }
+        finally { setEditBusy(false); }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, pdfFile, pdfReady]);
+
+  const handleDragStart = (idx) => { dragIdx.current = idx; };
+  const handleDragOver  = (e) => e.preventDefault();
+  const handleDrop = (idx) => {
+    const from = dragIdx.current;
+    if (from === null || from === undefined || from === idx) return;
+    setPageItems((prev) => {
+      const arr = [...prev];
+      const [moved] = arr.splice(from, 1);
+      arr.splice(idx, 0, moved);
+      return arr;
+    });
+    dragIdx.current = null;
+  };
+
+  const removePageItem = (uid) => setPageItems((prev) => prev.filter((p) => p.uid !== uid));
+
+  const insertBlankPage = () => {
+    const ref = pageItems.find((p) => p.kind === "page");
+    const w = ref?.w || 595.28;
+    const h = ref?.h || 841.89;
+    const blank = { uid: `blank-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, kind: "blank", width: w, height: h };
+    setPageItems((prev) => [...prev, blank]);
+  };
+
+  const loadMergeFile = async (file) => {
+    if (!file || file.type !== "application/pdf") return;
+    setMergeBusy(true);
+    try {
+      setMergeFile(file);
+      setMergeName(file.name.replace(".pdf", ""));
+      const items = await genPageThumbs(file, "merge");
+      setPageItems((prev) => [...prev, ...items]);
+    } catch (err) { console.error(err); alert("Couldn't read that PDF: " + err.message); }
+    finally { setMergeBusy(false); }
+  };
+
+  const doEditApply = async () => {
+    if (!pdfFile || pageItems.length === 0) return;
+    setEditBusy(true);
+    try {
+      const { PDFDocument } = await import("pdf-lib");
+      const outDoc  = await PDFDocument.create();
+      const mainSrc = await PDFDocument.load(await pdfFile.arrayBuffer());
+      const mergeSrc = mergeFile ? await PDFDocument.load(await mergeFile.arrayBuffer()) : null;
+
+      for (const item of pageItems) {
+        if (item.kind === "blank") {
+          outDoc.addPage([item.width, item.height]);
+        } else {
+          const srcDoc = item.srcKey === "main" ? mainSrc : mergeSrc;
+          if (!srcDoc) continue;
+          const [copied] = await outDoc.copyPages(srcDoc, [item.srcPageIndex]);
+          outDoc.addPage(copied);
+        }
+      }
+
+      const bytes = await outDoc.save();
+      const blob  = new Blob([bytes], { type: "application/pdf" });
+      setEditResult({ url: URL.createObjectURL(blob), name: `${editOutName || "edited"}.pdf`, pages: pageItems.length, size: (blob.size/1024/1024).toFixed(2) });
+      if (user) logToolUsage({ userId: user.uid, tool: "pdf-edit-pages", pageCount: pageItems.length, totalSizeKB: Math.round(blob.size/1024) });
+    } catch (err) {
+      console.error(err);
+      alert("Edit failed: " + err.message + "\n\nMake sure the 'pdf-lib' package is installed (npm i pdf-lib).");
+    } finally { setEditBusy(false); }
+  };
+
+  /* ── IMAGE RESIZE ── */
+  const loadImages = (fileList) => {
+    const files = Array.from(fileList || []).filter((f) => f.type.startsWith("image/"));
+    files.forEach((file) => {
+      const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        setImgItems((prev) => [...prev, { uid, name: file.name.replace(/\.[^.]+$/, ""), srcUrl: url, origW: img.width, origH: img.height }]);
+      };
+      img.src = url;
+    });
+  };
+
+  const removeImgItem = (uid) => setImgItems((prev) => prev.filter((i) => i.uid !== uid));
+
+  const computeDims = (origW, origH) => {
+    if (imgResizeMode === "percent") {
+      const f = imgPercent / 100;
+      return { w: Math.max(1, Math.round(origW * f)), h: Math.max(1, Math.round(origH * f)) };
+    }
+    if (imgResizeMode === "maxdim") {
+      const max = Math.max(origW, origH);
+      if (imgNoUpscale && max <= imgMaxDim) return { w: origW, h: origH };
+      const scale = imgMaxDim / max;
+      return { w: Math.max(1, Math.round(origW * scale)), h: Math.max(1, Math.round(origH * scale)) };
+    }
+    // exact
+    if (imgLockAspect) {
+      const scale = imgWidth / origW;
+      return { w: Math.round(imgWidth), h: Math.max(1, Math.round(origH * scale)) };
+    }
+    return { w: Math.round(imgWidth), h: Math.round(imgHeight) };
+  };
+
+  const doResizeImages = async () => {
+    if (!imgItems.length) return;
+    setImgBusy(true);
+    try {
+      const results = [];
+      for (const item of imgItems) {
+        const { w, h } = computeDims(item.origW, item.origH);
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = item.srcUrl; });
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (imgOutFormat === "jpg") { ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); }
+        ctx.drawImage(img, 0, 0, w, h);
+        const mime = imgOutFormat === "jpg" ? "image/jpeg" : `image/${imgOutFormat}`;
+        const dataUrl = canvas.toDataURL(mime, imgOutFormat === "png" ? undefined : imgQuality);
+        results.push({ uid: item.uid, name: `${item.name}-resized.${imgOutFormat}`, dataUrl, w, h, sizeKB: Math.round((dataUrl.length * 0.75) / 1024) });
+      }
+      setImgResults(results);
+      if (user) logToolUsage({ userId: user.uid, tool: "image-resize", pageCount: results.length, totalSizeKB: results.reduce((a, r) => a + r.sizeKB, 0) });
+    } catch (err) { console.error(err); alert("Resize failed: " + err.message); }
+    finally { setImgBusy(false); }
+  };
+
+  const downloadImgResult = (r) => {
+    const a = document.createElement("a");
+    a.href = r.dataUrl; a.download = r.name; a.click();
+  };
+
+  const downloadAllImgZip = async () => {
+    if (!imgResults.length) return;
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip   = new JSZip();
+      imgResults.forEach((r) => zip.file(r.name, r.dataUrl.split(",")[1], { base64: true }));
+      const blob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = "resized-images.zip"; a.click();
+    } catch { imgResults.forEach(downloadImgResult); }
+  };
+
+  const resetImages = () => { setImgItems([]); setImgResults([]); };
+
   const resetAll = () => {
     setPdfFile(null); setPdfName(""); setPageCount(0); setPdfSizeKB(0);
-    setResultUrl(null); setResultPages([]); setResultInfo(null); setProgress(0);
+    setResultUrl(null); setResultPages([]); setResultInfo(null); setResultText(null); setProgress(0);
+    setPageItems([]); setEditResult(null); setMergeFile(null); setMergeName("");
   };
 
   return (
@@ -312,12 +553,20 @@ export default function PdfToolsPage() {
           <div className={styles.brandIcon}>📋</div>
           <span>PDF Tools</span>
         </div>
-        {pdfFile && tab !== "wordtopdf" && (
+
+        {pdfFile && (tab === "resize" || tab === "toimg" || tab === "editpages") && (
           <div className={styles.topStats}>
             <span className={styles.statChip}>📄 {pdfName}.pdf</span>
             {pageCount > 0 && <span className={styles.statChip}>{pageCount} pages</span>}
             <span className={styles.statChip}>{pdfSizeKB} KB</span>
             <button className={styles.clearBtn} onClick={resetAll}>✕ Clear</button>
+          </div>
+        )}
+
+        {tab === "imgresize" && imgItems.length > 0 && (
+          <div className={styles.topStats}>
+            <span className={styles.statChip}>🖌 {imgItems.length} image(s)</span>
+            <button className={styles.clearBtn} onClick={resetImages}>✕ Clear</button>
           </div>
         )}
       </div>
@@ -326,7 +575,9 @@ export default function PdfToolsPage() {
         {/* LEFT */}
         <aside className={styles.leftPanel}>
           <div className={styles.panelHeader}>
-            <span className={styles.panelTitle}>{tab === "wordtopdf" ? "Word File" : "PDF File"}</span>
+            <span className={styles.panelTitle}>
+              {tab === "wordtopdf" ? "Word File" : tab === "imgresize" ? "Images" : "PDF File"}
+            </span>
           </div>
 
           {/* Word to PDF upload */}
@@ -370,6 +621,66 @@ export default function PdfToolsPage() {
                   </div>
                   <a href={wordResult.url} download={wordResult.name} className={styles.downloadBtn}>↓ Download</a>
                 </div>
+              )}
+            </>
+          ) : tab === "imgresize" ? (
+            <>
+              <div
+                className={`${styles.dropZone} ${imgDrag2 ? styles.dropActive : ""} ${imgItems.length ? styles.dropHasFiles : ""}`}
+                onDragOver={(e) => { e.preventDefault(); setImgDrag2(true); }}
+                onDragLeave={() => setImgDrag2(false)}
+                onDrop={(e) => { e.preventDefault(); setImgDrag2(false); loadImages(e.dataTransfer.files); }}
+                onClick={() => imgFileRef.current?.click()}
+              >
+                <input ref={imgFileRef} type="file" accept="image/*" multiple hidden onChange={(e) => loadImages(e.target.files)} />
+                <div className={styles.dropContent}>
+                  <div className={styles.dropEmoji}>🖌</div>
+                  <p className={styles.dropText}>Drop images here</p>
+                  <span className={styles.dropSub}>or click to browse — multiple allowed</span>
+                  <span className={styles.dropFormats}>JPG · PNG · WEBP · GIF</span>
+                </div>
+              </div>
+
+              {imgItems.length > 0 && (
+                <div className={styles.imageGrid}>
+                  {imgItems.map((it) => (
+                    <div key={it.uid} className={styles.imgCard}>
+                      <img src={it.srcUrl} alt={it.name} className={styles.imgThumb} />
+                      <div className={styles.imgOverlay}>
+                        <span className={styles.imgNum}>{it.origW}×{it.origH}</span>
+                        <button className={styles.imgRemove} onClick={() => removeImgItem(it.uid)}>✕</button>
+                      </div>
+                      <div className={styles.imgLabel}>{it.name}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {imgResults.length > 0 && (
+                <>
+                  <div className={styles.resultBox}>
+                    <div className={styles.resultLeft}>
+                      <span className={styles.resultIcon}>✅</span>
+                      <div>
+                        <div className={styles.resultName}>{imgResults.length} image(s) resized</div>
+                        <div className={styles.resultMeta}>{imgOutFormat.toUpperCase()}</div>
+                      </div>
+                    </div>
+                    <button className={styles.downloadBtn} onClick={downloadAllImgZip}>↓ ZIP All</button>
+                  </div>
+                  <div className={styles.imgPreviewGrid}>
+                    {imgResults.map((r) => (
+                      <div key={r.uid} className={styles.imgPreviewCard}>
+                        <img src={r.dataUrl} alt={r.name} className={styles.imgPreviewThumb} />
+                        <div className={styles.imgPreviewInfo}>
+                          <span>{r.w}×{r.h}</span>
+                          <span>{r.sizeKB} KB</span>
+                          <button className={styles.imgDlBtn} onClick={() => downloadImgResult(r)}>↓</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </>
           ) : (
@@ -420,21 +731,34 @@ export default function PdfToolsPage() {
                 </div>
               )}
 
-              {/* To-image result */}
+              {/* Export result — image */}
               {tab === "toimg" && resultInfo && (
                 <div className={styles.resultBox}>
                   <div className={styles.resultLeft}>
-                    <span className={styles.resultIcon}>🖼</span>
+                    <span className={styles.resultIcon}>{resultText ? "📄" : "🖼"}</span>
                     <div>
-                      <div className={styles.resultName}>{resultInfo.pages} images exported</div>
-                      <div className={styles.resultMeta}>{resultInfo.format} · {resultInfo.scale}</div>
+                      <div className={styles.resultName}>
+                        {resultText ? `${resultInfo.pages} page(s) extracted` : `${resultInfo.pages} image(s) exported`}
+                      </div>
+                      <div className={styles.resultMeta}>
+                        {resultText ? "Plain text (.txt)" : `${resultInfo.format} · ${resultInfo.scale}`}
+                      </div>
                     </div>
                   </div>
-                  <button className={styles.downloadBtn} onClick={downloadAllZip}>↓ ZIP All</button>
+                  {resultText
+                    ? <button className={styles.downloadBtn} onClick={downloadText}>↓ Download .txt</button>
+                    : <button className={styles.downloadBtn} onClick={downloadAllZip}>↓ ZIP All</button>}
                 </div>
               )}
 
-              {tab === "toimg" && resultPages.length > 0 && (
+              {tab === "toimg" && resultText && (
+                <div className={styles.textPreview}>
+                  {resultText.fullText.slice(0, 4000)}
+                  {resultText.fullText.length > 4000 ? "\n\n… (preview truncated — full text is in the downloaded file)" : ""}
+                </div>
+              )}
+
+              {tab === "toimg" && !resultText && resultPages.length > 0 && (
                 <div className={styles.imgPreviewGrid}>
                   {resultPages.map(({ dataUrl, pageNum, w, h }) => (
                     <div key={pageNum} className={styles.imgPreviewCard}>
@@ -457,7 +781,7 @@ export default function PdfToolsPage() {
           <div className={styles.tabBar}>
             {TABS.map((t) => (
               <button key={t.id} className={`${styles.tabBtn} ${tab===t.id?styles.tabActive:""}`}
-                onClick={() => { setTab(t.id); setResultUrl(null); setResultPages([]); setResultInfo(null); }}>
+                onClick={() => { setTab(t.id); setResultUrl(null); setResultPages([]); setResultInfo(null); setResultText(null); }}>
                 <span>{t.icon}</span> {t.label}
               </button>
             ))}
@@ -526,25 +850,27 @@ export default function PdfToolsPage() {
                 {processing && <div className={styles.progressTrack}><div className={styles.progressFill} style={{ width:`${progress}%` }} /></div>}
               </>}
 
-              {/* PDF TO IMAGE */}
+              {/* EXPORT: PDF → IMAGE / TEXT */}
               {tab === "toimg" && <>
-                <h2 className={styles.sectionTitle}>🖼 PDF → Image</h2>
-                <p className={styles.sectionDesc}>Convert each page to a high-quality image file.</p>
+                <h2 className={styles.sectionTitle}>🖼 Export PDF</h2>
+                <p className={styles.sectionDesc}>Convert each page to an image, or pull out the raw text.</p>
 
                 <div className={styles.field}>
                   <label>Format</label>
                   <div className={styles.chipGroup}>
-                    {["png","jpg","webp"].map((f) => (
+                    {["png","jpg","webp","txt"].map((f) => (
                       <button key={f} className={`${styles.chip} ${imgFormat===f?styles.chipActive:""}`} onClick={() => setImgFormat(f)}>{f.toUpperCase()}</button>
                     ))}
                   </div>
                 </div>
 
-                <div className={styles.field}>
-                  <label>Resolution — <strong className={styles.valLabel}>{imgScale}× ({Math.round(72*imgScale)} DPI)</strong></label>
-                  <input type="range" min="1" max="4" step="0.5" value={imgScale} onChange={(e) => setImgScale(+e.target.value)} className={styles.slider} />
-                  <div className={styles.sliderLabels}><span>72 DPI (screen)</span><span>288 DPI (print)</span></div>
-                </div>
+                {imgFormat !== "txt" && (
+                  <div className={styles.field}>
+                    <label>Resolution — <strong className={styles.valLabel}>{imgScale}× ({Math.round(72*imgScale)} DPI)</strong></label>
+                    <input type="range" min="1" max="4" step="0.5" value={imgScale} onChange={(e) => setImgScale(+e.target.value)} className={styles.slider} />
+                    <div className={styles.sliderLabels}><span>72 DPI (screen)</span><span>288 DPI (print)</span></div>
+                  </div>
+                )}
 
                 <div className={styles.field}>
                   <label>Pages</label>
@@ -560,14 +886,180 @@ export default function PdfToolsPage() {
                 </div>
 
                 <div className={styles.infoBox}>
-                  <span>📦</span>
-                  <span>All images bundled as <strong>.zip</strong>. Individual download also available.</span>
+                  <span>{imgFormat === "txt" ? "📄" : "📦"}</span>
+                  <span>
+                    {imgFormat === "txt"
+                      ? "Text is pulled straight from the PDF's embedded content — scanned/image-only pages won't extract anything."
+                      : <>All images bundled as <strong>.zip</strong>. Individual download also available.</>}
+                  </span>
                 </div>
 
-                <button className={`${styles.actionBtn} ${processing?styles.actionBusy:""}`} onClick={doToImage} disabled={processing||!pdfFile||!pdfReady}>
-                  {processing ? <><span className={styles.spinner} /> Converting… {progress}%</> : <>🖼 Convert to Images {pageCount>0?`(${pageRange==="all"?pageCount:"custom"} pages)`:""}</>}
+                <button className={`${styles.actionBtn} ${processing?styles.actionBusy:""}`} onClick={doExport} disabled={processing||!pdfFile||!pdfReady}>
+                  {processing
+                    ? <><span className={styles.spinner} /> {imgFormat === "txt" ? "Extracting" : "Converting"}… {progress}%</>
+                    : imgFormat === "txt"
+                      ? <>📄 Extract Text {pageCount>0?`(${pageRange==="all"?pageCount:"custom"} pages)`:""}</>
+                      : <>🖼 Convert to Images {pageCount>0?`(${pageRange==="all"?pageCount:"custom"} pages)`:""}</>}
                 </button>
                 {processing && <div className={styles.progressTrack}><div className={styles.progressFill} style={{ width:`${progress}%` }} /></div>}
+              </>}
+
+              {/* EDIT PAGES */}
+              {tab === "editpages" && <>
+                <h2 className={styles.sectionTitle}>🗂 Edit Pages</h2>
+                <p className={styles.sectionDesc}>Drag to reorder, delete pages, insert blanks, or merge another PDF in.</p>
+
+                {!pdfFile && <p className={styles.noImageHint}>Upload a PDF on the left to start editing.</p>}
+
+                {pdfFile && (
+                  <>
+                    <div className={styles.field}>
+                      <label>Output File Name</label>
+                      <div className={styles.nameRow}>
+                        <input className={styles.textInput} type="text" value={editOutName} onChange={(e) => setEditOutName(e.target.value)} placeholder="edited" />
+                        <span className={styles.nameSuffix}>.pdf</span>
+                      </div>
+                    </div>
+
+                    <div className={styles.field}>
+                      <label>Merge Another PDF <span className={styles.optional}>(optional)</span></label>
+                      <div className={styles.chipGroup}>
+                        <button className={styles.chip} onClick={() => mergeFileRef.current?.click()} disabled={mergeBusy}>
+                          {mergeBusy ? "Loading…" : "+ Add PDF to merge"}
+                        </button>
+                        {mergeName && <span className={styles.presetChip}>{mergeName}.pdf</span>}
+                      </div>
+                      <input ref={mergeFileRef} type="file" accept="application/pdf" hidden onChange={(e) => loadMergeFile(e.target.files?.[0])} />
+                    </div>
+
+                    <div className={styles.chipGroup}>
+                      <button className={styles.chip} onClick={insertBlankPage} disabled={editBusy}>+ Insert Blank Page (at end)</button>
+                    </div>
+
+                    {editBusy && pageItems.length === 0 && <p className={styles.loadingNote}>⏳ Loading pages…</p>}
+
+                    {pageItems.length > 0 && (
+                      <div className={styles.field}>
+                        <label>Pages — {pageItems.length} total <span className={styles.optional}>drag cards to reorder</span></label>
+                        <div className={styles.imageGrid}>
+                          {pageItems.map((item, idx) => (
+                            <div
+                              key={item.uid}
+                              className={styles.imgCard}
+                              draggable
+                              onDragStart={() => handleDragStart(idx)}
+                              onDragOver={handleDragOver}
+                              onDrop={() => handleDrop(idx)}
+                              title="Drag to reorder"
+                            >
+                              {item.kind === "blank" ? (
+                                <div className={styles.blankPageCard}>+ Blank<br/>Page</div>
+                              ) : (
+                                <img src={item.thumb} alt={`Page ${idx+1}`} className={styles.imgThumb} />
+                              )}
+                              <div className={styles.imgOverlay}>
+                                <span className={styles.imgNum}>{idx + 1}</span>
+                                <button className={styles.imgRemove} onClick={() => removePageItem(item.uid)}>✕</button>
+                              </div>
+                              <div className={styles.imgLabel}>
+                                {item.kind === "blank" ? "Blank" : item.srcKey === "main" ? "Original" : "Merged"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <button className={`${styles.actionBtn} ${editBusy?styles.actionBusy:""}`} onClick={doEditApply} disabled={editBusy||!pageItems.length}>
+                      {editBusy ? <><span className={styles.spinner} /> Building…</> : <>🗂 Apply & Build PDF ({pageItems.length} pages)</>}
+                    </button>
+
+                    {editResult && (
+                      <div className={styles.resultBox}>
+                        <div className={styles.resultLeft}>
+                          <span className={styles.resultIcon}>✅</span>
+                          <div>
+                            <div className={styles.resultName}>{editResult.name}</div>
+                            <div className={styles.resultMeta}>{editResult.pages} pages · {editResult.size} MB</div>
+                          </div>
+                        </div>
+                        <a href={editResult.url} download={editResult.name} className={styles.downloadBtn}>↓ Download</a>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>}
+
+              {/* IMAGE RESIZE */}
+              {tab === "imgresize" && <>
+                <h2 className={styles.sectionTitle}>🖌 Image Resize &amp; Convert</h2>
+                <p className={styles.sectionDesc}>Batch resize images and export as PNG, JPG, or WEBP.</p>
+
+                <div className={styles.field}>
+                  <label>Resize Mode</label>
+                  <div className={styles.chipGroup}>
+                    {[["percent","Percentage"],["exact","Exact Size"],["maxdim","Max Dimension"]].map(([v,l]) => (
+                      <button key={v} className={`${styles.chip} ${imgResizeMode===v?styles.chipActive:""}`} onClick={() => setImgResizeMode(v)}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {imgResizeMode === "percent" && (
+                  <div className={styles.field}>
+                    <label>Scale — <strong className={styles.valLabel}>{imgPercent}%</strong></label>
+                    <input type="range" min="5" max="200" value={imgPercent} onChange={(e) => setImgPercent(+e.target.value)} className={styles.slider} />
+                    <div className={styles.sliderLabels}><span>5%</span><span>200%</span></div>
+                  </div>
+                )}
+
+                {imgResizeMode === "exact" && (
+                  <div className={styles.fieldRow}>
+                    <div className={styles.field}>
+                      <label>Width (px)</label>
+                      <input className={styles.textInput} type="number" value={imgWidth} onChange={(e) => setImgWidth(+e.target.value)} />
+                    </div>
+                    <div className={styles.fieldCenter}>
+                      <button className={`${styles.ratioBtn} ${imgLockAspect?styles.ratioBtnOn:""}`} onClick={() => setImgLockAspect(!imgLockAspect)} title="Lock aspect ratio">🔗</button>
+                    </div>
+                    <div className={styles.field}>
+                      <label>Height (px) {imgLockAspect && <span className={styles.optional}>(auto)</span>}</label>
+                      <input className={styles.textInput} type="number" value={imgHeight} onChange={(e) => setImgHeight(+e.target.value)} disabled={imgLockAspect} />
+                    </div>
+                  </div>
+                )}
+
+                {imgResizeMode === "maxdim" && (
+                  <>
+                    <div className={styles.field}>
+                      <label>Max Dimension (px)</label>
+                      <input className={styles.textInput} type="number" value={imgMaxDim} onChange={(e) => setImgMaxDim(+e.target.value)} />
+                    </div>
+                    <label className={styles.checkRow}>
+                      <input type="checkbox" checked={imgNoUpscale} onChange={(e) => setImgNoUpscale(e.target.checked)} />
+                      Don't upscale images already smaller than this
+                    </label>
+                  </>
+                )}
+
+                <div className={styles.field}>
+                  <label>Output Format</label>
+                  <div className={styles.formatGrid}>
+                    {["png","jpg","webp"].map((f) => (
+                      <button key={f} className={`${styles.formatChip} ${imgOutFormat===f?styles.formatActive:""}`} onClick={() => setImgOutFormat(f)}>{f.toUpperCase()}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {imgOutFormat !== "png" && (
+                  <div className={styles.field}>
+                    <label>Quality — <strong className={styles.valLabel}>{Math.round(imgQuality*100)}%</strong></label>
+                    <input type="range" min="0.3" max="1" step="0.05" value={imgQuality} onChange={(e) => setImgQuality(+e.target.value)} className={styles.slider} />
+                  </div>
+                )}
+
+                <button className={`${styles.actionBtn} ${imgBusy?styles.actionBusy:""}`} onClick={doResizeImages} disabled={imgBusy||!imgItems.length}>
+                  {imgBusy ? <><span className={styles.spinner} /> Resizing…</> : <>🖌 Resize {imgItems.length||""} Image{imgItems.length===1?"":"s"}</>}
+                </button>
               </>}
 
               {/* WORD TO PDF */}
