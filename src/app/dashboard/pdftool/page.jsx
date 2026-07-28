@@ -45,6 +45,7 @@ export default function PdfToolsPage() {
   const fileRef  = useRef();
   const wordRef  = useRef();
   const mergeFileRef = useRef();
+  const mergeImgFileRef = useRef();
   const imgFileRef   = useRef();
   const dragIdx  = useRef(null);
 
@@ -89,6 +90,7 @@ export default function PdfToolsPage() {
   const [mergeFile,   setMergeFile  ] = useState(null);
   const [mergeName,   setMergeName  ] = useState("");
   const [mergeBusy,   setMergeBusy  ] = useState(false);
+  const [mergeImgBusy, setMergeImgBusy] = useState(false);
 
   // image resize
   const [imgItems,      setImgItems     ] = useState([]); // {uid,name,srcUrl,origW,origH}
@@ -431,6 +433,48 @@ export default function PdfToolsPage() {
     finally { setMergeBusy(false); }
   };
 
+  // Add one or more images as standalone pages, mixed into the same reorderable grid as PDF pages
+  const loadImagesIntoEdit = async (fileList) => {
+    const files = Array.from(fileList || []).filter((f) => f.type.startsWith("image/"));
+    if (!files.length) return;
+    setMergeImgBusy(true);
+    try {
+      const items = [];
+      for (const file of files) {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+        items.push({
+          uid: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          kind: "image",
+          file,
+          thumb: url,
+          w: img.naturalWidth,
+          h: img.naturalHeight,
+          name: file.name,
+        });
+      }
+      setPageItems((prev) => [...prev, ...items]);
+    } catch (err) { console.error(err); alert("Couldn't load one of those images: " + err.message); }
+    finally { setMergeImgBusy(false); }
+  };
+
+  // pdf-lib only embeds PNG/JPEG natively — normalize anything else (webp, gif, bmp…) to PNG via canvas
+  const imageFileToPngBytes = async (file) => {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const dataUrl = canvas.toDataURL("image/png");
+      const res = await fetch(dataUrl);
+      return await res.arrayBuffer();
+    } finally { URL.revokeObjectURL(url); }
+  };
+
   const doEditApply = async () => {
     if (!pdfFile || pageItems.length === 0) return;
     setEditBusy(true);
@@ -440,9 +484,26 @@ export default function PdfToolsPage() {
       const mainSrc = await PDFDocument.load(await pdfFile.arrayBuffer());
       const mergeSrc = mergeFile ? await PDFDocument.load(await mergeFile.arrayBuffer()) : null;
 
+      const PX_TO_PT = 0.75; // treat inserted images as ~96dpi so pages come out a sane physical size
+
       for (const item of pageItems) {
         if (item.kind === "blank") {
           outDoc.addPage([item.width, item.height]);
+        } else if (item.kind === "image") {
+          const mime = item.file.type;
+          let embedded;
+          if (mime === "image/png") {
+            embedded = await outDoc.embedPng(await item.file.arrayBuffer());
+          } else if (mime === "image/jpeg" || mime === "image/jpg") {
+            embedded = await outDoc.embedJpg(await item.file.arrayBuffer());
+          } else {
+            // webp, gif, bmp, etc. — normalize to PNG first
+            embedded = await outDoc.embedPng(await imageFileToPngBytes(item.file));
+          }
+          const pageW = embedded.width * PX_TO_PT;
+          const pageH = embedded.height * PX_TO_PT;
+          const page  = outDoc.addPage([pageW, pageH]);
+          page.drawImage(embedded, { x: 0, y: 0, width: pageW, height: pageH });
         } else {
           const srcDoc = item.srcKey === "main" ? mainSrc : mergeSrc;
           if (!srcDoc) continue;
@@ -907,7 +968,7 @@ export default function PdfToolsPage() {
               {/* EDIT PAGES */}
               {tab === "editpages" && <>
                 <h2 className={styles.sectionTitle}>🗂 Edit Pages</h2>
-                <p className={styles.sectionDesc}>Drag to reorder, delete pages, insert blanks, or merge another PDF in.</p>
+                <p className={styles.sectionDesc}>Drag to reorder, delete pages, insert blanks, add images, or merge another PDF in — all in one grid.</p>
 
                 {!pdfFile && <p className={styles.noImageHint}>Upload a PDF on the left to start editing.</p>}
 
@@ -930,6 +991,17 @@ export default function PdfToolsPage() {
                         {mergeName && <span className={styles.presetChip}>{mergeName}.pdf</span>}
                       </div>
                       <input ref={mergeFileRef} type="file" accept="application/pdf" hidden onChange={(e) => loadMergeFile(e.target.files?.[0])} />
+                    </div>
+
+                    <div className={styles.field}>
+                      <label>Insert Images <span className={styles.optional}>(optional — JPG, PNG, WEBP, GIF…)</span></label>
+                      <div className={styles.chipGroup}>
+                        <button className={styles.chip} onClick={() => mergeImgFileRef.current?.click()} disabled={mergeImgBusy}>
+                          {mergeImgBusy ? "Loading…" : "+ Add Images"}
+                        </button>
+                      </div>
+                      <input ref={mergeImgFileRef} type="file" accept="image/*" multiple hidden onChange={(e) => loadImagesIntoEdit(e.target.files)} />
+                      <p className={styles.hint}>Each image becomes its own page — drag it into position in the grid below.</p>
                     </div>
 
                     <div className={styles.chipGroup}>
@@ -962,7 +1034,7 @@ export default function PdfToolsPage() {
                                 <button className={styles.imgRemove} onClick={() => removePageItem(item.uid)}>✕</button>
                               </div>
                               <div className={styles.imgLabel}>
-                                {item.kind === "blank" ? "Blank" : item.srcKey === "main" ? "Original" : "Merged"}
+                                {item.kind === "blank" ? "Blank" : item.kind === "image" ? `🖼 ${item.name}` : item.srcKey === "main" ? "Original" : "Merged"}
                               </div>
                             </div>
                           ))}
