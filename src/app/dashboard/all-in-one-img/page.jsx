@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { logToolUsage } from "@/lib/firestore";
 
 // ─── PRESETS ──────────────────────────────────────────────────────────────────
 const PRESETS = [
@@ -545,6 +546,18 @@ export default function GovtFormPhotoTool() {
       });
       setProgress(100); setProgLbl("Done!");
       setTimeout(() => { setProcessing(false); setProgress(0); }, 700);
+      
+      //logToolUsage Code
+     if (user?.uid) {
+        await logToolUsage({
+          userId: user.uid,
+          tool: "all-in-one-img",
+          inputSizeKB: Math.round(imgData.kb),
+          outputSizeKB: Math.round(kb),
+          format: outFmt,
+          dimensions: `${reqW}x${reqH}`,
+        });
+      }
     } catch (e) {
       setProcErr(e?.message || "Something went wrong while processing that image. Please try a different file.");
       setProcessing(false); setProgress(0);
