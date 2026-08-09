@@ -26,7 +26,7 @@ function generateId() {
 }
 
 function makeTrackPayload(title, url, videoId) {
-  return { id: generateId(), title, url, videoId, addedAt: new Date().toISOString() };
+  return { id: generateId(), title, url, videoId, lyrics: '', addedAt: new Date().toISOString() };
 }
 
 function formatTime(sec) {
@@ -45,7 +45,7 @@ function getPlaylistCoverUrl(playlist) {
    Sub-components
 ───────────────────────────────────────────── */
 
-/** Single track row — handles own edit mode inline, supports drag-reorder + pin */
+/** Single track row — inline edit, drag-reorder, pin, lyrics */
 function TrackRow({
   track,
   index,
@@ -59,6 +59,7 @@ function TrackRow({
   onEjectToQuick,
   onEdit,
   onDelete,
+  onOpenLyrics,
   totalTracks,
   draggable,
   onDragStartRow,
@@ -141,6 +142,11 @@ function TrackRow({
               {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
+          <button
+            className={`${styles.iconBtn} ${track.lyrics ? styles.iconBtnHighlight : ''}`}
+            title="Lyrics"
+            onClick={onOpenLyrics}
+          >📝</button>
           {canEdit && !isQuickSong && (
             <button className={styles.iconBtn} title="Eject to Quick Songs" onClick={onEjectToQuick}>📤</button>
           )}
@@ -233,6 +239,43 @@ function ConfirmDialog({ state, onCancel }) {
   );
 }
 
+/** Lyrics modal — view or edit lyrics for a track */
+function LyricsModal({ state, onClose, onSave, onDraftChange }) {
+  if (!state?.open) return null;
+  return (
+    <div className={styles.overlay} onClick={onClose}>
+      <div className={styles.lyricsModal} onClick={e => e.stopPropagation()}>
+        <div className={styles.lyricsHeader}>
+          <h3 className={styles.modalTitle}>📝 {state.title}</h3>
+          <button className={styles.closeX} onClick={onClose}>✕</button>
+        </div>
+
+        {state.canEdit ? (
+          <textarea
+            className={styles.lyricsTextarea}
+            value={state.draft}
+            placeholder="Paste or type the lyrics here…"
+            onChange={e => onDraftChange(e.target.value)}
+          />
+        ) : (
+          <div className={styles.lyricsView}>
+            {state.draft
+              ? state.draft.split('\n').map((line, i) => <p key={i}>{line || '\u00A0'}</p>)
+              : <p className={styles.empty}>No lyrics added yet.</p>}
+          </div>
+        )}
+
+        {state.canEdit && (
+          <div className={styles.modalActions}>
+            <button className={styles.cancelBtn} onClick={onClose}>Cancel</button>
+            <button className={styles.confirmBtn} onClick={onSave}>Save Lyrics</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────
    Main Page
 ───────────────────────────────────────────── */
@@ -273,9 +316,10 @@ export default function MusicHubPage() {
   // UI
   const [activeTab, setActiveTab] = useState('quick');
   const [searchQ, setSearchQ] = useState('');
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(true);
   const [toasts, setToasts] = useState([]);
   const [confirmState, setConfirmState] = useState(null);
+  const [lyricsState, setLyricsState] = useState(null);
   const toastTimers = useRef({});
 
   // Add-track form
@@ -554,6 +598,48 @@ export default function MusicHubPage() {
     return t.title.toLowerCase().includes(searchQ.toLowerCase());
   }
 
+  /* ── Lyrics ── */
+  function openLyricsFor(track, target, canEditFlag) {
+    setLyricsState({
+      open: true,
+      title: track.title,
+      draft: track.lyrics || '',
+      canEdit: canEditFlag,
+      target,
+    });
+  }
+
+  async function saveLyrics() {
+    if (!lyricsState?.target) return;
+    const { target, draft } = lyricsState;
+    if (target.type === 'quick') {
+      setQuickSongs(qs => qs.map(s => (s.id === target.id ? { ...s, lyrics: draft } : s)));
+      try {
+        await updateDoc(doc(db, `users/${uid}/quicksongs`, target.id), { lyrics: draft });
+        addToast('Lyrics saved.');
+      } catch (err) {
+        console.error(err);
+        addToast('Could not save lyrics.', 'error');
+        fetchData();
+      }
+    } else {
+      const p = allPlaylists.find(pl => pl.id === target.playlistId);
+      if (!p) return;
+      const tracks = [...p.tracks];
+      tracks[target.index] = { ...tracks[target.index], lyrics: draft };
+      updateLocalPlaylistTracks(target.playlistId, tracks);
+      try {
+        await updateDoc(doc(db, 'playlists', target.playlistId), { tracks });
+        addToast('Lyrics saved.');
+      } catch (err) {
+        console.error(err);
+        addToast('Could not save lyrics.', 'error');
+        fetchData();
+      }
+    }
+    setLyricsState(null);
+  }
+
   /* ── Playlist CRUD ── */
   async function createPlaylist() {
     const name = createForm.name.trim();
@@ -642,7 +728,7 @@ export default function MusicHubPage() {
         const docRef = await addDoc(collection(db, `users/${uid}/quicksongs`), {
           ...makeTrackPayload(title, url, videoId), pinned: false, createdAt: serverTimestamp(),
         });
-        setQuickSongs(qs => [{ id: docRef.id, title, url, videoId, pinned: false, addedAt: new Date().toISOString() }, ...qs]);
+        setQuickSongs(qs => [{ id: docRef.id, title, url, videoId, lyrics: '', pinned: false, addedAt: new Date().toISOString() }, ...qs]);
       } else {
         const target = allPlaylists.find(p => p.id === trackForm.targetPlaylist);
         if (!target) { addToast('Playlist not found.', 'error'); return; }
@@ -668,7 +754,7 @@ export default function MusicHubPage() {
     if (!playlistId) return;
     const target = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
     if (!target) return;
-    const newTrack = { id: song.id, title: song.title, url: song.url, videoId: song.videoId, addedAt: song.addedAt || new Date().toISOString() };
+    const newTrack = { id: song.id, title: song.title, url: song.url, videoId: song.videoId, lyrics: song.lyrics || '', addedAt: song.addedAt || new Date().toISOString() };
     const tracks = [...(target.tracks || []), newTrack];
     updateLocalPlaylistTracks(playlistId, tracks);
     setQuickSongs(qs => qs.filter(s => s.id !== song.id));
@@ -692,10 +778,10 @@ export default function MusicHubPage() {
     const tracks = target.tracks.filter((_, i) => i !== index);
     updateLocalPlaylistTracks(playlistId, tracks);
     const tempId = generateId();
-    setQuickSongs(qs => [{ id: tempId, title: track.title, url: track.url, videoId: track.videoId, pinned: false, addedAt: new Date().toISOString() }, ...qs]);
+    setQuickSongs(qs => [{ id: tempId, title: track.title, url: track.url, videoId: track.videoId, lyrics: track.lyrics || '', pinned: false, addedAt: new Date().toISOString() }, ...qs]);
     try {
       const docRef = await addDoc(collection(db, `users/${uid}/quicksongs`), {
-        title: track.title, url: track.url, videoId: track.videoId, pinned: false,
+        title: track.title, url: track.url, videoId: track.videoId, lyrics: track.lyrics || '', pinned: false,
         addedAt: new Date().toISOString(), createdAt: serverTimestamp(),
       });
       setQuickSongs(qs => qs.map(s => (s.id === tempId ? { ...s, id: docRef.id } : s)));
@@ -931,6 +1017,7 @@ export default function MusicHubPage() {
             onEjectToQuick={() => ejectTrackToQuick(playlist.id, idx)}
             onEdit={updated => editPlaylistTrack(playlist.id, idx, updated)}
             onDelete={() => deletePlaylistTrack(playlist.id, idx)}
+            onOpenLyrics={() => openLyricsFor(t, { type: 'playlist', playlistId: playlist.id, index: idx }, canEdit)}
           />
         ))}
       </div>
@@ -951,6 +1038,12 @@ export default function MusicHubPage() {
     <div className={styles.page} data-theme={isDark ? 'dark' : ''}>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <ConfirmDialog state={confirmState} onCancel={() => setConfirmState(null)} />
+      <LyricsModal
+        state={lyricsState}
+        onClose={() => setLyricsState(null)}
+        onSave={saveLyrics}
+        onDraftChange={v => setLyricsState(s => ({ ...s, draft: v }))}
+      />
 
       {/* TOP BAR */}
       <div className={styles.topBar}>
@@ -1058,6 +1151,7 @@ export default function MusicHubPage() {
                         onEdit={({ title }) => editQuickSong(s.id, title)}
                         onDelete={() => deleteQuickSong(s.id)}
                         onMoveQuickToPlaylist={playlistId => moveQuickSongToPlaylist(s, playlistId)}
+                        onOpenLyrics={() => openLyricsFor(s, { type: 'quick', id: s.id }, true)}
                       />
                     ))}
                   </div>
