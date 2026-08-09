@@ -1,3 +1,4 @@
+// app/musichub/page.js
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -20,15 +21,31 @@ function extractVideoId(url) {
   return match?.[2]?.length === 11 ? match[2] : null;
 }
 
+function generateId() {
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
 function makeTrackPayload(title, url, videoId) {
-  return { title, url, videoId, addedAt: new Date().toISOString() };
+  return { id: generateId(), title, url, videoId, addedAt: new Date().toISOString() };
+}
+
+function formatTime(sec) {
+  if (!sec || !isFinite(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function getPlaylistCoverUrl(playlist) {
+  const firstWithVideo = playlist.tracks?.find(t => t.videoId);
+  return firstWithVideo ? `https://img.youtube.com/vi/${firstWithVideo.videoId}/mqdefault.jpg` : null;
 }
 
 /* ─────────────────────────────────────────────
    Sub-components
 ───────────────────────────────────────────── */
 
-/** Single track row — handles own edit mode inline */
+/** Single track row — handles own edit mode inline, supports drag-reorder + pin */
 function TrackRow({
   track,
   index,
@@ -43,14 +60,20 @@ function TrackRow({
   onEdit,
   onDelete,
   totalTracks,
+  draggable,
+  onDragStartRow,
+  onDropRow,
   // quick-song-only props
   isQuickSong,
   quickSongId,
   playlists,
   onMoveQuickToPlaylist,
+  pinned,
+  onTogglePin,
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ title: track.title, url: track.url || '' });
+  const [dragOver, setDragOver] = useState(false);
 
   function handleSave() {
     const vid = extractVideoId(form.url);
@@ -61,9 +84,23 @@ function TrackRow({
   }
 
   return (
-    <div className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ''}`}>
+    <div
+      className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ''} ${dragOver ? styles.trackRowDragOver : ''}`}
+      draggable={draggable && !editing}
+      onDragStart={() => onDragStartRow?.(index)}
+      onDragOver={e => { if (draggable) { e.preventDefault(); setDragOver(true); } }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={() => { setDragOver(false); onDropRow?.(index); }}
+    >
       <div className={styles.trackLeft}>
         {!isQuickSong && <span className={styles.trackNum}>{String(index + 1).padStart(2, '0')}</span>}
+        {isQuickSong && (
+          <button
+            className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
+            onClick={onTogglePin}
+            title={pinned ? 'Unpin' : 'Pin to top'}
+          >📌</button>
+        )}
         <button className={styles.playBtn} onClick={onPlay} title="Play">▶</button>
 
         {editing ? (
@@ -112,8 +149,9 @@ function TrackRow({
           )}
           {canEdit && !isQuickSong && (
             <>
-              <button className={styles.iconBtn} onClick={onMoveUp}  disabled={index === 0}>▲</button>
-              <button className={styles.iconBtn} onClick={onMoveDown} disabled={index === totalTracks - 1}>▼</button>
+              <button className={styles.iconBtn} onClick={onMoveUp} disabled={index === 0} title="Move up">▲</button>
+              <button className={styles.iconBtn} onClick={onMoveDown} disabled={index === totalTracks - 1} title="Move down">▼</button>
+              <span className={styles.dragHandle} title="Drag to reorder">⠿</span>
             </>
           )}
           <button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={onDelete}>✕</button>
@@ -124,7 +162,7 @@ function TrackRow({
 }
 
 /** Comment feed + input for a playlist */
-function CommentFeed({ playlist, currentUser, onPost }) {
+function CommentFeed({ playlist, onPost }) {
   const [text, setText] = useState('');
 
   function handlePost() {
@@ -158,6 +196,43 @@ function CommentFeed({ playlist, currentUser, onPost }) {
   );
 }
 
+/** Toast stack */
+function ToastStack({ toasts, onDismiss }) {
+  if (!toasts.length) return null;
+  return (
+    <div className={styles.toastStack}>
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          className={`${styles.toast} ${t.type === 'error' ? styles.toastError : styles.toastSuccess}`}
+          onClick={() => onDismiss(t.id)}
+        >
+          <span>{t.type === 'error' ? '⚠️' : '✓'}</span>
+          <span>{t.message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Custom confirm dialog — replaces window.confirm */
+function ConfirmDialog({ state, onCancel }) {
+  if (!state?.open) return null;
+  return (
+    <div className={styles.overlay} onClick={onCancel}>
+      <div className={styles.confirmModal} onClick={e => e.stopPropagation()}>
+        <p className={styles.confirmMessage}>{state.message}</p>
+        <div className={styles.modalActions}>
+          <button className={styles.cancelBtn} onClick={onCancel}>Cancel</button>
+          <button className={`${styles.confirmBtn} ${styles.confirmBtnDanger}`} onClick={state.onConfirm}>
+            {state.confirmLabel || 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────
    Main Page
 ───────────────────────────────────────────── */
@@ -181,12 +256,27 @@ export default function MusicHubPage() {
   const [nowPlayingTitle, setNowPlayingTitle] = useState('');
   const [queuePlaylist, setQueuePlaylist] = useState(null);
   const [queueIndex, setQueueIndex] = useState(-1);
-  const iframeRef = useRef(null);
+  const [ytReady, setYtReady] = useState(false);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState('off'); // off | all | one
+  const [playerStatus, setPlayerStatus] = useState({
+    isPlaying: false, currentTime: 0, duration: 0, volume: 80, muted: false,
+  });
+  const playerRef = useRef(null);
+  const progressTimerRef = useRef(null);
+  const shuffleRef = useRef(false);
+  const repeatModeRef = useRef('off');
+  const queuePlaylistRef = useRef(null);
+  const queueIndexRef = useRef(-1);
+  const dragFromRef = useRef(null);
 
   // UI
   const [activeTab, setActiveTab] = useState('quick');
   const [searchQ, setSearchQ] = useState('');
   const [isDark, setIsDark] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [confirmState, setConfirmState] = useState(null);
+  const toastTimers = useRef({});
 
   // Add-track form
   const [trackForm, setTrackForm] = useState({ title: '', url: '', targetPlaylist: 'quick' });
@@ -201,6 +291,30 @@ export default function MusicHubPage() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareTarget, setShareTarget] = useState(null);
   const [shareForm, setShareForm] = useState({ email: '', permission: 'view' });
+
+  /* ── Toasts ── */
+  const addToast = useCallback((message, type = 'success') => {
+    const id = generateId();
+    setToasts(t => [...t, { id, message, type }]);
+    toastTimers.current[id] = setTimeout(() => {
+      setToasts(t => t.filter(x => x.id !== id));
+      delete toastTimers.current[id];
+    }, 3200);
+  }, []);
+  const dismissToast = useCallback(id => {
+    setToasts(t => t.filter(x => x.id !== id));
+    if (toastTimers.current[id]) { clearTimeout(toastTimers.current[id]); delete toastTimers.current[id]; }
+  }, []);
+
+  /* ── Confirm dialog ── */
+  function askConfirm(message, onConfirm, confirmLabel) {
+    setConfirmState({
+      open: true,
+      message,
+      confirmLabel,
+      onConfirm: () => { onConfirm(); setConfirmState(null); },
+    });
+  }
 
   /* ── Auth ── */
   useEffect(() => {
@@ -232,150 +346,319 @@ export default function MusicHubPage() {
       setAllUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== uid));
     } catch (err) {
       console.error('[MusicHub] fetch error:', err);
+      addToast('Could not load your data. Retrying may help.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [uid, currentUser]);
+  }, [uid, currentUser, addToast]);
 
   useEffect(() => {
     if (uid && currentUser?.email) fetchData();
   }, [uid, currentUser, fetchData]);
 
-  /* ── Auto-advance queue ── */
-  const playNext = useCallback(() => {
-    if (!queuePlaylist || queueIndex < 0) return;
-    const next = queueIndex + 1;
-    if (queuePlaylist.tracks?.[next]) {
-      const t = queuePlaylist.tracks[next];
-      setQueueIndex(next);
-      setActiveVideoId(t.videoId);
-      setNowPlayingTitle(t.title);
-    } else {
-      setQueuePlaylist(null);
-      setQueueIndex(-1);
-    }
-  }, [queuePlaylist, queueIndex]);
+  /* ── Keep refs in sync (avoid stale closures inside YT event callbacks) ── */
+  useEffect(() => { shuffleRef.current = shuffle; }, [shuffle]);
+  useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+  useEffect(() => { queuePlaylistRef.current = queuePlaylist; }, [queuePlaylist]);
+  useEffect(() => { queueIndexRef.current = queueIndex; }, [queueIndex]);
 
+  /* ── Local state helpers (optimistic updates — no full refetch) ── */
+  function updateLocalPlaylistTracks(playlistId, tracks) {
+    setPlaylists(ps => ps.map(p => (p.id === playlistId ? { ...p, tracks } : p)));
+    setSharedPlaylists(ps => ps.map(p => (p.id === playlistId ? { ...p, tracks } : p)));
+  }
+  function updateLocalPlaylist(playlistId, updater) {
+    setPlaylists(ps => ps.map(p => (p.id === playlistId ? updater(p) : p)));
+    setSharedPlaylists(ps => ps.map(p => (p.id === playlistId ? updater(p) : p)));
+  }
+
+  /* ── Load YouTube IFrame API once ── */
   useEffect(() => {
-    const handler = e => {
-      if (e.origin !== 'https://www.youtube.com' && e.origin !== 'https://www.youtube-nocookie.com') return;
-      try {
-        const data = JSON.parse(e.data);
-        if (data.event === 'infoDelivery' && data.info?.playerState === 0) playNext();
-      } catch (_) {}
+    if (window.YT && window.YT.Player) { setYtReady(true); return; }
+    if (!document.getElementById('yt-iframe-api')) {
+      const tag = document.createElement('script');
+      tag.id = 'yt-iframe-api';
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.body.appendChild(tag);
+    }
+    const prevCb = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      setYtReady(true);
+      if (typeof prevCb === 'function') prevCb();
     };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, [playNext]);
+  }, []);
 
-  /* ── Play ── */
+  /* ── Progress timer ── */
+  function startProgressTimer() {
+    stopProgressTimer();
+    progressTimerRef.current = setInterval(() => {
+      const p = playerRef.current;
+      if (!p || typeof p.getCurrentTime !== 'function') return;
+      setPlayerStatus(s => ({ ...s, currentTime: p.getCurrentTime() || 0, duration: p.getDuration() || 0 }));
+    }, 500);
+  }
+  function stopProgressTimer() {
+    if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+  }
+  useEffect(() => () => stopProgressTimer(), []);
+
+  /* ── Track-ended logic (repeat / shuffle / auto-advance) ── */
+  function handleTrackEnded() {
+    stopProgressTimer();
+    if (repeatModeRef.current === 'one') {
+      playerRef.current?.seekTo(0);
+      playerRef.current?.playVideo();
+      return;
+    }
+    const pl = queuePlaylistRef.current;
+    const idx = queueIndexRef.current;
+    if (!pl || idx < 0 || !pl.tracks?.length) return;
+    let nextIdx;
+    if (shuffleRef.current && pl.tracks.length > 1) {
+      do { nextIdx = Math.floor(Math.random() * pl.tracks.length); } while (nextIdx === idx);
+    } else {
+      nextIdx = idx + 1;
+      if (nextIdx >= pl.tracks.length) {
+        if (repeatModeRef.current === 'all') nextIdx = 0;
+        else { setQueuePlaylist(null); setQueueIndex(-1); return; }
+      }
+    }
+    const t = pl.tracks[nextIdx];
+    if (!t) return;
+    setQueueIndex(nextIdx);
+    setActiveVideoId(t.videoId);
+    setNowPlayingTitle(t.title);
+  }
+
+  function handlePlayerStateChange(e) {
+    const state = e.data;
+    setPlayerStatus(s => ({ ...s, isPlaying: state === window.YT.PlayerState.PLAYING }));
+    if (state === window.YT.PlayerState.PLAYING) startProgressTimer();
+    if (state === window.YT.PlayerState.PAUSED) stopProgressTimer();
+    if (state === window.YT.PlayerState.ENDED) handleTrackEnded();
+  }
+
+  /* ── Create / update the YT player when the active video changes ── */
+  useEffect(() => {
+    if (!ytReady || !activeVideoId) return;
+    if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
+      playerRef.current.loadVideoById(activeVideoId);
+      return;
+    }
+    playerRef.current = new window.YT.Player('yt-player-mount', {
+      videoId: activeVideoId,
+      playerVars: { autoplay: 1, modestbranding: 1, rel: 0, playsinline: 1 },
+      events: {
+        onReady: e => { e.target.setVolume(playerStatus.volume); e.target.playVideo(); },
+        onStateChange: handlePlayerStateChange,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ytReady, activeVideoId]);
+
+  /* ── Spacebar play/pause shortcut ── */
+  useEffect(() => {
+    function handleKey(e) {
+      const tag = document.activeElement?.tagName;
+      if (e.code === 'Space' && tag !== 'INPUT' && tag !== 'TEXTAREA' && activeVideoId) {
+        e.preventDefault();
+        togglePlayPause();
+      }
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerStatus.isPlaying, activeVideoId]);
+
+  /* ── Player controls ── */
   function play(url, title, playlist = null, index = -1) {
     const vid = extractVideoId(url);
-    if (!vid) return alert('Could not parse a YouTube video ID from that URL.');
+    if (!vid) return addToast('Could not parse a YouTube video ID from that URL.', 'error');
     setActiveVideoId(vid);
     setNowPlayingTitle(title);
     setQueuePlaylist(playlist);
     setQueueIndex(index);
   }
 
+  function togglePlayPause() {
+    if (!playerRef.current) return;
+    if (playerStatus.isPlaying) playerRef.current.pauseVideo();
+    else playerRef.current.playVideo();
+  }
+
+  function playNextManual() {
+    const pl = queuePlaylistRef.current;
+    const idx = queueIndexRef.current;
+    if (!pl?.tracks?.length) return;
+    let nextIdx;
+    if (shuffleRef.current && pl.tracks.length > 1) {
+      do { nextIdx = Math.floor(Math.random() * pl.tracks.length); } while (nextIdx === idx);
+    } else {
+      nextIdx = Math.min(idx + 1, pl.tracks.length - 1);
+    }
+    const t = pl.tracks[nextIdx];
+    if (!t) return;
+    setQueueIndex(nextIdx);
+    setActiveVideoId(t.videoId);
+    setNowPlayingTitle(t.title);
+  }
+
+  function playPrevManual() {
+    const pl = queuePlaylistRef.current;
+    const idx = queueIndexRef.current;
+    if (!pl?.tracks?.length) return;
+    const prevIdx = Math.max(idx - 1, 0);
+    const t = pl.tracks[prevIdx];
+    if (!t) return;
+    setQueueIndex(prevIdx);
+    setActiveVideoId(t.videoId);
+    setNowPlayingTitle(t.title);
+  }
+
+  function handleSeek(e) {
+    if (!playerRef.current || !playerStatus.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    playerRef.current.seekTo(pct * playerStatus.duration, true);
+  }
+
+  function handleVolumeChange(e) {
+    const v = Number(e.target.value);
+    setPlayerStatus(s => ({ ...s, volume: v, muted: v === 0 }));
+    playerRef.current?.setVolume(v);
+    if (v === 0) playerRef.current?.mute();
+    else playerRef.current?.unMute();
+  }
+
+  function toggleMute() {
+    if (!playerRef.current) return;
+    if (playerStatus.muted) { playerRef.current.unMute(); setPlayerStatus(s => ({ ...s, muted: false })); }
+    else { playerRef.current.mute(); setPlayerStatus(s => ({ ...s, muted: true })); }
+  }
+
   /* ── Computed ── */
   const allPlaylists = useMemo(() => [...playlists, ...sharedPlaylists], [playlists, sharedPlaylists]);
 
+  const sortedQuickSongs = useMemo(() => {
+    const arr = [...quickSongs];
+    arr.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    return arr;
+  }, [quickSongs]);
+
   const filteredQuickSongs = useMemo(
-    () => quickSongs.filter(s => s.title.toLowerCase().includes(searchQ.toLowerCase())),
-    [quickSongs, searchQ]
+    () => sortedQuickSongs.filter(s => s.title.toLowerCase().includes(searchQ.toLowerCase())),
+    [sortedQuickSongs, searchQ]
   );
+
+  function trackMatches(t) {
+    return t.title.toLowerCase().includes(searchQ.toLowerCase());
+  }
 
   /* ── Playlist CRUD ── */
   async function createPlaylist() {
-    if (!createForm.name.trim()) return alert('Playlist name is required.');
+    const name = createForm.name.trim();
+    if (!name) return addToast('Playlist name is required.', 'error');
     setSaving(true);
     try {
-      await addDoc(collection(db, 'playlists'), {
-        name: createForm.name.trim(),
-        desc: createForm.desc.trim(),
-        ownerId: uid,
-        ownerName: currentUser.displayName,
-        ownerEmail: currentUser.email,
-        tracks: [],
-        sharedWith: [],
-        sharedWithEmails: [],
-        comments: [],
+      const desc = createForm.desc.trim();
+      const docRef = await addDoc(collection(db, 'playlists'), {
+        name, desc, ownerId: uid,
+        ownerName: currentUser.displayName, ownerEmail: currentUser.email,
+        tracks: [], sharedWith: [], sharedWithEmails: [], comments: [],
         createdAt: serverTimestamp(),
       });
-      await fetchData();
+      setPlaylists(ps => [{
+        id: docRef.id, name, desc, ownerId: uid,
+        ownerName: currentUser.displayName, ownerEmail: currentUser.email,
+        tracks: [], sharedWith: [], sharedWithEmails: [], comments: [],
+      }, ...ps]);
       setShowCreateModal(false);
       setCreateForm({ name: '', desc: '' });
+      addToast('Playlist created.');
     } catch (err) {
       console.error(err);
+      addToast('Could not create playlist.', 'error');
     } finally {
       setSaving(false);
     }
   }
 
   async function savePlaylistMeta(id) {
-    if (!playlistEditForm.name.trim()) return alert('Playlist name cannot be empty.');
+    const name = playlistEditForm.name.trim();
+    if (!name) return addToast('Playlist name cannot be empty.', 'error');
+    const desc = playlistEditForm.desc.trim();
+    updateLocalPlaylist(id, p => ({ ...p, name, desc }));
+    setEditingPlaylistId(null);
     try {
-      await updateDoc(doc(db, 'playlists', id), {
-        name: playlistEditForm.name.trim(),
-        desc: playlistEditForm.desc.trim(),
-      });
-      setEditingPlaylistId(null);
-      await fetchData();
+      await updateDoc(doc(db, 'playlists', id), { name, desc });
     } catch (err) {
       console.error(err);
+      addToast('Could not save changes.', 'error');
+      fetchData();
     }
   }
 
-  async function deletePlaylist(id) {
-    if (!confirm('Delete this playlist permanently?')) return;
-    try {
-      await deleteDoc(doc(db, 'playlists', id));
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-    }
+  function deletePlaylist(id) {
+    askConfirm('Delete this playlist permanently? This cannot be undone.', async () => {
+      const snapshot = playlists;
+      setPlaylists(ps => ps.filter(p => p.id !== id));
+      try {
+        await deleteDoc(doc(db, 'playlists', id));
+        addToast('Playlist deleted.');
+      } catch (err) {
+        console.error(err);
+        setPlaylists(snapshot);
+        addToast('Could not delete playlist.', 'error');
+      }
+    });
   }
 
-  async function leaveSharedPlaylist(playlist) {
-    if (!confirm('Remove yourself from this shared playlist?')) return;
-    try {
-      await updateDoc(doc(db, 'playlists', playlist.id), {
-        sharedWith: (playlist.sharedWith || []).filter(u => u.email !== currentUser.email),
-        sharedWithEmails: (playlist.sharedWithEmails || []).filter(e => e !== currentUser.email),
-      });
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-    }
+  function leaveSharedPlaylist(playlist) {
+    askConfirm('Remove yourself from this shared playlist?', async () => {
+      setSharedPlaylists(ps => ps.filter(p => p.id !== playlist.id));
+      try {
+        await updateDoc(doc(db, 'playlists', playlist.id), {
+          sharedWith: (playlist.sharedWith || []).filter(u => u.email !== currentUser.email),
+          sharedWithEmails: (playlist.sharedWithEmails || []).filter(e => e !== currentUser.email),
+        });
+      } catch (err) {
+        console.error(err);
+        addToast('Could not leave playlist.', 'error');
+        fetchData();
+      }
+    });
   }
 
   /* ── Track CRUD ── */
   async function addTrack() {
-    if (!trackForm.title.trim() || !trackForm.url.trim()) return alert('Title and URL are both required.');
-    const videoId = extractVideoId(trackForm.url);
-    if (!videoId) return alert('Invalid YouTube URL — no video ID found.');
+    const title = trackForm.title.trim();
+    const url = trackForm.url.trim();
+    if (!title || !url) return addToast('Title and URL are both required.', 'error');
+    const videoId = extractVideoId(url);
+    if (!videoId) return addToast('Invalid YouTube URL — no video ID found.', 'error');
     setSaving(true);
     try {
       if (trackForm.targetPlaylist === 'quick') {
-        await addDoc(collection(db, `users/${uid}/quicksongs`), {
-          ...makeTrackPayload(trackForm.title.trim(), trackForm.url.trim(), videoId),
-          createdAt: serverTimestamp(),
+        const docRef = await addDoc(collection(db, `users/${uid}/quicksongs`), {
+          ...makeTrackPayload(title, url, videoId), pinned: false, createdAt: serverTimestamp(),
         });
+        setQuickSongs(qs => [{ id: docRef.id, title, url, videoId, pinned: false, addedAt: new Date().toISOString() }, ...qs]);
       } else {
         const target = allPlaylists.find(p => p.id === trackForm.targetPlaylist);
-        if (!target) { alert('Playlist not found.'); return; }
+        if (!target) { addToast('Playlist not found.', 'error'); return; }
         const isOwner = target.ownerId === uid;
         const canEdit = isOwner || target.sharedWith?.find(s => s.email === currentUser.email)?.permission === 'edit';
-        if (!canEdit) { alert('You don\'t have permission to add tracks to this playlist.'); return; }
-        await updateDoc(doc(db, 'playlists', target.id), {
-          tracks: [...(target.tracks || []), makeTrackPayload(trackForm.title.trim(), trackForm.url.trim(), videoId)],
-        });
+        if (!canEdit) { addToast("You don't have permission to add tracks to this playlist.", 'error'); return; }
+        const tracks = [...(target.tracks || []), makeTrackPayload(title, url, videoId)];
+        updateLocalPlaylistTracks(target.id, tracks);
+        await updateDoc(doc(db, 'playlists', target.id), { tracks });
       }
-      await fetchData();
       setTrackForm({ title: '', url: '', targetPlaylist: 'quick' });
+      addToast('Track added.');
     } catch (err) {
       console.error(err);
+      addToast('Could not add track.', 'error');
+      fetchData();
     } finally {
       setSaving(false);
     }
@@ -385,16 +668,20 @@ export default function MusicHubPage() {
     if (!playlistId) return;
     const target = playlists.find(p => p.id === playlistId) || sharedPlaylists.find(p => p.id === playlistId);
     if (!target) return;
+    const newTrack = { id: song.id, title: song.title, url: song.url, videoId: song.videoId, addedAt: song.addedAt || new Date().toISOString() };
+    const tracks = [...(target.tracks || []), newTrack];
+    updateLocalPlaylistTracks(playlistId, tracks);
+    setQuickSongs(qs => qs.filter(s => s.id !== song.id));
     try {
       await Promise.all([
-        updateDoc(doc(db, 'playlists', playlistId), {
-          tracks: [...(target.tracks || []), makeTrackPayload(song.title, song.url, song.videoId)],
-        }),
+        updateDoc(doc(db, 'playlists', playlistId), { tracks }),
         deleteDoc(doc(db, `users/${uid}/quicksongs`, song.id)),
       ]);
-      await fetchData();
+      addToast('Moved to playlist.');
     } catch (err) {
       console.error(err);
+      addToast('Could not move track.', 'error');
+      fetchData();
     }
   }
 
@@ -402,19 +689,22 @@ export default function MusicHubPage() {
     const target = allPlaylists.find(p => p.id === playlistId);
     if (!target) return;
     const track = target.tracks[index];
+    const tracks = target.tracks.filter((_, i) => i !== index);
+    updateLocalPlaylistTracks(playlistId, tracks);
+    const tempId = generateId();
+    setQuickSongs(qs => [{ id: tempId, title: track.title, url: track.url, videoId: track.videoId, pinned: false, addedAt: new Date().toISOString() }, ...qs]);
     try {
-      await Promise.all([
-        addDoc(collection(db, `users/${uid}/quicksongs`), {
-          ...makeTrackPayload(track.title, track.url, track.videoId),
-          createdAt: serverTimestamp(),
-        }),
-        updateDoc(doc(db, 'playlists', playlistId), {
-          tracks: target.tracks.filter((_, i) => i !== index),
-        }),
-      ]);
-      await fetchData();
+      const docRef = await addDoc(collection(db, `users/${uid}/quicksongs`), {
+        title: track.title, url: track.url, videoId: track.videoId, pinned: false,
+        addedAt: new Date().toISOString(), createdAt: serverTimestamp(),
+      });
+      setQuickSongs(qs => qs.map(s => (s.id === tempId ? { ...s, id: docRef.id } : s)));
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks });
+      addToast('Moved to Quick Songs.');
     } catch (err) {
       console.error(err);
+      addToast('Could not eject track.', 'error');
+      fetchData();
     }
   }
 
@@ -423,46 +713,30 @@ export default function MusicHubPage() {
     if (!target) return;
     const tracks = [...target.tracks];
     tracks[index] = { ...tracks[index], ...updated };
+    updateLocalPlaylistTracks(playlistId, tracks);
     try {
       await updateDoc(doc(db, 'playlists', playlistId), { tracks });
-      await fetchData();
     } catch (err) {
       console.error(err);
+      addToast('Could not save track.', 'error');
+      fetchData();
     }
   }
 
-  async function deletePlaylistTrack(playlistId, index) {
-    if (!confirm('Remove this track from the playlist?')) return;
-    const target = allPlaylists.find(p => p.id === playlistId);
-    if (!target) return;
-    try {
-      await updateDoc(doc(db, 'playlists', playlistId), {
-        tracks: target.tracks.filter((_, i) => i !== index),
-      });
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function editQuickSong(id, title) {
-    if (!title.trim()) return;
-    try {
-      await updateDoc(doc(db, `users/${uid}/quicksongs`, id), { title: title.trim() });
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function deleteQuickSong(id) {
-    if (!confirm('Delete this track?')) return;
-    try {
-      await deleteDoc(doc(db, `users/${uid}/quicksongs`, id));
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-    }
+  function deletePlaylistTrack(playlistId, index) {
+    askConfirm('Remove this track from the playlist?', async () => {
+      const target = allPlaylists.find(p => p.id === playlistId);
+      if (!target) return;
+      const tracks = target.tracks.filter((_, i) => i !== index);
+      updateLocalPlaylistTracks(playlistId, tracks);
+      try {
+        await updateDoc(doc(db, 'playlists', playlistId), { tracks });
+      } catch (err) {
+        console.error(err);
+        addToast('Could not remove track.', 'error');
+        fetchData();
+      }
+    });
   }
 
   async function reorderTrack(playlistId, index, direction) {
@@ -472,91 +746,175 @@ export default function MusicHubPage() {
     const swapIdx = direction === 'up' ? index - 1 : index + 1;
     if (swapIdx < 0 || swapIdx >= tracks.length) return;
     [tracks[index], tracks[swapIdx]] = [tracks[swapIdx], tracks[index]];
+    updateLocalPlaylistTracks(playlistId, tracks);
     try {
       await updateDoc(doc(db, 'playlists', playlistId), { tracks });
-      await fetchData();
     } catch (err) {
       console.error(err);
+      addToast('Could not reorder tracks.', 'error');
+      fetchData();
+    }
+  }
+
+  function handleDragStartRow(index) {
+    dragFromRef.current = index;
+  }
+  async function handleDropRow(playlistId, toIndex) {
+    const fromIndex = dragFromRef.current;
+    dragFromRef.current = null;
+    if (fromIndex === null || fromIndex === undefined || fromIndex === toIndex) return;
+    const target = allPlaylists.find(p => p.id === playlistId);
+    if (!target?.tracks) return;
+    const tracks = [...target.tracks];
+    const [moved] = tracks.splice(fromIndex, 1);
+    tracks.splice(toIndex, 0, moved);
+    updateLocalPlaylistTracks(playlistId, tracks);
+    try {
+      await updateDoc(doc(db, 'playlists', playlistId), { tracks });
+    } catch (err) {
+      console.error(err);
+      addToast('Could not reorder tracks.', 'error');
+      fetchData();
+    }
+  }
+
+  async function editQuickSong(id, title) {
+    const t = title.trim();
+    if (!t) return;
+    setQuickSongs(qs => qs.map(s => (s.id === id ? { ...s, title: t } : s)));
+    try {
+      await updateDoc(doc(db, `users/${uid}/quicksongs`, id), { title: t });
+    } catch (err) {
+      console.error(err);
+      addToast('Could not rename track.', 'error');
+      fetchData();
+    }
+  }
+
+  function deleteQuickSong(id) {
+    askConfirm('Delete this track?', async () => {
+      setQuickSongs(qs => qs.filter(s => s.id !== id));
+      try {
+        await deleteDoc(doc(db, `users/${uid}/quicksongs`, id));
+      } catch (err) {
+        console.error(err);
+        addToast('Could not delete track.', 'error');
+        fetchData();
+      }
+    });
+  }
+
+  async function togglePinQuickSong(id, pinned) {
+    setQuickSongs(qs => qs.map(s => (s.id === id ? { ...s, pinned: !pinned } : s)));
+    try {
+      await updateDoc(doc(db, `users/${uid}/quicksongs`, id), { pinned: !pinned });
+    } catch (err) {
+      console.error(err);
+      addToast('Could not update pin.', 'error');
+      fetchData();
     }
   }
 
   /* ── Sharing ── */
   async function sharePlaylist() {
-    if (!shareForm.email) return alert('Select a user to share with.');
-    if (shareTarget.sharedWithEmails?.includes(shareForm.email)) return alert('This user already has access.');
+    if (!shareForm.email) return addToast('Select a user to share with.', 'error');
+    if (shareTarget.sharedWithEmails?.includes(shareForm.email)) return addToast('This user already has access.', 'error');
     setSaving(true);
+    const targetUser = allUsers.find(u => u.email === shareForm.email);
+    const entry = { email: shareForm.email, name: targetUser?.displayName || targetUser?.name || 'Workspace member', permission: shareForm.permission };
+    const playlistId = shareTarget.id;
+    const prevSharedWith = shareTarget.sharedWith || [];
+    const prevSharedWithEmails = shareTarget.sharedWithEmails || [];
+    updateLocalPlaylist(playlistId, p => ({
+      ...p,
+      sharedWith: [...(p.sharedWith || []), entry],
+      sharedWithEmails: [...(p.sharedWithEmails || []), shareForm.email],
+    }));
     try {
-      const targetUser = allUsers.find(u => u.email === shareForm.email);
-      const entry = {
-        email: shareForm.email,
-        name: targetUser?.displayName || targetUser?.name || 'Workspace member',
-        permission: shareForm.permission,
-      };
-      await updateDoc(doc(db, 'playlists', shareTarget.id), {
-        sharedWith: [...(shareTarget.sharedWith || []), entry],
-        sharedWithEmails: [...(shareTarget.sharedWithEmails || []), shareForm.email],
+      await updateDoc(doc(db, 'playlists', playlistId), {
+        sharedWith: [...prevSharedWith, entry],
+        sharedWithEmails: [...prevSharedWithEmails, shareForm.email],
       });
-      await fetchData();
       setShowShareModal(false);
       setShareForm({ email: '', permission: 'view' });
+      addToast('Playlist shared.');
     } catch (err) {
       console.error(err);
+      addToast('Could not share playlist.', 'error');
+      fetchData();
     } finally {
       setSaving(false);
     }
   }
 
   async function changePermission(playlist, email, permission) {
+    updateLocalPlaylist(playlist.id, p => ({
+      ...p, sharedWith: p.sharedWith.map(s => (s.email === email ? { ...s, permission } : s)),
+    }));
     try {
       await updateDoc(doc(db, 'playlists', playlist.id), {
-        sharedWith: playlist.sharedWith.map(s => s.email === email ? { ...s, permission } : s),
+        sharedWith: playlist.sharedWith.map(s => (s.email === email ? { ...s, permission } : s)),
       });
-      await fetchData();
     } catch (err) {
       console.error(err);
+      addToast('Could not update permission.', 'error');
+      fetchData();
     }
   }
 
-  async function revokeAccess(playlist, email) {
-    if (!confirm('Revoke access for this user?')) return;
-    try {
-      await updateDoc(doc(db, 'playlists', playlist.id), {
-        sharedWith: playlist.sharedWith.filter(s => s.email !== email),
-        sharedWithEmails: playlist.sharedWithEmails.filter(e => e !== email),
-      });
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-    }
+  function revokeAccess(playlist, email) {
+    askConfirm('Revoke access for this user?', async () => {
+      updateLocalPlaylist(playlist.id, p => ({
+        ...p,
+        sharedWith: p.sharedWith.filter(s => s.email !== email),
+        sharedWithEmails: p.sharedWithEmails.filter(e => e !== email),
+      }));
+      try {
+        await updateDoc(doc(db, 'playlists', playlist.id), {
+          sharedWith: playlist.sharedWith.filter(s => s.email !== email),
+          sharedWithEmails: playlist.sharedWithEmails.filter(e => e !== email),
+        });
+      } catch (err) {
+        console.error(err);
+        addToast('Could not revoke access.', 'error');
+        fetchData();
+      }
+    });
   }
 
   /* ── Comments ── */
   async function postComment(playlistId, text) {
     const target = allPlaylists.find(p => p.id === playlistId);
     if (!target) return;
+    const comment = { authorName: currentUser.displayName, authorEmail: currentUser.email, text, timestamp: new Date().toISOString() };
+    updateLocalPlaylist(playlistId, p => ({ ...p, comments: [...(p.comments || []), comment] }));
     try {
-      await updateDoc(doc(db, 'playlists', playlistId), {
-        comments: [...(target.comments || []), {
-          authorName: currentUser.displayName,
-          authorEmail: currentUser.email,
-          text,
-          timestamp: new Date().toISOString(),
-        }],
-      });
-      await fetchData();
+      await updateDoc(doc(db, 'playlists', playlistId), { comments: [...(target.comments || []), comment] });
     } catch (err) {
       console.error(err);
+      addToast('Could not post comment.', 'error');
+      fetchData();
     }
   }
 
   /* ── Render helpers ── */
   function renderPlaylistTracks(playlist, canEdit, isOwner) {
-    if (!playlist.tracks?.length) return <p className={styles.empty}>No tracks yet — add one above.</p>;
+    const entries = (playlist.tracks || [])
+      .map((t, idx) => ({ t, idx }))
+      .filter(({ t }) => !searchQ.trim() || trackMatches(t));
+
+    if (!entries.length) {
+      return (
+        <p className={styles.empty}>
+          {searchQ.trim() ? 'No matching tracks.' : 'No tracks yet — add one above.'}
+        </p>
+      );
+    }
     return (
       <div className={styles.trackList}>
-        {playlist.tracks.map((t, idx) => (
+        {entries.map(({ t, idx }) => (
           <TrackRow
-            key={idx}
+            key={t.id || idx}
             track={t}
             index={idx}
             playlistId={playlist.id}
@@ -564,6 +922,9 @@ export default function MusicHubPage() {
             canEdit={canEdit}
             isOwner={isOwner}
             totalTracks={playlist.tracks.length}
+            draggable={canEdit}
+            onDragStartRow={handleDragStartRow}
+            onDropRow={i => handleDropRow(playlist.id, i)}
             onPlay={() => play(t.url, t.title, playlist, idx)}
             onMoveUp={() => reorderTrack(playlist.id, idx, 'up')}
             onMoveDown={() => reorderTrack(playlist.id, idx, 'down')}
@@ -588,6 +949,8 @@ export default function MusicHubPage() {
 
   return (
     <div className={styles.page} data-theme={isDark ? 'dark' : ''}>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <ConfirmDialog state={confirmState} onCancel={() => setConfirmState(null)} />
 
       {/* TOP BAR */}
       <div className={styles.topBar}>
@@ -674,7 +1037,7 @@ export default function MusicHubPage() {
             <div className={styles.viewCard}>
               <p className={styles.sectionLabel}>Quick Songs — no playlist</p>
               {filteredQuickSongs.length === 0
-                ? <p className={styles.empty}>No quick songs yet. Add one above.</p>
+                ? <p className={styles.empty}>{searchQ.trim() ? 'No matching tracks.' : 'No quick songs yet. Add one above.'}</p>
                 : (
                   <div className={styles.trackList}>
                     {filteredQuickSongs.map(s => (
@@ -689,6 +1052,8 @@ export default function MusicHubPage() {
                         quickSongId={s.id}
                         playlists={playlists}
                         totalTracks={1}
+                        pinned={!!s.pinned}
+                        onTogglePin={() => togglePinQuickSong(s.id, s.pinned)}
                         onPlay={() => play(s.url, s.title)}
                         onEdit={({ title }) => editQuickSong(s.id, title)}
                         onDelete={() => deleteQuickSong(s.id)}
@@ -706,73 +1071,80 @@ export default function MusicHubPage() {
             <div className={styles.playlistGrid}>
               {playlists.length === 0
                 ? <p className={styles.empty}>You haven't created any playlists yet.</p>
-                : playlists.map(p => (
-                  <div key={p.id} className={styles.playlistCard}>
-                    <div className={styles.playlistHeader}>
-                      <div className={styles.playlistHeaderLeft}>
-                        {editingPlaylistId === p.id ? (
-                          <div className={styles.metaEditStack}>
-                            <input
-                              className={styles.input}
-                              value={playlistEditForm.name}
-                              placeholder="Playlist name"
-                              onChange={e => setPlaylistEditForm(f => ({ ...f, name: e.target.value }))}
-                            />
-                            <input
-                              className={styles.input}
-                              value={playlistEditForm.desc}
-                              placeholder="Description (optional)"
-                              onChange={e => setPlaylistEditForm(f => ({ ...f, desc: e.target.value }))}
-                            />
-                            <div className={styles.metaEditActions}>
-                              <button className={styles.metaSaveBtn} onClick={() => savePlaylistMeta(p.id)}>Save</button>
-                              <button className={styles.metaCancelBtn} onClick={() => setEditingPlaylistId(null)}>Cancel</button>
+                : playlists.map(p => {
+                  const coverUrl = getPlaylistCoverUrl(p);
+                  return (
+                    <div key={p.id} className={styles.playlistCard}>
+                      <div className={styles.playlistHeader}>
+                        <div className={styles.playlistHeaderLeft}>
+                          {editingPlaylistId === p.id ? (
+                            <div className={styles.metaEditStack}>
+                              <input
+                                className={styles.input}
+                                value={playlistEditForm.name}
+                                placeholder="Playlist name"
+                                onChange={e => setPlaylistEditForm(f => ({ ...f, name: e.target.value }))}
+                              />
+                              <input
+                                className={styles.input}
+                                value={playlistEditForm.desc}
+                                placeholder="Description (optional)"
+                                onChange={e => setPlaylistEditForm(f => ({ ...f, desc: e.target.value }))}
+                              />
+                              <div className={styles.metaEditActions}>
+                                <button className={styles.metaSaveBtn} onClick={() => savePlaylistMeta(p.id)}>Save</button>
+                                <button className={styles.metaCancelBtn} onClick={() => setEditingPlaylistId(null)}>Cancel</button>
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <>
-                            <h4 className={styles.playlistName}>
-                              📁 {p.name}
-                              <button
-                                className={styles.editNameBtn}
-                                onClick={() => { setEditingPlaylistId(p.id); setPlaylistEditForm({ name: p.name, desc: p.desc || '' }); }}
-                              >✏️ Edit</button>
-                            </h4>
-                            <p className={styles.playlistDesc}>{p.desc || 'No description.'}</p>
-                          </>
-                        )}
+                          ) : (
+                            <div className={styles.playlistTitleRow}>
+                              {coverUrl
+                                ? <img src={coverUrl} alt="" className={styles.playlistCover} />
+                                : <div className={styles.playlistCoverFallback}>📁</div>}
+                              <div>
+                                <h4 className={styles.playlistName}>
+                                  {p.name}
+                                  <button
+                                    className={styles.editNameBtn}
+                                    onClick={() => { setEditingPlaylistId(p.id); setPlaylistEditForm({ name: p.name, desc: p.desc || '' }); }}
+                                  >✏️ Edit</button>
+                                </h4>
+                                <p className={styles.playlistDesc}>{p.desc || 'No description.'}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className={styles.playlistHeaderRight}>
+                          <button className={styles.shareBtn} onClick={() => { setShareTarget(p); setShowShareModal(true); }}>🌐 Share</button>
+                          <button className={styles.deleteBtn} onClick={() => deletePlaylist(p.id)}>🗑️ Delete</button>
+                        </div>
                       </div>
-                      <div className={styles.playlistHeaderRight}>
-                        <button className={styles.shareBtn} onClick={() => { setShareTarget(p); setShowShareModal(true); }}>🌐 Share</button>
-                        <button className={styles.deleteBtn} onClick={() => deletePlaylist(p.id)}>🗑️ Delete</button>
-                      </div>
+
+                      {p.sharedWith?.length > 0 && (
+                        <div className={styles.sharedUsersRow}>
+                          <span className={styles.sharedLabel}>Shared with</span>
+                          {p.sharedWith.map((u, i) => (
+                            <div key={i} className={styles.userChip}>
+                              <span className={styles.userName}>👤 {u.name}</span>
+                              <select
+                                className={styles.permSelect}
+                                value={u.permission}
+                                onChange={e => changePermission(p, u.email, e.target.value)}
+                              >
+                                <option value="view">View</option>
+                                <option value="edit">Edit</option>
+                              </select>
+                              <button className={styles.revokeBtn} onClick={() => revokeAccess(p, u.email)}>✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {renderPlaylistTracks(p, true, true)}
+                      <CommentFeed playlist={p} onPost={postComment} />
                     </div>
-
-                    {/* shared users */}
-                    {p.sharedWith?.length > 0 && (
-                      <div className={styles.sharedUsersRow}>
-                        <span className={styles.sharedLabel}>Shared with</span>
-                        {p.sharedWith.map((u, i) => (
-                          <div key={i} className={styles.userChip}>
-                            <span className={styles.userName}>👤 {u.name}</span>
-                            <select
-                              className={styles.permSelect}
-                              value={u.permission}
-                              onChange={e => changePermission(p, u.email, e.target.value)}
-                            >
-                              <option value="view">View</option>
-                              <option value="edit">Edit</option>
-                            </select>
-                            <button className={styles.revokeBtn} onClick={() => revokeAccess(p, u.email)}>✕</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {renderPlaylistTracks(p, true, true)}
-                    <CommentFeed playlist={p} currentUser={currentUser} onPost={postComment} />
-                  </div>
-                ))
+                  );
+                })
               }
             </div>
           )}
@@ -785,12 +1157,18 @@ export default function MusicHubPage() {
                 : sharedPlaylists.map(p => {
                   const myRole = p.sharedWith?.find(s => s.email === currentUser.email);
                   const canEdit = myRole?.permission === 'edit';
+                  const coverUrl = getPlaylistCoverUrl(p);
                   return (
                     <div key={p.id} className={styles.playlistCardShared}>
                       <div className={styles.playlistHeader}>
-                        <div>
-                          <h4 className={styles.playlistName}>🌐 {p.name}</h4>
-                          <p className={styles.playlistDesc}>by {p.ownerName} ({p.ownerEmail})</p>
+                        <div className={styles.playlistTitleRow}>
+                          {coverUrl
+                            ? <img src={coverUrl} alt="" className={styles.playlistCover} />
+                            : <div className={styles.playlistCoverFallback}>🌐</div>}
+                          <div>
+                            <h4 className={styles.playlistName}>{p.name}</h4>
+                            <p className={styles.playlistDesc}>by {p.ownerName} ({p.ownerEmail})</p>
+                          </div>
                         </div>
                         <div className={styles.playlistHeaderRight}>
                           <span className={styles.roleBadge}>{myRole?.permission?.toUpperCase()}</span>
@@ -798,7 +1176,7 @@ export default function MusicHubPage() {
                         </div>
                       </div>
                       {renderPlaylistTracks(p, canEdit, false)}
-                      <CommentFeed playlist={p} currentUser={currentUser} onPost={postComment} />
+                      <CommentFeed playlist={p} onPost={postComment} />
                     </div>
                   );
                 })
@@ -811,34 +1189,76 @@ export default function MusicHubPage() {
         <div className={styles.sidebar}>
           <div className={styles.player}>
             <h3 className={styles.cardTitle}>Now Playing</h3>
-            {activeVideoId ? (
-              <div className={styles.playerInner}>
-                <div className={styles.videoWrap}>
-                  <iframe
-                    ref={iframeRef}
-                    className={styles.iframe}
-                    src={`https://www.youtube.com/embed/${activeVideoId}?enablejsapi=1&autoplay=1&modestbranding=1&rel=0`}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title={nowPlayingTitle}
-                  />
-                </div>
-                <div className={styles.nowPlaying}>
-                  <p className={styles.nowPlayingLabel}>▶ Now playing</p>
-                  <p className={styles.nowPlayingTitle}>{nowPlayingTitle}</p>
-                  {queuePlaylist && (
-                    <span className={styles.queueInfo}>
-                      Track {queueIndex + 1} of {queuePlaylist.tracks?.length} · {queuePlaylist.name}
-                    </span>
-                  )}
-                </div>
+            <div className={styles.playerInner}>
+              <div className={styles.videoWrap}>
+                <div id="yt-player-mount" className={styles.ytMount}></div>
+                {!activeVideoId && (
+                  <div className={styles.playerIdleOverlay}>
+                    <div className={styles.playerIdleIcon}>🎵</div>
+                    <p>Select a track to play</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className={styles.playerIdle}>
-                <div className={styles.playerIdleIcon}>🎵</div>
-                <p>Select a track to play</p>
-              </div>
-            )}
+
+              {activeVideoId && (
+                <>
+                  <div className={styles.nowPlaying}>
+                    <p className={styles.nowPlayingLabel}>▶ Now playing</p>
+                    <p className={styles.nowPlayingTitle}>{nowPlayingTitle}</p>
+                    {queuePlaylist && (
+                      <span className={styles.queueInfo}>
+                        Track {queueIndex + 1} of {queuePlaylist.tracks?.length} · {queuePlaylist.name}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className={styles.playerControls}>
+                    <div className={styles.progressRow} onClick={handleSeek}>
+                      <div className={styles.progressBar}>
+                        <div
+                          className={styles.progressFill}
+                          style={{ width: `${playerStatus.duration ? (playerStatus.currentTime / playerStatus.duration) * 100 : 0}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className={styles.timeRow}>
+                      <span>{formatTime(playerStatus.currentTime)}</span>
+                      <span>{formatTime(playerStatus.duration)}</span>
+                    </div>
+                    <div className={styles.controlsRow}>
+                      <button
+                        className={`${styles.ctrlBtn} ${shuffle ? styles.ctrlBtnActive : ''}`}
+                        onClick={() => setShuffle(s => !s)}
+                        title="Shuffle"
+                      >🔀</button>
+                      <button className={styles.ctrlBtn} onClick={playPrevManual} title="Previous">⏮</button>
+                      <button className={styles.playPauseBtn} onClick={togglePlayPause} title={playerStatus.isPlaying ? 'Pause' : 'Play'}>
+                        {playerStatus.isPlaying ? '⏸' : '▶'}
+                      </button>
+                      <button className={styles.ctrlBtn} onClick={playNextManual} title="Next">⏭</button>
+                      <button
+                        className={`${styles.ctrlBtn} ${repeatMode !== 'off' ? styles.ctrlBtnActive : ''}`}
+                        onClick={() => setRepeatMode(m => (m === 'off' ? 'all' : m === 'all' ? 'one' : 'off'))}
+                        title={`Repeat: ${repeatMode}`}
+                      >{repeatMode === 'one' ? '🔂' : '🔁'}</button>
+                    </div>
+                    <div className={styles.volumeRow}>
+                      <button className={styles.ctrlBtn} onClick={toggleMute}>
+                        {playerStatus.muted || playerStatus.volume === 0 ? '🔇' : '🔊'}
+                      </button>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={playerStatus.muted ? 0 : playerStatus.volume}
+                        onChange={handleVolumeChange}
+                        className={styles.volumeSlider}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
