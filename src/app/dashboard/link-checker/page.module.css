@@ -452,3 +452,5 @@
   .infoRow { flex-direction: column; gap: 3px; }
   .infoValue { text-align: left; }
 }
+
+.tagSafe { background: var(--green-soft); color: var(--green); }
