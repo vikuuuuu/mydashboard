@@ -1,0 +1,52 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 0.6fr 1fr 1fr 0.8fr 1.2fr;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface, #f7f8fb);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-family: "DM Mono", monospace;
+}
+
+.mode {
+  text-transform: capitalize;
+  font-weight: 700;
+  color: var(--accent, #4361ee);
+}
+
+.wpm {
+  font-weight: 700;
+}
+
+.date {
+  color: #888;
+  text-align: right;
+}
+
+.loadMore {
+  margin-top: 16px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--accent, #4361ee);
+  background: transparent;
+  color: var(--accent, #4361ee);
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 4px;
+  }
+  .date {
+    text-align: left;
+  }
+}
