@@ -1,0 +1,102 @@
+/* VirtualKeyboard.module.css
+   Uses your existing global tokens: --bg, --surface, --accent, --radius
+   Falls back to sane defaults if a token isn't defined on this page. */
+
+.keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  background: var(--surface, #f4f5f9);
+  border-radius: var(--radius, 12px);
+  font-family: "DM Mono", monospace;
+  user-select: none;
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+}
+
+.key {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #222;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.08s ease, border-color 0.12s ease;
+}
+
+[data-theme="dark"] .key {
+  background: #1c1d24;
+  color: #eee;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.key:hover {
+  border-color: var(--accent, #4361ee);
+}
+
+.controlKey {
+  font-size: 0.7rem;
+  color: #777;
+}
+
+.homeKey::after {
+  content: "";
+  position: absolute;
+  bottom: 5px;
+  width: 10px;
+  height: 2px;
+  background: var(--accent, #4361ee);
+  border-radius: 2px;
+}
+
+.activeKey {
+  background: var(--accent, #4361ee);
+  border-color: var(--accent, #4361ee);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(67, 97, 238, 0.35);
+}
+
+.shiftNeeded {
+  outline: 2px dashed #f2a900;
+  outline-offset: 2px;
+}
+
+.pressedKey {
+  transform: scale(0.92);
+  background: #dfe4ff;
+}
+
+.shiftChar {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 0.55rem;
+  opacity: 0.55;
+}
+
+.hint {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #f2a900;
+  margin-top: 4px;
+  font-family: "DM Sans", sans-serif;
+}
+
+@media (max-width: 640px) {
+  .key {
+    height: 34px;
+    font-size: 0.7rem;
+  }
+}
