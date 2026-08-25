@@ -1,0 +1,52 @@
+.wrapper {
+  position: relative;
+  background: var(--surface, #f9f9fb);
+  border-radius: var(--radius, 12px);
+  padding: 24px;
+  cursor: text;
+}
+
+.textDisplay {
+  font-family: "DM Mono", monospace;
+  font-size: 1.4rem;
+  line-height: 2.1rem;
+  letter-spacing: 0.3px;
+  word-break: break-word;
+}
+
+.pending {
+  color: #999;
+}
+
+.correct {
+  color: #1c9c4a;
+}
+
+.incorrect {
+  color: #ffffff;
+  background: #e5484d;
+  border-radius: 3px;
+}
+
+.cursor {
+  border-left: 2px solid var(--accent, #4361ee);
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    border-color: transparent;
+  }
+}
+
+.hiddenInput {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+[data-theme="dark"] .pending {
+  color: #666;
+}
