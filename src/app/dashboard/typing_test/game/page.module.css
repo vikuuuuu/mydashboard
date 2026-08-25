@@ -1,0 +1,51 @@
+.startScreen,
+.resultScreen {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.primaryBtn {
+  background: var(--accent, #4361ee);
+  color: #fff;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 999px;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-top: 12px;
+}
+
+.gameArea {
+  text-align: center;
+}
+
+.hud {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  font-family: "DM Mono", monospace;
+  margin-bottom: 24px;
+}
+
+.timer {
+  color: var(--accent, #4361ee);
+  font-weight: 700;
+}
+
+.wordDisplay {
+  font-family: "Syne", sans-serif;
+  font-size: 2.4rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.gameInput {
+  width: 100%;
+  max-width: 420px;
+  padding: 14px 18px;
+  font-size: 1.1rem;
+  border-radius: var(--radius, 12px);
+  border: 2px solid var(--accent, #4361ee);
+  text-align: center;
+  font-family: "DM Mono", monospace;
+}
