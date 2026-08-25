@@ -55,6 +55,15 @@ const DEFAULT_TOOLS = [
   color: "#4f46e5",
   pinned: false,
 },
+  {
+  id: "typing_test",
+  title: "Typing Test",
+  desc: "Test your typing speed, accuracy, and words per minute.",
+  icon: "⌨️",
+  color: "#7209b7",
+  pinned: false
+}
+
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
