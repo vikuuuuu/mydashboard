@@ -7,10 +7,10 @@ import { getTypingProfile } from "@/lib/firestoreTyping";
 import styles from "./page.module.css";
 
 const MODES = [
-  { href: "/practice", title: "Practice", desc: "Free typing, random paragraphs, live WPM & accuracy." },
-  { href: "/learn", title: "Learn", desc: "Step-by-step lessons with on-screen keyboard guidance." },
-  { href: "/game", title: "Game", desc: "Time-attack and word-sprint challenges. Beat your score." },
-  { href: "/history", title: "History", desc: "Your saved sessions, best scores, and progress." },
+  { href: "/dashboard/typing_test/practice", title: "Practice", desc: "Free typing, random paragraphs, live WPM & accuracy." },
+  { href: "/dashboard/typing_test/learn", title: "Learn", desc: "Step-by-step lessons with on-screen keyboard guidance." },
+  { href: "/dashboard/typing_test/game", title: "Game", desc: "Time-attack and word-sprint challenges. Beat your score." },
+  { href: "/dashboard/typing_test/history", title: "History", desc: "Your saved sessions, best scores, and progress." },
 ];
 
 export default function TypingPracticeHome() {
