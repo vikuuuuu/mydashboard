@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { logToolUsage } from "@/lib/firestore";
 import { getCurrentUser } from "@/lib/firebaseAuth";
@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/firebaseAuth";
 const PRESETS = [
   { label: "Govt Form 480×672", w: 480, h: 672, minKB: 50, maxKB: 300, dpi: 96, fmts: ["jpg", "jpeg"] },
   { label: "SSC/UPSC Photo", w: 200, h: 230, minKB: 10, maxKB: 50, dpi: 96, fmts: ["jpg", "jpeg"] },
+  { label: "SSC Signature", w: 260, h: 75, minKB: 10, maxKB: 20, dpi: 300, fmts: ["jpg", "jpeg"] },
   { label: "Passport Size", w: 413, h: 531, minKB: 20, maxKB: 100, dpi: 96, fmts: ["jpg", "jpeg"] },
   { label: "Visa Photo", w: 35, h: 45, minKB: 5, maxKB: 50, dpi: 300, fmts: ["jpg", "jpeg"] },
   { label: "Document Scan", w: 1200, h: 1600, minKB: 100, maxKB: 1000, dpi: 200, fmts: ["jpg", "jpeg", "png"] },
@@ -42,11 +43,6 @@ const MAX_UPLOAD_MB = 30;
 
 // ─── DPI / SIZE HELPERS (real metadata handling — this is the core bugfix) ───
 
-// Accurate byte length from a base64 data URL (previous code used a hardcoded
-// header-length offset of 22, which is wrong for every MIME type — jpeg's
-// "data:image/jpeg;base64," prefix alone is 24 chars, png's is 23 — so every
-// size estimate during compression was off, and the binary search in
-// smartCompress was chasing the wrong target).
 function dataUrlBytes(dataUrl) {
   const comma = dataUrl.indexOf(",");
   const base64 = dataUrl.slice(comma + 1);
@@ -72,19 +68,14 @@ function bytesToDataUrl(bytes, mime) {
   return `data:${mime};base64,${btoa(bin)}`;
 }
 
-// Canvas's toDataURL() never writes DPI/density metadata — that's the actual
-// root cause of "DPI does nothing". We patch the JFIF APP0 header in-place
-// (Chromium's JPEG encoder always emits a standard JFIF segment right after
-// the SOI marker) so the exported file reports the DPI the user asked for.
 function setJpegDPI(dataUrl, dpi) {
   try {
     const base64 = dataUrl.split(",")[1];
     const bytes = base64ToBytes(base64);
-    if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return dataUrl; // not a JPEG
-    if (bytes[2] !== 0xff || bytes[3] !== 0xe0) return dataUrl; // no APP0/JFIF segment found
-    // APP0 marker starts at offset 2: FF E0 [len:2] "JFIF\0"(5) [ver:2] [units:1] [xden:2] [yden:2]
+    if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return dataUrl;
+    if (bytes[2] !== 0xff || bytes[3] !== 0xe0) return dataUrl;
     const unitsOffset = 2 + 4 + 5 + 2; // = 13
-    bytes[unitsOffset] = 1; // 1 = dots per inch
+    bytes[unitsOffset] = 1;
     bytes[unitsOffset + 1] = (dpi >> 8) & 0xff;
     bytes[unitsOffset + 2] = dpi & 0xff;
     bytes[unitsOffset + 3] = (dpi >> 8) & 0xff;
@@ -110,31 +101,27 @@ function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-// Inserts a pHYs chunk (pixel density) right after IHDR, which must be the
-// first chunk in a PNG. Needs a real CRC32 over "pHYs" + data, or viewers
-// that validate chunk integrity will reject the file.
 function setPngDPI(dataUrl, dpi) {
   try {
     const base64 = dataUrl.split(",")[1];
     const bytes = base64ToBytes(base64);
-    // PNG signature (8) + IHDR chunk: length(4) + "IHDR"(4) + data(13) + crc(4) = 25
     const ihdrEnd = 8 + 4 + 4 + 13 + 4; // 33
     const pxPerMeter = Math.round(dpi / 0.0254);
 
-    const chunkData = new Uint8Array(9); // 4 (x) + 4 (y) + 1 (unit)
+    const chunkData = new Uint8Array(9);
     const dv = new DataView(chunkData.buffer);
     dv.setUint32(0, pxPerMeter);
     dv.setUint32(4, pxPerMeter);
-    chunkData[8] = 1; // 1 = meters
+    chunkData[8] = 1;
 
     const typeAndData = new Uint8Array(4 + 9);
-    typeAndData.set([0x70, 0x48, 0x59, 0x73], 0); // "pHYs"
+    typeAndData.set([0x70, 0x48, 0x59, 0x73], 0);
     typeAndData.set(chunkData, 4);
     const crc = crc32(typeAndData);
 
     const chunk = new Uint8Array(4 + typeAndData.length + 4);
     const cv = new DataView(chunk.buffer);
-    cv.setUint32(0, 9); // data length
+    cv.setUint32(0, 9);
     chunk.set(typeAndData, 4);
     cv.setUint32(4 + typeAndData.length, crc);
 
@@ -148,13 +135,104 @@ function setPngDPI(dataUrl, dpi) {
   }
 }
 
-// WebP DPI would require rebuilding the RIFF container with an XMP/EXIF
-// chunk — not worth the complexity here. We're explicit about that
-// limitation in the UI rather than silently pretending it's embedded.
 function stampDPI(dataUrl, mime, dpi) {
   if (mime === "image/jpeg") return setJpegDPI(dataUrl, dpi);
   if (mime === "image/png") return setPngDPI(dataUrl, dpi);
   return dataUrl;
+}
+
+// ─── SIZE PADDING (the actual fix for tiny images like a 260×75 signature) ───
+// A 260×75px signature (~19,500px) is mostly blank background + a few thin
+// strokes. That's so little entropy that even JPEG quality 99 often can't
+// physically reach 10-20KB — there's nothing left to encode. Trying to
+// "force" it bigger by resampling, adding noise, or reducing compression
+// further just distorts or blurs the actual signature.
+// The correct fix (what real SSC/UPSC photo tools do): pad the *file bytes*,
+// not the *pixels*. JPEG's COM marker and PNG's tEXt chunk are segments that
+// every decoder skips over when rendering — so we can inflate the file to
+// any target size by stuffing inert bytes into one of these, and the image
+// itself is 100% untouched (same pixels, same dimensions, same quality).
+
+function padJpegToSize(dataUrl, targetBytes) {
+  try {
+    const base64 = dataUrl.split(",")[1];
+    const bytes = base64ToBytes(base64);
+    if (bytes.length >= targetBytes) return dataUrl;
+    let deficit = targetBytes - bytes.length;
+
+    // Insert after the APP0/JFIF segment (not before it) so the file stays
+    // strictly JFIF-compliant for picky government portal validators.
+    let insertAt = 2;
+    if (bytes[2] === 0xff && bytes[3] === 0xe0) {
+      const segLen = (bytes[4] << 8) | bytes[5];
+      insertAt = 4 + segLen;
+    }
+
+    const segments = [];
+    while (deficit > 0) {
+      // A single COM segment can hold at most 65533 bytes of payload
+      // (65535 max segment length - 2 bytes for the length field itself).
+      const payloadLen = Math.min(deficit, 65533);
+      const seg = new Uint8Array(4 + payloadLen); // FF FE + len(2) + payload
+      seg[0] = 0xff; seg[1] = 0xfe;
+      const lenField = payloadLen + 2;
+      seg[2] = (lenField >> 8) & 0xff; seg[3] = lenField & 0xff;
+      segments.push(seg);
+      deficit -= payloadLen;
+    }
+    const addBytes = segments.reduce((s, x) => s + x.length, 0);
+    const out = new Uint8Array(bytes.length + addBytes);
+    out.set(bytes.subarray(0, insertAt), 0);
+    let off = insertAt;
+    for (const seg of segments) { out.set(seg, off); off += seg.length; }
+    out.set(bytes.subarray(insertAt), off);
+    return bytesToDataUrl(out, "image/jpeg");
+  } catch {
+    return dataUrl;
+  }
+}
+
+function padPngToSize(dataUrl, targetBytes) {
+  try {
+    const base64 = dataUrl.split(",")[1];
+    const bytes = base64ToBytes(base64);
+    if (bytes.length >= targetBytes) return dataUrl;
+    const deficit = targetBytes - bytes.length;
+
+    const keyword = new TextEncoder().encode("Comment\0");
+    const padLen = Math.max(0, deficit - keyword.length - 12); // 12 = chunk overhead
+    const text = new Uint8Array(padLen).fill(0x20); // spaces — inert, never rendered
+    const chunkData = new Uint8Array(keyword.length + text.length);
+    chunkData.set(keyword, 0);
+    chunkData.set(text, keyword.length);
+
+    const typeAndData = new Uint8Array(4 + chunkData.length);
+    typeAndData.set([0x74, 0x45, 0x58, 0x74], 0); // "tEXt"
+    typeAndData.set(chunkData, 4);
+    const crc = crc32(typeAndData);
+
+    const chunk = new Uint8Array(4 + typeAndData.length + 4);
+    const dv = new DataView(chunk.buffer);
+    dv.setUint32(0, chunkData.length);
+    chunk.set(typeAndData, 4);
+    dv.setUint32(4 + typeAndData.length, crc);
+
+    // Insert right before the IEND chunk (always the final 12 bytes of a PNG).
+    const insertAt = bytes.length - 12;
+    const out = new Uint8Array(bytes.length + chunk.length);
+    out.set(bytes.subarray(0, insertAt), 0);
+    out.set(chunk, insertAt);
+    out.set(bytes.subarray(insertAt), insertAt + chunk.length);
+    return bytesToDataUrl(out, "image/png");
+  } catch {
+    return dataUrl;
+  }
+}
+
+function padToSize(dataUrl, mime, targetBytes) {
+  if (mime === "image/jpeg") return padJpegToSize(dataUrl, targetBytes);
+  if (mime === "image/png") return padPngToSize(dataUrl, targetBytes);
+  return dataUrl; // webp padding isn't safe without a full RIFF rebuild
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
@@ -208,6 +286,7 @@ const S = {
   dlBtn: { padding: 10, border: "none", borderRadius: 10, background: "#0f9d6e", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", fontFamily: "'Syne',sans-serif", transition: "opacity 0.15s" },
   alertWarn: { background: "rgba(247,127,0,0.08)", border: "1px solid rgba(247,127,0,0.2)", borderRadius: 8, padding: "8px 10px", fontSize: 12, color: "#c46200", display: "flex", alignItems: "flex-start", gap: 6 },
   alertInfo: { background: "rgba(67,97,238,0.07)", border: "1px solid rgba(67,97,238,0.18)", borderRadius: 8, padding: "8px 10px", fontSize: 12, color: "#4361ee", display: "flex", alignItems: "flex-start", gap: 6 },
+  alertOk: { background: "rgba(15,157,110,0.07)", border: "1px solid rgba(15,157,110,0.2)", borderRadius: 8, padding: "8px 10px", fontSize: 12, color: "#0f9d6e", display: "flex", alignItems: "flex-start", gap: 6 },
   alertErr: { background: "rgba(230,57,70,0.07)", border: "1px solid rgba(230,57,70,0.2)", borderRadius: 8, padding: "8px 10px", fontSize: 12, color: "#e63946", display: "flex", alignItems: "flex-start", gap: 6 },
   divider: { height: 1, background: "rgba(99,120,200,0.10)", margin: "12px 0" },
   sectionMini: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca8d0", marginBottom: 8 },
@@ -216,6 +295,13 @@ const S = {
   spinner: { display: "inline-block", width: 14, height: 14, border: "2px solid rgba(255,255,255,0.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" },
   changeLink: { background: "none", border: "none", color: "#4361ee", fontSize: 11, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" },
   resetLink: { background: "none", border: "none", color: "#9ca8d0", fontSize: 11, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", textDecoration: "underline" },
+  liveBar: { display: "flex", flexWrap: "wrap", gap: "6px 14px", background: "#f4f7fe", border: "1px solid rgba(99,120,200,0.13)", borderRadius: 10, padding: "10px 14px", fontSize: 12 },
+  liveItem: { display: "flex", alignItems: "center", gap: 5, color: "#6b7ab5" },
+  liveVal: { fontWeight: 700, fontFamily: "monospace" },
+  cropWrap: { position: "relative", display: "inline-block", maxWidth: "100%", touchAction: "none", cursor: "crosshair", userSelect: "none" },
+  cropImg: { display: "block", maxWidth: "100%", maxHeight: 320, borderRadius: 8 },
+  cropBox: { position: "absolute", border: "2px solid #4361ee", background: "rgba(67,97,238,0.12)", boxShadow: "0 0 0 2000px rgba(10,15,40,0.35)", cursor: "move" },
+  cropHandle: { position: "absolute", width: 12, height: 12, background: "#4361ee", border: "2px solid #fff", borderRadius: "50%", right: -6, bottom: -6, cursor: "nwse-resize" },
   // Image Studio styles
   tabBar: { display: "flex", borderBottom: "1px solid rgba(99,120,200,0.13)", background: "#f4f7fe", overflowX: "auto", flexShrink: 0, scrollbarWidth: "thin" },
   tabBtn: (active) => ({ display: "flex", alignItems: "center", gap: 5, padding: "10px 14px", border: "none", borderBottom: `2.5px solid ${active ? "#4361ee" : "transparent"}`, background: active ? "#ffffff" : "none", color: active ? "#4361ee" : "#6b7ab5", fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }),
@@ -262,9 +348,6 @@ const STUDIO_TABS = [
   { id: "denoise", icon: "✨", label: "Denoise" },
 ];
 
-// CSS filter map used for the studio Filter tab (both the live preview and
-// the swatch thumbnails), kept as one source of truth instead of duplicating
-// the map inline in JSX.
 const FILTER_CSS = {
   none: "none",
   grayscale: (v) => `grayscale(${v}%)`,
@@ -306,11 +389,22 @@ export default function GovtFormPhotoTool() {
   const [history, setHistory] = useState([]);
   const [uploadErr, setUploadErr] = useState("");
 
+  // Crop (applied before resize, in Convert mode)
+  const [cropRect, setCropRect] = useState(null); // {x,y,w,h} in natural px, or null = full image
+  const [cropDisplayW, setCropDisplayW] = useState(0);
+  const [cropDrag, setCropDrag] = useState(null); // {mode:'move'|'resize', startX, startY, orig}
+  const cropImgRef = useRef();
+  const cropWrapRef = useRef();
+
   // Convert options
   const [resizeMode, setResizeMode] = useState("contain");
   const [outFmt, setOutFmt] = useState("image/jpeg");
   const [bgColor, setBgColor] = useState("#ffffff");
   const [compPct, setCompPct] = useState(0.5);
+
+  // Live preview estimate
+  const [liveEstimate, setLiveEstimate] = useState(null); // {kb, w, h}
+  const [liveComputing, setLiveComputing] = useState(false);
 
   // Processing
   const [processing, setProcessing] = useState(false);
@@ -433,6 +527,7 @@ export default function GovtFormPhotoTool() {
         setImgData({ src: e.target.result, w: img.width, h: img.height, kb: file.size / 1024, type: file.type, name: file.name });
         setPreview(e.target.result);
         setCropW(String(img.width)); setCropH(String(img.height));
+        setCropRect(null);
         setResult(null); setStudioResult(null); setHistory([]); setPipeline([]); setStudioErr("");
       };
       img.src = e.target.result;
@@ -451,6 +546,7 @@ export default function GovtFormPhotoTool() {
     setReqMin(String(p.minKB)); setReqMax(String(p.maxKB));
     setReqUnit("KB"); setReqDPI(String(p.dpi));
     setReqFmts([...p.fmts]); setFormName(p.label); setActivePreset(i);
+    setCropRect(null);
   };
 
   const toggleFmt = (f) => {
@@ -458,20 +554,92 @@ export default function GovtFormPhotoTool() {
     setActivePreset(null);
   };
 
+  // ── Crop tool (Step 2) ──────────────────────────────────────────────────
+  // Initializes a crop box matching the target aspect ratio (reqW:reqH) so
+  // users can't accidentally pick a region that will get squashed/stretched
+  // later — what they see selected is what they get, undistorted.
+  const initCropBox = useCallback((natW, natH) => {
+    const targetW = parseInt(reqW) || natW, targetH = parseInt(reqH) || natH;
+    const targetRatio = targetW / targetH;
+    let w, h;
+    if (natW / natH > targetRatio) { h = natH; w = h * targetRatio; }
+    else { w = natW; h = w / targetRatio; }
+    const x = (natW - w) / 2, y = (natH - h) / 2;
+    setCropRect({ x, y, w, h });
+  }, [reqW, reqH]);
+
+  const onCropImgLoad = (e) => {
+    setCropDisplayW(e.target.clientWidth);
+    if (!cropRect) initCropBox(imgData.w, imgData.h);
+  };
+
+  const cropScale = cropDisplayW && imgData ? cropDisplayW / imgData.w : 1;
+
+  const startCropDrag = (mode) => (e) => {
+    e.preventDefault();
+    const point = e.touches ? e.touches[0] : e;
+    setCropDrag({ mode, startX: point.clientX, startY: point.clientY, orig: { ...cropRect } });
+  };
+
+  useEffect(() => {
+    if (!cropDrag) return;
+    const targetRatio = (parseInt(reqW) || 1) / (parseInt(reqH) || 1);
+    const onMove = (e) => {
+      const point = e.touches ? e.touches[0] : e;
+      const dx = (point.clientX - cropDrag.startX) / cropScale;
+      const dy = (point.clientY - cropDrag.startY) / cropScale;
+      setCropRect(() => {
+        const o = cropDrag.orig;
+        if (cropDrag.mode === "move") {
+          const x = Math.min(Math.max(0, o.x + dx), imgData.w - o.w);
+          const y = Math.min(Math.max(0, o.y + dy), imgData.h - o.h);
+          return { ...o, x, y };
+        }
+        // resize: keep aspect ratio locked to reqW:reqH
+        let w = Math.max(20, o.w + dx);
+        w = Math.min(w, imgData.w - o.x);
+        let h = w / targetRatio;
+        if (o.y + h > imgData.h) { h = imgData.h - o.y; w = h * targetRatio; }
+        return { ...o, w, h };
+      });
+    };
+    const onUp = () => setCropDrag(null);
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove); window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp);
+    };
+  }, [cropDrag, cropScale, imgData, reqW, reqH]);
+
+  // Re-fit crop box whenever the target ratio changes so it never drifts
+  // out of sync with the requirement dimensions.
+  useEffect(() => {
+    if (imgData && cropRect) initCropBox(imgData.w, imgData.h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reqW, reqH]);
+
   // ── Convert: build canvas ──
   const buildCanvas = (img) => {
     const w = parseInt(reqW), h = parseInt(reqH);
     const c = document.createElement("canvas"); c.width = w; c.height = h;
     const ctx = c.getContext("2d");
     ctx.fillStyle = bgColor; ctx.fillRect(0, 0, w, h);
+
+    // If a crop selection exists, draw only that region as the source.
+    const sx = cropRect ? cropRect.x : 0;
+    const sy = cropRect ? cropRect.y : 0;
+    const sw = cropRect ? cropRect.w : img.width;
+    const sh = cropRect ? cropRect.h : img.height;
+
     if (resizeMode === "contain") {
-      const sc = Math.min(w / img.width, h / img.height);
-      const nw = img.width * sc, nh = img.height * sc;
-      ctx.drawImage(img, (w - nw) / 2, (h - nh) / 2, nw, nh);
+      const sc = Math.min(w / sw, h / sh);
+      const nw = sw * sc, nh = sh * sc;
+      ctx.drawImage(img, sx, sy, sw, sh, (w - nw) / 2, (h - nh) / 2, nw, nh);
     } else {
-      const sc = Math.max(w / img.width, h / img.height);
-      const nw = img.width * sc, nh = img.height * sc;
-      ctx.drawImage(img, (w - nw) / 2, (h - nh) / 2, nw, nh);
+      const sc = Math.max(w / sw, h / sh);
+      const nw = sw * sc, nh = sh * sc;
+      ctx.drawImage(img, sx, sy, sw, sh, (w - nw) / 2, (h - nh) / 2, nw, nh);
     }
     if (reqColor === "gray") {
       const d = ctx.getImageData(0, 0, w, h);
@@ -484,11 +652,9 @@ export default function GovtFormPhotoTool() {
     return c;
   };
 
-  // Fixed: accurate byte sizing (was reading 22 bytes off, which corrupted
-  // the binary search target), and PNG is now handled honestly — the
-  // `quality` argument to toDataURL is simply ignored for PNG by every
-  // browser, so looping 16 times on it was wasted work that always produced
-  // the same file. We export once for PNG and say so in the result.
+  // Returns the best achievable encode plus whether it undershoots minKB
+  // (which, for tiny target sizes like a 260×75 signature, is expected and
+  // handled by padding afterwards — not by further compression tricks).
   const smartCompress = (canvas) => {
     const [minKB, maxKB] = getMinMaxKB();
     const minB = minKB * 1024, maxB = maxKB * 1024;
@@ -496,7 +662,8 @@ export default function GovtFormPhotoTool() {
 
     if (outFmt === "image/png") {
       const data = canvas.toDataURL(outFmt);
-      return { data, bytes: dataUrlBytes(data), qualityAdjustable: false };
+      const bytes = dataUrlBytes(data);
+      return { data, bytes, qualityAdjustable: false, needsPadding: bytes < minB };
     }
 
     let lo = 0.02, hi = 0.99, best = null, bestDiff = Infinity;
@@ -510,8 +677,17 @@ export default function GovtFormPhotoTool() {
       }
       if (bytes > midB) hi = q; else lo = q;
     }
-    if (!best) best = canvas.toDataURL(outFmt, (lo + hi) / 2);
-    return { data: best, bytes: dataUrlBytes(best), qualityAdjustable: true };
+    if (best) return { data: best, bytes: dataUrlBytes(best), qualityAdjustable: true, needsPadding: false };
+
+    // Nothing in the quality sweep landed inside [minB, maxB]. For very
+    // small target dimensions this almost always means max quality still
+    // undershoots minB — there isn't enough pixel detail to encode more
+    // bytes. Use the highest-quality encode as the real image (best
+    // fidelity) and flag it for padding rather than chasing an
+    // unreachable quality target.
+    const maxQData = canvas.toDataURL(outFmt, 0.99);
+    const maxQBytes = dataUrlBytes(maxQData);
+    return { data: maxQData, bytes: maxQBytes, qualityAdjustable: true, needsPadding: maxQBytes < minB };
   };
 
   const handleProcess = async () => {
@@ -528,31 +704,38 @@ export default function GovtFormPhotoTool() {
       const canvas = buildCanvas(img);
       setProgress(60); setProgLbl("Compressing…");
       await new Promise(r => setTimeout(r, 40));
-      const { data: rawData, qualityAdjustable } = smartCompress(canvas);
+      const { data: rawData, qualityAdjustable, needsPadding } = smartCompress(canvas);
 
-      // Actually stamp the requested DPI into the file's own metadata
-      // (JFIF header for JPEG, pHYs chunk for PNG) instead of just holding
-      // it in component state and hoping.
       const dpiVal = Math.max(1, parseInt(reqDPI) || 96);
       const dpiSupported = outFmt === "image/jpeg" || outFmt === "image/png";
-      const finalData = dpiSupported ? stampDPI(rawData, outFmt, dpiVal) : rawData;
+      let finalData = dpiSupported ? stampDPI(rawData, outFmt, dpiVal) : rawData;
+
+      const [minKB, maxKB] = getMinMaxKB();
+      const minB = minKB * 1024, maxB = maxKB * 1024;
+      let padded = false;
+      if (needsPadding || dataUrlBytes(finalData) < minB) {
+        // Pad slightly above the raw minimum (not right at the edge) so
+        // rounding during upload/storage doesn't drop it back under the
+        // requirement. Content and dimensions are 100% unaffected.
+        const targetBytes = Math.ceil(minB + Math.min(maxB - minB, minB * 0.1));
+        const paddedData = padToSize(finalData, outFmt, targetBytes);
+        if (paddedData !== finalData) { finalData = paddedData; padded = true; }
+      }
 
       setProgress(90); setProgLbl("Verifying…");
       await new Promise(r => setTimeout(r, 30));
       const bytes = dataUrlBytes(finalData);
       const kb = bytes / 1024;
       const ext = outFmt === "image/jpeg" ? "jpg" : outFmt === "image/png" ? "png" : "webp";
-      const [minKB, maxKB] = getMinMaxKB();
       setResult({
         data: finalData, kb, ext, w: parseInt(reqW), h: parseInt(reqH),
         inRange: kb >= minKB && kb <= maxKB, minKB, maxKB,
-        dpi: dpiVal, dpiEmbedded: dpiSupported, qualityAdjustable,
+        dpi: dpiVal, dpiEmbedded: dpiSupported, qualityAdjustable, padded,
       });
       setProgress(100); setProgLbl("Done!");
       setTimeout(() => { setProcessing(false); setProgress(0); }, 700);
-      
-      // Code
-     if (user?.uid) {
+
+      if (user?.uid) {
         await logToolUsage({
           userId: user.uid,
           tool: "all-in-one-img",
@@ -567,6 +750,40 @@ export default function GovtFormPhotoTool() {
       setProcessing(false); setProgress(0);
     }
   };
+
+  // ── Live preview: recompute an approximate output size whenever the
+  // target dimensions / DPI / format / crop change, debounced so typing
+  // doesn't trigger a canvas encode on every keystroke. This is a single
+  // fast encode (not the full binary search) purely for the on-screen
+  // estimate — the real export still runs smartCompress + padding.
+  useEffect(() => {
+    if (!imgData || mode !== "convert") return;
+    const w = parseInt(reqW), h = parseInt(reqH);
+    if (!w || !h || w < 10 || h < 10) { setLiveEstimate(null); return; }
+    setLiveComputing(true);
+    const t = setTimeout(async () => {
+      try {
+        const img = await getImg(preview || imgData.src);
+        const canvas = buildCanvas(img);
+        const [minKB, maxKB] = getMinMaxKB();
+        let data, bytes;
+        if (outFmt === "image/png") {
+          data = canvas.toDataURL(outFmt);
+        } else {
+          data = canvas.toDataURL(outFmt, Math.max(0.02, Math.min(0.99, compPct)));
+        }
+        bytes = dataUrlBytes(data);
+        const willPad = minKB > 0 && bytes < minKB * 1024;
+        setLiveEstimate({ kb: bytes / 1024, w, h, willPad, underMin: willPad });
+      } catch {
+        setLiveEstimate(null);
+      } finally {
+        setLiveComputing(false);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reqW, reqH, reqDPI, outFmt, bgColor, resizeMode, compPct, cropRect, imgData, mode]);
 
   const handleDownload = () => {
     if (!result) return;
@@ -791,10 +1008,6 @@ export default function GovtFormPhotoTool() {
     const a = document.createElement("a"); a.href = studioResult; a.download = `edited-photo-${Date.now()}.png`; a.click();
   };
 
-  // Live CSS-only preview for Adjust/Filter tabs, so sliders show their
-  // effect immediately instead of the user being blind until they click
-  // Apply. This never touches the underlying pixel data — Apply still runs
-  // the real canvas pipeline that gets committed to history/downloads.
   const getLivePreviewCSS = () => {
     if (studioTab === "adjust") {
       return `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
@@ -870,7 +1083,7 @@ export default function GovtFormPhotoTool() {
 
         {imgData && (
           <button style={{ marginLeft: "auto", ...S.alertErr, cursor: "pointer", padding: "4px 10px", borderRadius: 999, fontSize: 11, border: "1px solid rgba(230,57,70,0.2)" }}
-            onClick={() => { setImgData(null); setPreview(null); setResult(null); setStudioResult(null); setHistory([]); setPipeline([]); setUploadErr(""); setStudioErr(""); fileInputRef.current.value = ""; }}>
+            onClick={() => { setImgData(null); setPreview(null); setResult(null); setStudioResult(null); setHistory([]); setPipeline([]); setUploadErr(""); setStudioErr(""); setCropRect(null); fileInputRef.current.value = ""; }}>
             ✕ Clear
           </button>
         )}
@@ -912,14 +1125,14 @@ export default function GovtFormPhotoTool() {
 
               <div className="g2" style={{ ...S.g2, marginBottom: 12 }}>
                 <div style={S.field}>
-                  <span style={S.label}>DPI <span style={S.opt}>(embedded in file metadata)</span></span>
+                  <span style={S.label}>DPI <span style={S.opt}>(embedded in file metadata — doesn't touch pixel size)</span></span>
                   <input style={S.input} type="number" value={reqDPI} min={72} max={1200} placeholder="96" onChange={e => setReqDPI(e.target.value)} />
                 </div>
                 <div style={S.field}><span style={S.label}>Color mode</span><select style={S.select} value={reqColor} onChange={e => setReqColor(e.target.value)}><option value="rgb">RGB (Color)</option><option value="gray">Grayscale</option></select></div>
               </div>
 
               {(outFmt === "image/webp") && (
-                <div style={{ ...S.alertWarn, marginBottom: 12 }}>⚠ WEBP output can't carry DPI metadata in the browser — switch to JPG or PNG if the form checks DPI.</div>
+                <div style={{ ...S.alertWarn, marginBottom: 12 }}>⚠ WEBP output can't carry DPI metadata, and can't be padded to a minimum size, in the browser — switch to JPG or PNG if the form checks either.</div>
               )}
 
               <div style={{ marginBottom: 12 }}>
@@ -927,7 +1140,7 @@ export default function GovtFormPhotoTool() {
                 <div style={S.fmtWrap}>{ALL_FMTS.map(f => <button key={f} style={S.chip(reqFmts.includes(f))} onClick={() => toggleFmt(f)}>{f.toUpperCase()}</button>)}</div>
               </div>
 
-              <div style={S.field}><span style={S.label}>Form / Exam name <span style={S.opt}>(optional)</span></span><input style={S.input} type="text" value={formName} placeholder="e.g. UPSC CSE 2025 Application" onChange={e => setFormName(e.target.value)} /></div>
+              <div style={S.field}><span style={S.label}>Form / Exam name <span style={S.opt}>(optional)</span></span><input style={S.input} type="text" value={formName} placeholder="e.g. SSC CGL 2026 Application" onChange={e => setFormName(e.target.value)} /></div>
 
               {formErr && <div style={{ ...S.alertErr, marginTop: 10 }}>⚠ {formErr}</div>}
 
@@ -940,12 +1153,25 @@ export default function GovtFormPhotoTool() {
                   <span style={S.sumItem}>🎨 <span style={S.sumVal}>{reqColor === "rgb" ? "RGB" : "Grayscale"}</span></span>
                 </div>
               )}
+
+              {/* Tiny-target warning — this is exactly the SSC signature case */}
+              {(() => {
+                const w = parseInt(reqW), h = parseInt(reqH), [mn] = getMinMaxKB();
+                if (w && h && w * h < 40000 && mn > 8) {
+                  return (
+                    <div style={{ ...S.alertInfo, marginTop: 10 }}>
+                      ℹ {w}×{h}px is a small canvas ({(w * h).toLocaleString()} px total) for a {mn}KB+ minimum — compression alone usually can't reach that. The converter will automatically pad the file to size without touching the image, so don't worry if the live estimate below shows a smaller number.
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </div>
 
           {/* STEP 2 */}
           <div style={S.card}>
-            <div style={S.cardHdr}><span>📤</span><span style={S.cardHdrTitle}>Step 2 — Upload Your Photo</span></div>
+            <div style={S.cardHdr}><span>📤</span><span style={S.cardHdrTitle}>Step 2 — Upload & Crop Your Photo</span></div>
             <div style={S.cardBody}>
               {!imgData ? (
                 <div className="drop-zone" role="button" tabIndex={0} aria-label="Upload photo" style={S.dropZone(isDrag)}
@@ -957,31 +1183,43 @@ export default function GovtFormPhotoTool() {
                 </div>
               ) : (
                 <>
-                  <div style={S.previewBox}>
-                    <img src={preview} alt="preview" style={{ maxHeight: 180, objectFit: "contain", borderRadius: 8 }} />
+                  <div style={S.sectionMini}>Drag to reposition · drag the corner handle to resize (aspect ratio locked to {reqW}:{reqH})</div>
+                  <div style={{ display: "flex", justifyContent: "center", background: "#f4f7fe", borderRadius: 10, padding: 10 }}>
+                    <div ref={cropWrapRef} style={S.cropWrap}>
+                      <img ref={cropImgRef} src={imgData.src} alt="crop source" style={S.cropImg} onLoad={onCropImgLoad} draggable={false} />
+                      {cropRect && cropDisplayW > 0 && (
+                        <div
+                          style={{
+                            ...S.cropBox,
+                            left: cropRect.x * cropScale,
+                            top: cropRect.y * cropScale,
+                            width: cropRect.w * cropScale,
+                            height: cropRect.h * cropScale,
+                          }}
+                          onMouseDown={startCropDrag("move")}
+                          onTouchStart={startCropDrag("move")}
+                        >
+                          <div style={S.cropHandle} onMouseDown={(e) => { e.stopPropagation(); startCropDrag("resize")(e); }} onTouchStart={(e) => { e.stopPropagation(); startCropDrag("resize")(e); }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button style={S.chip(false)} onClick={() => initCropBox(imgData.w, imgData.h)}>↺ Reset crop</button>
+                    <span style={{ fontSize: 11, color: "#9ca8d0", alignSelf: "center" }}>
+                      {cropRect ? `Selecting ${Math.round(cropRect.w)}×${Math.round(cropRect.h)}px of ${imgData.w}×${imgData.h}px` : ""}
+                    </span>
+                  </div>
+
+                  <div style={{ ...S.previewBox, marginTop: 12 }}>
                     <span style={{ fontSize: 11, color: "#9ca8d0", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{imgData.name}</span>
-                    <button style={S.changeLink} onClick={() => { setImgData(null); setPreview(null); setResult(null); setUploadErr(""); fileInputRef.current.value = ""; }}>Change photo</button>
+                    <button style={S.changeLink} onClick={() => { setImgData(null); setPreview(null); setResult(null); setUploadErr(""); setCropRect(null); fileInputRef.current.value = ""; }}>Change photo</button>
                   </div>
                   <div style={S.statGrid}>
-                    <div style={S.stat}><div style={S.statV}>{imgData.w}px</div><div style={S.statL}>Width</div></div>
-                    <div style={S.stat}><div style={S.statV}>{imgData.h}px</div><div style={S.statL}>Height</div></div>
-                    <div style={S.stat}><div style={S.statV}>{imgData.kb.toFixed(1)} KB</div><div style={S.statL}>Size</div></div>
+                    <div style={S.stat}><div style={S.statV}>{imgData.w}px</div><div style={S.statL}>Original W</div></div>
+                    <div style={S.stat}><div style={S.statV}>{imgData.h}px</div><div style={S.statL}>Original H</div></div>
+                    <div style={S.stat}><div style={S.statV}>{imgData.kb.toFixed(1)} KB</div><div style={S.statL}>Original size</div></div>
                   </div>
-                  {checks && (
-                    <div style={{ marginTop: 10 }}>
-                      {[{ lbl: "Resolution", ok: checks.resOk }, { lbl: "File size", ok: checks.szOk }, { lbl: "Format", ok: checks.fmtOk }].map(({ lbl, ok }) => (
-                        <div key={lbl} style={S.chkItem}><span style={S.chkLbl}>{lbl}</span><span style={S.tag(ok, false)}>{ok ? "✓ Meets requirement" : "✗ Needs adjustment"}</span></div>
-                      ))}
-                    </div>
-                  )}
-                  {checks && (!checks.resOk || !checks.szOk || !checks.fmtOk) && (
-                    <div style={{ ...S.alertWarn, marginTop: 10 }}>
-                      ⚠ {[!checks.resOk && `Resolution (${imgData.w}×${imgData.h}) → ${reqW}×${reqH}.`, !checks.szOk && `Size (${imgData.kb.toFixed(0)} KB) → ${reqMin}–${reqMax} ${reqUnit}.`, !checks.fmtOk && `Format → selected output format.`].filter(Boolean).join(" ")}
-                    </div>
-                  )}
-                  {checks && checks.resOk && checks.szOk && checks.fmtOk && (
-                    <div style={{ ...S.alertInfo, marginTop: 10 }}>✓ Already meets all requirements! Will still re-export cleanly.</div>
-                  )}
                 </>
               )}
               {uploadErr && <div style={{ ...S.alertErr, marginTop: 10 }}>⚠ {uploadErr}</div>}
@@ -1021,7 +1259,7 @@ export default function GovtFormPhotoTool() {
                 </div>
               </div>
 
-              <div style={{ marginBottom: 4 }}>
+              <div style={{ marginBottom: 14 }}>
                 <span style={S.label}>Compression target {outFmt === "image/png" && <span style={S.opt}>(PNG size isn't adjustable — see note below)</span>}</span>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {[["Lightest", 0.2], ["Balanced", 0.5], ["High quality", 0.75], ["Max quality", 0.9]].map(([lbl, pct]) => (
@@ -1031,6 +1269,22 @@ export default function GovtFormPhotoTool() {
                 {reqMin && reqMax && <small style={{ fontSize: 10, color: "#9ca8d0", marginTop: 4, display: "block" }}>Target within {reqMin}–{reqMax} {reqUnit}</small>}
                 {outFmt === "image/png" && <div style={{ ...S.alertInfo, marginTop: 8 }}>ℹ PNG is lossless — browsers ignore a "quality" setting for it, so file size can't be tuned this way. Switch to JPG if you need a tight size window.</div>}
               </div>
+
+              {/* Live preview bar */}
+              {imgData && (
+                <div style={{ ...S.liveBar, marginBottom: 14 }}>
+                  <span style={S.liveItem}>📐 <span style={S.liveVal}>{reqW}×{reqH}px</span></span>
+                  <span style={S.liveItem}>🖨 <span style={S.liveVal}>{reqDPI} DPI</span></span>
+                  <span style={S.liveItem}>
+                    💾 {liveComputing ? "estimating…" : liveEstimate ? (
+                      <span style={S.liveVal}>≈ {liveEstimate.kb.toFixed(1)} KB{liveEstimate.willPad ? " (before auto-pad)" : ""}</span>
+                    ) : "—"}
+                  </span>
+                  {liveEstimate?.willPad && (
+                    <span style={{ ...S.liveItem, color: "#4361ee" }}>→ will be padded to ≥ {reqMin}{reqUnit} on export</span>
+                  )}
+                </div>
+              )}
 
               {processing && (
                 <div style={S.progressWrap}>
@@ -1062,9 +1316,10 @@ export default function GovtFormPhotoTool() {
                 <div style={S.rMeta}><div style={S.rMetaV}>{result.ext.toUpperCase()}</div><div style={S.rMetaL}>Format</div></div>
                 <div style={S.rMeta}><div style={S.rMetaV}>{result.dpi} DPI</div><div style={S.rMetaL}>{result.dpiEmbedded ? "Embedded ✓" : "Not embeddable"}</div></div>
               </div>
-              {!result.qualityAdjustable && <div style={S.alertInfo}>ℹ Exported as lossless PNG — size wasn't tunable via compression.</div>}
+              {result.padded && <div style={S.alertOk}>✓ File was padded with inert metadata bytes to meet the {result.minKB}KB minimum — pixels and quality are untouched.</div>}
+              {!result.qualityAdjustable && outFmt !== "image/png" && <div style={S.alertInfo}>ℹ Exported at maximum quality — size wasn't tunable via compression alone at this resolution.</div>}
               {!result.dpiEmbedded && <div style={S.alertWarn}>⚠ {result.ext.toUpperCase()} can't store DPI metadata in-browser — the pixel dimensions are still exact, but DPI wasn't written to the file.</div>}
-              {!result.inRange && <div style={S.alertWarn}>⚠ Output ({result.kb.toFixed(1)} KB) slightly outside {result.minKB}–{result.maxKB} KB. Try PNG or adjust compression.</div>}
+              {!result.inRange && <div style={S.alertWarn}>⚠ Output ({result.kb.toFixed(1)} KB) slightly outside {result.minKB}–{result.maxKB} KB. Try re-running — padding targets just above the minimum.</div>}
               <button className="dl-btn" style={S.dlBtn} onClick={handleDownload}>↓ Download ({result.ext.toUpperCase()})</button>
             </div>
           )}
@@ -1144,7 +1399,7 @@ export default function GovtFormPhotoTool() {
                       <div style={S.field}><span style={S.label}>Width</span><input style={S.input} type="number" value={cropW} onChange={e => setCropW(e.target.value)} /></div>
                       <div style={S.field}><span style={S.label}>Height</span><input style={S.input} type="number" value={cropH} onChange={e => setCropH(e.target.value)} /></div>
                     </div>
-                    <div style={S.alertInfo}>ℹ Image is {imgData.w}×{imgData.h}px — out-of-bounds crops are automatically clamped.</div>
+                    <div style={S.alertInfo}>ℹ Image is {imgData.w}×{imgData.h}px — out-of-bounds crops are automatically clamped. For a visual drag-to-crop, use Convert mode's Step 2.</div>
                   </>}
 
                   {studioTab === "rotate" && <>
