@@ -26,8 +26,9 @@ const GENRES = [
   'Anime', 'Reality TV', 'Mystery', 'Biographical', 'Other',
 ];
 
-const TYPES    = ['Series', 'Movie', 'Mini-Series', 'Documentary', 'Anime'];
-const STATUSES = ['watchlist', 'watching', 'watched', 'upcoming'];
+const TYPES     = ['Series', 'Movie', 'Mini-Series', 'Documentary', 'Anime'];
+const STATUSES  = ['watchlist', 'watching', 'watched', 'upcoming'];
+const WEEKDAYS  = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const EMOJIS = [
   '🎬','🔫','⚔️','🕵️','📈','👻','🚔','💥','🐅','❤️',
@@ -58,6 +59,10 @@ const EMPTY_FORM = {
   platform: 'Netflix', genre: 'Drama', year: String(new Date().getFullYear()),
   desc: '', seasons: '', currentSeason: '', currentEp: '',
   totalEp: '', nextEp: '', nextDate: '', status: 'watchlist', progress: 0,
+  // new fields
+  isFavorite: false,
+  weeklyRelease: false, releaseDay: 'Friday',
+  seasonComplete: false, nextSeasonYear: '',
 };
 
 /* ══════════════════════════════════════════════
@@ -80,6 +85,22 @@ function formatDate(dateStr) {
   const d = new Date(dateStr);
   if (isNaN(d)) return dateStr;
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/* Next occurrence (including today) of a given weekday name */
+function getNextWeekdayCountdown(dayName) {
+  if (!dayName) return null;
+  const idx = WEEKDAYS.indexOf(dayName); // 0=Mon ... 6=Sun
+  if (idx === -1) return null;
+  const now       = new Date();
+  const todayIdx  = (now.getDay() + 6) % 7; // convert JS Sun=0 to Mon=0
+  let daysAhead   = (idx - todayIdx + 7) % 7;
+  const target    = new Date(now);
+  target.setHours(0,0,0,0);
+  target.setDate(target.getDate() + daysAhead);
+  if (daysAhead === 0) return { days: 0, label: 'Today!', today: true, date: target };
+  if (daysAhead === 1) return { days: 1, label: 'Tomorrow', today: false, date: target };
+  return { days: daysAhead, label: `in ${daysAhead}d`, today: false, date: target };
 }
 
 /* ══════════════════════════════════════════════
@@ -115,7 +136,7 @@ function Spinner() {
 }
 
 /* ══════════════════════════════════════════════
-   COUNTDOWN CHIP
+   COUNTDOWN CHIP (release date)
 ══════════════════════════════════════════════ */
 function CountdownChip({ dateStr, compact = false }) {
   const cd = getCountdown(dateStr);
@@ -133,9 +154,56 @@ function CountdownChip({ dateStr, compact = false }) {
 }
 
 /* ══════════════════════════════════════════════
+   WEEKLY RELEASE CHIP — "New ep every Friday · in 3d"
+══════════════════════════════════════════════ */
+function WeeklyChip({ day, compact = false }) {
+  const wd = getNextWeekdayCountdown(day);
+  if (!wd) return null;
+  const urgency = wd.today ? styles.cdUrgent : wd.days <= 1 ? styles.cdSoon : styles.cdFar;
+  if (compact) {
+    return (
+      <span className={`${styles.weeklyChip} ${urgency}`}>
+        🔁 {day}s · {wd.label}
+      </span>
+    );
+  }
+  return (
+    <div className={styles.weeklyBlock}>
+      <span className={styles.weeklyIco}>🔁</span>
+      <div>
+        <div className={styles.weeklyTitle}>New episode every {day}</div>
+        <div className={styles.weeklySub}>Next drop {wd.label.toLowerCase()}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   NEXT SEASON CHIP — "All episodes out · Season 5 in 2027"
+══════════════════════════════════════════════ */
+function NextSeasonChip({ year, compact = false }) {
+  if (compact) {
+    return (
+      <span className={styles.seasonChip}>
+        ✅ All eps out{year ? ` · Next: ${year}` : ''}
+      </span>
+    );
+  }
+  return (
+    <div className={styles.seasonBlock}>
+      <span className={styles.seasonIco}>🎬</span>
+      <div>
+        <div className={styles.seasonTitle}>All current episodes out</div>
+        {year && <div className={styles.seasonSub}>Next season expected in {year}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
    MEDIA CARD
 ══════════════════════════════════════════════ */
-function MediaCard({ item, onClick, onEdit, onDelete }) {
+function MediaCard({ item, onClick, onEdit, onDelete, onToggleFav }) {
   const [imgErr, setImgErr] = useState(false);
   const cd = item.status === 'upcoming' ? getCountdown(item.nextDate) : null;
 
@@ -167,6 +235,15 @@ function MediaCard({ item, onClick, onEdit, onDelete }) {
           {item.platform}
         </div>
 
+        {/* Favorite star */}
+        <button
+          className={`${styles.favBtn} ${item.isFavorite ? styles.favBtnOn : ''}`}
+          onClick={e => { e.stopPropagation(); onToggleFav(item); }}
+          title={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          {item.isFavorite ? '⭐' : '☆'}
+        </button>
+
         {/* Status overlay */}
         {item.status === 'watched' && (
           <div className={styles.cardWatchedBadge}>✓ Done</div>
@@ -177,6 +254,11 @@ function MediaCard({ item, onClick, onEdit, onDelete }) {
           <div className={`${styles.cardCdOverlay} ${cd.days <= 3 ? styles.cardCdUrgent : ''}`}>
             ⏳ {cd.days}d
           </div>
+        )}
+
+        {/* Weekly release badge on poster */}
+        {item.weeklyRelease && item.releaseDay && (
+          <div className={styles.cardWeeklyOverlay}>🔁 {item.releaseDay}s</div>
         )}
       </div>
 
@@ -197,6 +279,14 @@ function MediaCard({ item, onClick, onEdit, onDelete }) {
         {item.status === 'upcoming' && item.nextDate && (
           <div className={styles.cardNextDate}>📅 {formatDate(item.nextDate)}</div>
         )}
+
+        {item.weeklyRelease && item.releaseDay && (
+          <WeeklyChip day={item.releaseDay} compact />
+        )}
+
+        {item.seasonComplete && (
+          <NextSeasonChip year={item.nextSeasonYear} compact />
+        )}
       </div>
 
       {/* Footer actions */}
@@ -211,7 +301,7 @@ function MediaCard({ item, onClick, onEdit, onDelete }) {
 /* ══════════════════════════════════════════════
    UPCOMING ROW (for Upcoming tab)
 ══════════════════════════════════════════════ */
-function UpcomingRow({ item, onClick, onEdit, onDelete }) {
+function UpcomingRow({ item, onClick, onEdit, onDelete, onToggleFav }) {
   const cd = getCountdown(item.nextDate);
   return (
     <div className={styles.upRow} onClick={() => onClick(item)}>
@@ -239,13 +329,19 @@ function UpcomingRow({ item, onClick, onEdit, onDelete }) {
 
       {/* Info */}
       <div className={styles.upInfo}>
-        <div className={styles.upTitle}>{item.title}</div>
+        <div className={styles.upTitle}>
+          {item.isFavorite && <span className={styles.upFavMark}>⭐</span>}
+          {item.title}
+        </div>
         <div className={styles.upMeta}>
           <PlatformBadge platform={item.platform} />
           <span className={`${styles.badge} ${styles.badgeType}`}>{item.type}</span>
         </div>
         {item.nextDate && (
           <div className={styles.upDate}>📅 {formatDate(item.nextDate)}</div>
+        )}
+        {item.seasonComplete && (
+          <NextSeasonChip year={item.nextSeasonYear} compact />
         )}
         {item.desc && (
           <div className={styles.upDesc}>{item.desc.slice(0, 80)}{item.desc.length > 80 ? '…' : ''}</div>
@@ -254,6 +350,7 @@ function UpcomingRow({ item, onClick, onEdit, onDelete }) {
 
       {/* Actions */}
       <div className={styles.upActs} onClick={e => e.stopPropagation()}>
+        <button className={styles.cardEdit} onClick={() => onToggleFav(item)}>{item.isFavorite ? '⭐' : '☆'}</button>
         <button className={styles.cardEdit} onClick={() => onEdit(item)}>✏️</button>
         <button className={styles.cardDel}  onClick={() => onDelete(item.id)}>🗑</button>
       </div>
@@ -265,7 +362,7 @@ function UpcomingRow({ item, onClick, onEdit, onDelete }) {
    FORM MODAL (Add / Edit)
 ══════════════════════════════════════════════ */
 function FormModal({ editItem, onClose, onSave, saving }) {
-  const [form, setForm] = useState(editItem ? { ...editItem } : { ...EMPTY_FORM });
+  const [form, setForm] = useState(editItem ? { ...EMPTY_FORM, ...editItem } : { ...EMPTY_FORM });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const submit = () => {
@@ -324,16 +421,26 @@ function FormModal({ editItem, onClose, onSave, saving }) {
             </div>
           )}
 
-          {/* Title */}
+          {/* Title + Favorite */}
           <div className={styles.fField}>
             <label className={styles.fLabel}>Title *</label>
-            <input
-              className={styles.fInput}
-              value={form.title}
-              onChange={e => set('title', e.target.value)}
-              placeholder="e.g. Mirzapur Season 4"
-              autoFocus
-            />
+            <div className={styles.titleRow}>
+              <input
+                className={styles.fInput}
+                value={form.title}
+                onChange={e => set('title', e.target.value)}
+                placeholder="e.g. Mirzapur Season 4"
+                autoFocus
+              />
+              <button
+                type="button"
+                className={`${styles.favToggleBtn} ${form.isFavorite ? styles.favToggleBtnOn : ''}`}
+                onClick={() => set('isFavorite', !form.isFavorite)}
+                title="Mark as favorite"
+              >
+                {form.isFavorite ? '⭐' : '☆'}
+              </button>
+            </div>
           </div>
 
           {/* Type + Platform */}
@@ -439,6 +546,53 @@ function FormModal({ editItem, onClose, onSave, saving }) {
             </div>
           )}
 
+          {/* Weekly release toggle — series that are currently watching/upcoming */}
+          {isSeries && (isWatching || form.status === 'watchlist') && (
+            <div className={styles.fField}>
+              <label className={styles.fToggleRow}>
+                <input
+                  type="checkbox"
+                  checked={!!form.weeklyRelease}
+                  onChange={e => set('weeklyRelease', e.target.checked)}
+                />
+                <span>🔁 Releases a new episode every week</span>
+              </label>
+              {form.weeklyRelease && (
+                <select
+                  className={styles.fSelect}
+                  value={form.releaseDay}
+                  onChange={e => set('releaseDay', e.target.value)}
+                  style={{ marginTop: 8 }}
+                >
+                  {WEEKDAYS.map(d => <option key={d}>{d}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* Season complete / next season toggle */}
+          {isSeries && (
+            <div className={styles.fField}>
+              <label className={styles.fToggleRow}>
+                <input
+                  type="checkbox"
+                  checked={!!form.seasonComplete}
+                  onChange={e => set('seasonComplete', e.target.checked)}
+                />
+                <span>✅ All current episodes are out (new season expected)</span>
+              </label>
+              {form.seasonComplete && (
+                <input
+                  className={styles.fInput}
+                  value={form.nextSeasonYear || ''}
+                  onChange={e => set('nextSeasonYear', e.target.value)}
+                  placeholder="Next season expected — e.g. 2027"
+                  style={{ marginTop: 8 }}
+                />
+              )}
+            </div>
+          )}
+
           {/* Release date — upcoming + next season */}
           <div className={styles.fField}>
             <label className={styles.fLabel}>
@@ -474,7 +628,7 @@ function FormModal({ editItem, onClose, onSave, saving }) {
 /* ══════════════════════════════════════════════
    DETAIL MODAL
 ══════════════════════════════════════════════ */
-function DetailModal({ item, onClose, onStatusChange, onEdit, saving }) {
+function DetailModal({ item, onClose, onStatusChange, onEdit, onToggleFav, saving }) {
   if (!item) return null;
   const cd = item.status === 'upcoming' ? getCountdown(item.nextDate) : null;
 
@@ -482,6 +636,13 @@ function DetailModal({ item, onClose, onStatusChange, onEdit, saving }) {
     <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className={styles.detailPanel}>
         <button className={styles.closeBtn} onClick={onClose}>✕</button>
+        <button
+          className={`${styles.favBtn} ${styles.favBtnDetail} ${item.isFavorite ? styles.favBtnOn : ''}`}
+          onClick={() => onToggleFav(item)}
+          title={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          {item.isFavorite ? '⭐' : '☆'}
+        </button>
 
         {/* Hero */}
         {item.posterUrl ? (
@@ -511,6 +672,16 @@ function DetailModal({ item, onClose, onStatusChange, onEdit, saving }) {
               {item.currentSeason > 0 && <> · S{item.currentSeason}E{item.currentEp || 0}</>}
               {item.nextEp && <> · Next: <strong>{item.nextEp}</strong></>}
             </div>
+          )}
+
+          {/* Weekly release */}
+          {item.weeklyRelease && item.releaseDay && (
+            <WeeklyChip day={item.releaseDay} />
+          )}
+
+          {/* Season complete / next season */}
+          {item.seasonComplete && (
+            <NextSeasonChip year={item.nextSeasonYear} />
           )}
 
           {/* Progress */}
@@ -623,10 +794,12 @@ export default function WatchTrackerPage() {
     return okPlat && okSearch;
   }), [items, platFilter, searchQ]);
 
-  const watching  = filtered.filter(x => x.status === 'watching');
-  const watchlist = filtered.filter(x => x.status === 'watchlist');
-  const watched   = filtered.filter(x => x.status === 'watched');
-  const upcoming  = filtered.filter(x => x.status === 'upcoming');
+  const watching   = filtered.filter(x => x.status === 'watching');
+  const watchlist  = filtered.filter(x => x.status === 'watchlist');
+  const watched    = filtered.filter(x => x.status === 'watched');
+  const upcoming   = filtered.filter(x => x.status === 'upcoming');
+  const favorites  = filtered.filter(x => x.isFavorite);
+  const weeklyShows = filtered.filter(x => x.weeklyRelease && x.releaseDay);
 
   /* Save (add / edit) */
   const saveItem = async form => {
@@ -650,6 +823,11 @@ export default function WatchTrackerPage() {
         nextDate:      form.nextDate || null,
         status:        form.status,
         progress:      Number(form.progress) || 0,
+        isFavorite:      !!form.isFavorite,
+        weeklyRelease:   !!form.weeklyRelease,
+        releaseDay:      form.weeklyRelease ? form.releaseDay : null,
+        seasonComplete:  !!form.seasonComplete,
+        nextSeasonYear:  form.seasonComplete ? (form.nextSeasonYear || '').trim() : '',
         updatedAt:     serverTimestamp(),
       };
 
@@ -694,6 +872,19 @@ export default function WatchTrackerPage() {
     setSaving(false);
   };
 
+  /* Toggle favorite */
+  const toggleFavorite = async item => {
+    if (!uid) return;
+    const next = !item.isFavorite;
+    try {
+      await updateDoc(doc(db, `users/${uid}/watchtracker`, item.id), {
+        isFavorite: next, updatedAt: serverTimestamp(),
+      });
+      setItems(prev  => prev.map(x => x.id === item.id ? { ...x, isFavorite: next } : x));
+      setDetailItem(p => p?.id === item.id ? { ...p, isFavorite: next } : p);
+    } catch (e) { console.error(e); }
+  };
+
   const openEdit = item => { setEditItem(item); setShowForm(true); };
   const openAdd  = ()   => { setEditItem(null);  setShowForm(true); };
 
@@ -711,6 +902,7 @@ export default function WatchTrackerPage() {
     { id: 'watchlist', label: `📋 Watchlist${watchlist.length ? ` (${watchlist.length})` : ''}` },
     { id: 'upcoming',  label: `🗓 Upcoming${upcoming.length  ? ` (${upcoming.length})`  : ''}` },
     { id: 'watched',   label: `✅ Watched${watched.length    ? ` (${watched.length})`   : ''}` },
+    { id: 'favorites', label: `⭐ Favorites${favorites.length ? ` (${favorites.length})` : ''}` },
   ];
 
   return (
@@ -775,6 +967,7 @@ export default function WatchTrackerPage() {
                 { n: watchlist.length, l: 'Watchlist', ico: '📋' },
                 { n: upcoming.length,  l: 'Upcoming',  ico: '🗓' },
                 { n: watched.length,   l: 'Watched',   ico: '✅' },
+                { n: favorites.length, l: 'Favorites', ico: '⭐' },
               ].map(s => (
                 <div key={s.l} className={styles.stat} onClick={() => setActiveTab(s.l.toLowerCase())}>
                   <div className={styles.statIco}>{s.ico}</div>
@@ -784,6 +977,32 @@ export default function WatchTrackerPage() {
               ))}
             </div>
 
+            {/* This week's episodes */}
+            {weeklyShows.length > 0 && (
+              <section className={styles.section}>
+                <div className={styles.sectionHead}>
+                  <h2 className={styles.sectionTitle}>🔁 New Episodes This Week</h2>
+                </div>
+                <div className={styles.weeklyRow}>
+                  {weeklyShows
+                    .sort((a, b) => (getNextWeekdayCountdown(a.releaseDay)?.days ?? 9) - (getNextWeekdayCountdown(b.releaseDay)?.days ?? 9))
+                    .map(item => (
+                      <div key={item.id} className={styles.weeklyCard} onClick={() => setDetailItem(item)}>
+                        <div className={styles.weeklyCardThumb}>
+                          {item.posterUrl
+                            ? <img src={item.posterUrl} alt={item.title} className={styles.upThumbImg} />
+                            : <span className={styles.upThumbEmoji}>{item.emoji}</span>}
+                        </div>
+                        <div className={styles.weeklyCardBody}>
+                          <div className={styles.weeklyCardTitle}>{item.title}</div>
+                          <WeeklyChip day={item.releaseDay} compact />
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </section>
+            )}
+
             {/* Continue watching */}
             {watching.length > 0 && (
               <section className={styles.section}>
@@ -792,7 +1011,7 @@ export default function WatchTrackerPage() {
                 </div>
                 <div className={styles.grid}>
                   {watching.map(item => (
-                    <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />
+                    <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} onToggleFav={toggleFavorite} />
                   ))}
                 </div>
               </section>
@@ -806,7 +1025,7 @@ export default function WatchTrackerPage() {
                 </div>
                 <div className={styles.upcomingList}>
                   {upcoming.map(item => (
-                    <UpcomingRow key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />
+                    <UpcomingRow key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} onToggleFav={toggleFavorite} />
                   ))}
                 </div>
               </section>
@@ -823,7 +1042,7 @@ export default function WatchTrackerPage() {
                 </div>
                 <div className={styles.grid}>
                   {watchlist.slice(0, 8).map(item => (
-                    <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />
+                    <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} onToggleFav={toggleFavorite} />
                   ))}
                 </div>
               </section>
@@ -846,7 +1065,7 @@ export default function WatchTrackerPage() {
           <section className={styles.section}>
             {watching.length === 0
               ? <div className={styles.empty}><div className={styles.emptyIco}>▶️</div><div className={styles.emptyTitle}>Nothing being watched</div><p className={styles.emptySub}>Move something from Watchlist to start watching.</p></div>
-              : <div className={styles.grid}>{watching.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}</div>
+              : <div className={styles.grid}>{watching.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} onToggleFav={toggleFavorite} />)}</div>
             }
           </section>
         )}
@@ -856,7 +1075,7 @@ export default function WatchTrackerPage() {
           <section className={styles.section}>
             {watchlist.length === 0
               ? <div className={styles.empty}><div className={styles.emptyIco}>📋</div><div className={styles.emptyTitle}>Watchlist is empty</div><p className={styles.emptySub}>Add movies and shows you want to watch.</p></div>
-              : <div className={styles.grid}>{watchlist.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}</div>
+              : <div className={styles.grid}>{watchlist.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} onToggleFav={toggleFavorite} />)}</div>
             }
           </section>
         )}
@@ -875,7 +1094,7 @@ export default function WatchTrackerPage() {
                       return new Date(a.nextDate) - new Date(b.nextDate);
                     })
                     .map(item => (
-                      <UpcomingRow key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />
+                      <UpcomingRow key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} onToggleFav={toggleFavorite} />
                     ))
                   }
                 </div>
@@ -889,7 +1108,17 @@ export default function WatchTrackerPage() {
           <section className={styles.section}>
             {watched.length === 0
               ? <div className={styles.empty}><div className={styles.emptyIco}>✅</div><div className={styles.emptyTitle}>Nothing completed</div><p className={styles.emptySub}>Mark items as watched to see them here.</p></div>
-              : <div className={styles.grid}>{watched.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} />)}</div>
+              : <div className={styles.grid}>{watched.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} onToggleFav={toggleFavorite} />)}</div>
+            }
+          </section>
+        )}
+
+        {/* ── FAVORITES ── */}
+        {activeTab === 'favorites' && (
+          <section className={styles.section}>
+            {favorites.length === 0
+              ? <div className={styles.empty}><div className={styles.emptyIco}>⭐</div><div className={styles.emptyTitle}>No favorites yet</div><p className={styles.emptySub}>Tap the star on any title to pin it here.</p></div>
+              : <div className={styles.grid}>{favorites.map(item => <MediaCard key={item.id} item={item} onClick={setDetailItem} onEdit={openEdit} onDelete={deleteItem} onToggleFav={toggleFavorite} />)}</div>
             }
           </section>
         )}
@@ -903,6 +1132,7 @@ export default function WatchTrackerPage() {
           onClose={() => setDetailItem(null)}
           onStatusChange={changeStatus}
           onEdit={openEdit}
+          onToggleFav={toggleFavorite}
           saving={saving}
         />
       )}
