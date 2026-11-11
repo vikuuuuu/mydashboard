@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
-import { parseAnswerKeyHtml } from '@/lib/answerKeyParser';
+import { parseAnswerKeyHtml } from '@/lib/answerkeyparser';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
