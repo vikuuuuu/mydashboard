@@ -49,7 +49,7 @@ const DEFAULT_TOOLS = [
   { id: "locker",  title: "Secure Vault",  desc: "Encrypt and securely store passwords, IDs, bank details, documents, photos & private notes.",  icon: "🔐",  color: "#4f46e5",  pinned: false },
   {  id: "dairy",  title: "Milk Dairy Record",  desc: "Manage milk collection, customer records, payments & daily dairy transactions.",  icon: "🥛",  color: "#4f46e5",  pinned: false,},
   {  id: "typing_test",  title: "Typing Test",  desc: "Test your typing speed, accuracy, and words per minute.",  icon: "⌨️",  color: "#7209b7",  pinned: false},
-  {  id: "answer-key-analyzer",  title: "Scorecard & Result",  desc: "Analyze RRB & SSC answer keys: score, accuracy, subject-wise result.",  icon: "🎯",  color: "#4361ee",   pinned: false}
+  {  id: "Ssc-rrb-score-card",  title: "Scorecard & Result",  desc: "Analyze RRB & SSC answer keys: score, accuracy, subject-wise result.",  icon: "🎯",  color: "#4361ee",   pinned: false}
 ];
 
 const VIEWS      = ["grid", "list", "compact"];
