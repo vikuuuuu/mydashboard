@@ -100,7 +100,13 @@ async function fetchSheet(startUrl) {
       remember(res);
       const isRedirect = res.status >= 300 && res.status < 400;
       const buf = isRedirect ? null : await res.arrayBuffer();
-      return { status: res.status, ok: res.ok, loc: res.headers.get('location'), buf };
+      return {
+        status: res.status,
+        ok: res.ok,
+        loc: res.headers.get('location'),
+        server: res.headers.get('server') || '',
+        buf,
+      };
     } catch {
       throw new HttpError(
         502,
@@ -138,11 +144,22 @@ async function fetchSheet(startUrl) {
     }
 
     if (!r.ok) {
-      console.error('answer-key upstream failure', r.status, current.hostname);
+      // Shows up in Vercel → Logs. Helps tell "blocked" from "bad link".
+      const snippet = r.buf
+        ? new TextDecoder('utf-8').decode(r.buf.slice(0, 400)).replace(/\s+/g, ' ')
+        : '';
+      console.error('answer-key upstream failure', {
+        status: r.status,
+        host: current.hostname,
+        path: current.pathname.slice(0, 80),
+        server: r.server,
+        body: snippet,
+      });
+      const tag = `${r.status}${r.server ? ` · ${r.server}` : ''}`;
       throw new HttpError(
         502,
         'FETCH_FAILED',
-        `The exam site returned an error (${r.status}). The link may have expired — try "Paste page source" instead.`
+        `The exam site refused the request (${tag}). Make sure the link is your response sheet page (not the login page). If it still fails, save that page with Ctrl+S and upload it under "Paste page source".`
       );
     }
     if (r.buf.byteLength > MAX_BYTES) {
