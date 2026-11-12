@@ -1,17 +1,15 @@
 // Pure functions — no Firebase, no cheerio. Safe to import in client code.
 
-// Marking schemes differ by exam, year and shift. Treat these as starting
-// points and edit the numbers to match your notification.
 export const EXAM_PRESETS = [
   { id: 'rrb', label: 'RRB (NTPC / Group D / ALP / JE)', correct: '1', negative: '1/3' },
   { id: 'ssc-cgl', label: 'SSC CGL / CHSL Tier 1', correct: '2', negative: '0.5' },
+  { id: 'ssc-mains', label: 'SSC CGL / CHSL Tier 2', correct: '3', negative: '1' },
   { id: 'ssc-std', label: 'SSC GD / CPO / Steno / JE', correct: '1', negative: '0.25' },
   { id: 'custom', label: 'Custom', correct: '1', negative: '0' },
 ];
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-// Accepts "2", "0.25" or a fraction like "1/3". Returns NaN when invalid.
 export function parseMarks(text) {
   const t = String(text ?? '').trim();
   if (!t) return NaN;
@@ -27,6 +25,7 @@ export function parseMarks(text) {
 
 export function formatMarks(n) {
   if (Math.abs(n - 1 / 3) < 1e-9) return '1/3';
+  if (Math.abs(n - 2 / 3) < 1e-9) return '2/3';
   return String(Number(n.toFixed(4)));
 }
 
@@ -36,13 +35,13 @@ export function fmt(n) {
 }
 
 /**
- * parsed:  { sections: string[], questions: [{ n, s, chosen, answer }] }
- * scheme:  { correct: number, negative: number }
- *
- * Result codes per question: C correct, W wrong, U unattempted,
- * N no answer key in the sheet (not scored).
+ * Result codes per question:
+ * C = Correct
+ * W = Wrong (Incorrect)
+ * U = Unattempted
+ * N = No answer key / Dropped question (not scored)
  */
-export function computeResult(parsed, scheme) {
+export function computeResult(parsed, scheme, { bonusForDropped = false } = {}) {
   const cm = scheme.correct;
   const nm = scheme.negative;
 
@@ -56,32 +55,45 @@ export function computeResult(parsed, scheme) {
     unscored: 0,
   }));
 
-  const questions = parsed.questions.map((q) => {
-    const sec = sections[q.s];
+  const questions = parsed.questions.map((q, idx) => {
+    const sec = sections[q.s] || sections[0];
     sec.total += 1;
-    if (q.chosen) sec.attempted += 1;
-    else sec.unattempted += 1;
 
     let r;
     if (!q.answer) {
+      // Dropped / Unscored question: do NOT count in attempted/unattempted
       r = 'N';
       sec.unscored += 1;
     } else if (!q.chosen) {
       r = 'U';
+      sec.unattempted += 1;
     } else if (q.chosen === q.answer) {
       r = 'C';
+      sec.attempted += 1;
       sec.correct += 1;
     } else {
       r = 'W';
+      sec.attempted += 1;
       sec.incorrect += 1;
     }
-    return { n: q.n, s: q.s, c: q.chosen, a: q.answer, r };
+
+    return {
+      id: q.id || `${q.s}-${q.n}-${idx}`,
+      n: q.n,
+      s: q.s,
+      c: q.chosen,
+      a: q.answer,
+      r,
+    };
   });
 
   sections.forEach((sec) => {
     const judged = sec.correct + sec.incorrect;
-    sec.score = round2(sec.correct * cm - sec.incorrect * nm);
-    sec.maxScore = round2(sec.total * cm);
+    const scorableCount = sec.total - sec.unscored;
+    const bonus = bonusForDropped ? sec.unscored * cm : 0;
+
+    sec.score = round2(sec.correct * cm - sec.incorrect * nm + bonus);
+    sec.maxScore = round2((bonusForDropped ? sec.total : scorableCount) * cm);
     sec.accuracy = judged ? round2((sec.correct / judged) * 100) : 0;
   });
 
@@ -95,8 +107,11 @@ export function computeResult(parsed, scheme) {
     unscored: sum('unscored'),
   };
 
-  const score = round2(totals.correct * cm - totals.incorrect * nm);
-  const maxScore = round2(totals.totalQuestions * cm);
+  const scorableTotal = totals.totalQuestions - totals.unscored;
+  const totalBonus = bonusForDropped ? totals.unscored * cm : 0;
+
+  const score = round2(totals.correct * cm - totals.incorrect * nm + totalBonus);
+  const maxScore = round2((bonusForDropped ? totals.totalQuestions : scorableTotal) * cm);
   const percentage = maxScore > 0 ? round2((score / maxScore) * 100) : 0;
   const judged = totals.correct + totals.incorrect;
   const accuracy = judged ? round2((totals.correct / judged) * 100) : 0;
