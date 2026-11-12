@@ -22,7 +22,7 @@ import {
   formatMarks,
   parseMarks,
 } from '@/lib/answerKeyScoring';
-import styles from './answerKey.module.css';
+import styles from './answerkey.module.css';
 
 const COLLECTION = 'answerKeyAnalyses';
 
