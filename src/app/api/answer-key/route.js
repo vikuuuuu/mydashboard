@@ -1,20 +1,17 @@
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
+import https from 'node:https';
 import { parseAnswerKeyHtml } from '@/lib/answerKeyParser';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
-// Government exam hosts are sometimes slow or blocked outside India.
-// On Vercel this pins the function to Mumbai.
 export const preferredRegion = 'bom1';
 
-// Only these hosts can be fetched. Never open this up to arbitrary URLs —
-// the route would become an open proxy / SSRF hole.
 const ALLOWED_HOSTS = ['digialm.com'];
 const MAX_BYTES = 8 * 1024 * 1024;
 const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 class HttpError extends Error {
   constructor(status, code, message) {
@@ -33,8 +30,6 @@ function isAllowed(u) {
   return ALLOWED_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
-// Confirms the Firebase ID token with Google's REST API, so no admin SDK is
-// needed. Uses the same public web API key your client already has.
 async function verifyUser(req) {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   const key = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -55,70 +50,104 @@ async function verifyUser(req) {
   }
 }
 
-const browserHeaders = (u) => ({
+const browserHeaders = () => ({
   'User-Agent': UA,
-  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8',
-  Referer: `${u.origin}/`,
+  Accept:
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7,hi;q=0.6',
+  'Cache-Control': 'no-cache',
+  Pragma: 'no-cache',
+  'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+  'Sec-Ch-Ua-Mobile': '?0',
+  'Sec-Ch-Ua-Platform': '"Windows"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
   'Upgrade-Insecure-Requests': '1',
 });
 
+// Raw HTTPS request that preserves exact path (like '//per/g22/...') without URL normalization
+function rawHttpsGet(rawUrl, headers) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(rawUrl);
+    const hostIdx = rawUrl.indexOf(u.host);
+    const rawPath = hostIdx !== -1 ? rawUrl.slice(hostIdx + u.host.length) || '/' : u.pathname + u.search;
+
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        port: 443,
+        path: rawPath,
+        method: 'GET',
+        headers: {
+          Host: u.host,
+          ...headers,
+        },
+        timeout: 15000,
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          resolve({
+            status: res.statusCode || 500,
+            ok: res.statusCode >= 200 && res.statusCode < 300,
+            loc: res.headers.location || null,
+            server: res.headers.server || '',
+            setCookie: res.headers['set-cookie'] || [],
+            buf: Buffer.concat(chunks),
+          });
+        });
+      }
+    );
+
+    req.on('timeout', () => req.destroy(new Error('TIMEOUT')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 async function fetchSheet(startUrl) {
+  let cleanStr = startUrl.replace(/&amp;/gi, '&').replace(/[\r\n\t\s]+/g, '').trim();
   let current;
   try {
-    // Undo copy-paste damage: HTML-escaped ampersands, spaces, line breaks.
-    current = new URL(startUrl.replace(/&amp;/gi, '&').replace(/\s+/g, ''));
+    current = new URL(cleanStr);
   } catch {
     throw new HttpError(400, 'BAD_URL', 'That does not look like a valid link.');
   }
 
-  // Cookies picked up along the way (redirects, warm-up request).
   const cookies = new Map();
-  const remember = (res) => {
-    const lines = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
-    for (const line of lines) {
+  const remember = (setCookieArr) => {
+    for (const line of setCookieArr || []) {
       const pair = line.split(';')[0];
       const i = pair.indexOf('=');
       if (i > 0) cookies.set(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
     }
   };
 
-  async function get(u) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+  async function get(targetStr, uObj, isRetry = false) {
     try {
-      const headers = browserHeaders(u);
+      const headers = browserHeaders();
+      if (isRetry) {
+        headers.Referer = `${uObj.origin}/`;
+        headers['Sec-Fetch-Site'] = 'same-origin';
+      }
       if (cookies.size) {
         headers.Cookie = [...cookies].map(([k, v]) => `${k}=${v}`).join('; ');
       }
-      const res = await fetch(u, {
-        redirect: 'manual',
-        signal: ctrl.signal,
-        cache: 'no-store',
-        headers,
-      });
-      remember(res);
-      const isRedirect = res.status >= 300 && res.status < 400;
-      const buf = isRedirect ? null : await res.arrayBuffer();
-      return {
-        status: res.status,
-        ok: res.ok,
-        loc: res.headers.get('location'),
-        server: res.headers.get('server') || '',
-        buf,
-      };
+      const res = await rawHttpsGet(targetStr, headers);
+      remember(res.setCookie);
+      return res;
     } catch {
       throw new HttpError(
         502,
         'FETCH_FAILED',
-        'Could not reach the exam site. Open the link in your browser, then use "Paste page source" instead.'
+        'Could not reach the exam site. Open the link in your browser, press Ctrl+U, copy all, and use "Paste page source".'
       );
-    } finally {
-      clearTimeout(timer);
     }
   }
 
-  // Follow redirects by hand so every hop is re-checked against the allow-list.
   let warmedUp = false;
   for (let hop = 0; hop < 6; hop += 1) {
     if (!isAllowed(current)) {
@@ -129,37 +158,27 @@ async function fetchSheet(startUrl) {
       );
     }
 
-    const r = await get(current);
+    const r = await get(cleanStr, current, warmedUp);
 
     if (r.status >= 300 && r.status < 400 && r.loc) {
-      current = new URL(r.loc, current);
+      const nextUrl = new URL(r.loc, current);
+      current = nextUrl;
+      cleanStr = r.loc.startsWith('http') ? r.loc : nextUrl.toString();
       continue;
     }
 
-    // 400/403: visit the site's home page once to pick up cookies, then retry.
     if (!r.ok && !warmedUp && (r.status === 400 || r.status === 403)) {
       warmedUp = true;
-      await get(new URL('/', current.origin)).catch(() => {});
+      await get(`${current.origin}/`, new URL('/', current.origin), false).catch(() => {});
       continue;
     }
 
     if (!r.ok) {
-      // Shows up in Vercel → Logs. Helps tell "blocked" from "bad link".
-      const snippet = r.buf
-        ? new TextDecoder('utf-8').decode(r.buf.slice(0, 400)).replace(/\s+/g, ' ')
-        : '';
-      console.error('answer-key upstream failure', {
-        status: r.status,
-        host: current.hostname,
-        path: current.pathname.slice(0, 80),
-        server: r.server,
-        body: snippet,
-      });
       const tag = `${r.status}${r.server ? ` · ${r.server}` : ''}`;
       throw new HttpError(
         502,
         'FETCH_FAILED',
-        `The exam site refused the request (${tag}). Make sure the link is your response sheet page (not the login page). If it still fails, save that page with Ctrl+S and upload it under "Paste page source".`
+        `The exam site blocked direct server access (${tag}). Open your answer key link in browser, press Ctrl+U (View Source), copy everything (Ctrl+A, Ctrl+C), and paste it in "Paste page source".`
       );
     }
     if (r.buf.byteLength > MAX_BYTES) {
@@ -196,8 +215,6 @@ export async function POST(req) {
 
     const parsed = parseAnswerKeyHtml(html);
 
-    // Same sheet → same fingerprint → re-analyzing updates one Firestore doc
-    // instead of creating duplicates.
     const c = parsed.candidate;
     const basis = c.rollNo
       ? [c.rollNo, c.examDate, c.examTime, c.subject].join('|')
