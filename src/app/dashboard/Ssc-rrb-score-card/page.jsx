@@ -22,7 +22,7 @@ import {
   formatMarks,
   parseMarks,
 } from '@/lib/answerKeyScoring';
-import styles from './answerkey.module.css';
+import styles from './answerKey.module.css';
 
 const COLLECTION = 'answerKeyAnalyses';
 
@@ -217,6 +217,23 @@ export default function AnswerKeyAnalyzerPage() {
     setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
   }
 
+  function onPickFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      setError('That file is over 4 MB, which is the upload limit here.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setHtmlText(String(reader.result || ''));
+      setError('');
+    };
+    reader.onerror = () => setError('Could not read that file.');
+    reader.readAsText(file);
+  }
+
   async function removeSaved(row) {
     try {
       await deleteDoc(doc(db, COLLECTION, row.id));
@@ -286,8 +303,9 @@ export default function AnswerKeyAnalyzerPage() {
               autoComplete="off"
             />
             <span className={styles.hint}>
-              Links from digialm.com are supported. If the link won&apos;t load here, open it in
-              your browser, press Ctrl+U, copy everything, and use &ldquo;Paste page source&rdquo;.
+              Use the address of your response sheet page (the one that shows your questions), not
+              the login page. If it won&apos;t load here, save that page with Ctrl+S and upload it
+              under &ldquo;Paste page source&rdquo;.
             </span>
           </label>
         ) : (
@@ -300,6 +318,16 @@ export default function AnswerKeyAnalyzerPage() {
               value={htmlText}
               onChange={(e) => setHtmlText(e.target.value)}
               spellCheck={false}
+            />
+            <span className={styles.hint}>
+              Easiest way: open your response sheet, press Ctrl+S to save the page as HTML, then
+              choose that file here.
+            </span>
+            <input
+              className={styles.input}
+              type="file"
+              accept=".html,.htm,text/html"
+              onChange={onPickFile}
             />
           </label>
         )}
