@@ -55,53 +55,53 @@ async function verifyUser(req) {
   }
 }
 
+const browserHeaders = (u) => ({
+  'User-Agent': UA,
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8',
+  Referer: `${u.origin}/`,
+  'Upgrade-Insecure-Requests': '1',
+});
+
 async function fetchSheet(startUrl) {
   let current;
   try {
-    current = new URL(startUrl);
+    // Undo copy-paste damage: HTML-escaped ampersands, spaces, line breaks.
+    current = new URL(startUrl.replace(/&amp;/gi, '&').replace(/\s+/g, ''));
   } catch {
     throw new HttpError(400, 'BAD_URL', 'That does not look like a valid link.');
   }
 
-  // Follow redirects by hand so every hop is re-checked against the allow-list.
-  for (let hop = 0; hop < 4; hop += 1) {
-    if (!isAllowed(current)) {
-      throw new HttpError(
-        400,
-        'BAD_HOST',
-        'Only answer-key links from digialm.com (RRB / SSC) are supported. Use "Paste page source" for anything else.'
-      );
+  // Cookies picked up along the way (redirects, warm-up request).
+  const cookies = new Map();
+  const remember = (res) => {
+    const lines = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
+    for (const line of lines) {
+      const pair = line.split(';')[0];
+      const i = pair.indexOf('=');
+      if (i > 0) cookies.set(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
     }
+  };
 
+  async function get(u) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
     try {
-      const res = await fetch(current, {
+      const headers = browserHeaders(u);
+      if (cookies.size) {
+        headers.Cookie = [...cookies].map(([k, v]) => `${k}=${v}`).join('; ');
+      }
+      const res = await fetch(u, {
         redirect: 'manual',
         signal: ctrl.signal,
         cache: 'no-store',
-        headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*' },
+        headers,
       });
-
-      const loc = res.headers.get('location');
-      if (res.status >= 300 && res.status < 400 && loc) {
-        current = new URL(loc, current);
-        continue;
-      }
-      if (!res.ok) {
-        throw new HttpError(
-          502,
-          'FETCH_FAILED',
-          `The exam site returned an error (${res.status}). The link may have expired — try "Paste page source" instead.`
-        );
-      }
-      const buf = await res.arrayBuffer();
-      if (buf.byteLength > MAX_BYTES) {
-        throw new HttpError(413, 'TOO_LARGE', 'That page is too large to analyze.');
-      }
-      return new TextDecoder('utf-8').decode(buf);
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
+      remember(res);
+      const isRedirect = res.status >= 300 && res.status < 400;
+      const buf = isRedirect ? null : await res.arrayBuffer();
+      return { status: res.status, ok: res.ok, loc: res.headers.get('location'), buf };
+    } catch {
       throw new HttpError(
         502,
         'FETCH_FAILED',
@@ -110,6 +110,45 @@ async function fetchSheet(startUrl) {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  // Follow redirects by hand so every hop is re-checked against the allow-list.
+  let warmedUp = false;
+  for (let hop = 0; hop < 6; hop += 1) {
+    if (!isAllowed(current)) {
+      throw new HttpError(
+        400,
+        'BAD_HOST',
+        'Only answer-key links from digialm.com (RRB / SSC) are supported. Use "Paste page source" for anything else.'
+      );
+    }
+
+    const r = await get(current);
+
+    if (r.status >= 300 && r.status < 400 && r.loc) {
+      current = new URL(r.loc, current);
+      continue;
+    }
+
+    // 400/403: visit the site's home page once to pick up cookies, then retry.
+    if (!r.ok && !warmedUp && (r.status === 400 || r.status === 403)) {
+      warmedUp = true;
+      await get(new URL('/', current.origin)).catch(() => {});
+      continue;
+    }
+
+    if (!r.ok) {
+      console.error('answer-key upstream failure', r.status, current.hostname);
+      throw new HttpError(
+        502,
+        'FETCH_FAILED',
+        `The exam site returned an error (${r.status}). The link may have expired — try "Paste page source" instead.`
+      );
+    }
+    if (r.buf.byteLength > MAX_BYTES) {
+      throw new HttpError(413, 'TOO_LARGE', 'That page is too large to analyze.');
+    }
+    return new TextDecoder('utf-8').decode(r.buf);
   }
   throw new HttpError(502, 'FETCH_FAILED', 'Too many redirects from the exam site.');
 }
