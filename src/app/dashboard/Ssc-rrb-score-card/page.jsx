@@ -12,8 +12,6 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore';
-// Adjust this import if your Firebase init lives elsewhere.
-// It must export the initialized `auth` and `db` instances.
 import { auth, db } from '@/lib/firebase';
 import {
   EXAM_PRESETS,
@@ -31,6 +29,7 @@ const FILTERS = [
   { id: 'C', label: 'Correct' },
   { id: 'W', label: 'Incorrect' },
   { id: 'U', label: 'Unattempted' },
+  { id: 'N', label: 'Dropped / Unscored' },
 ];
 
 export default function AnswerKeyAnalyzerPage() {
@@ -44,14 +43,15 @@ export default function AnswerKeyAnalyzerPage() {
   const [correctTxt, setCorrectTxt] = useState('1');
   const [negativeTxt, setNegativeTxt] = useState('1/3');
   const [cutoffTxt, setCutoffTxt] = useState('');
+  const [bonusForDropped, setBonusForDropped] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [parsed, setParsed] = useState(null);
-  const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
+  const [saveState, setSaveState] = useState('idle');
   const [history, setHistory] = useState([]);
   const [filter, setFilter] = useState('all');
-  const [activeQ, setActiveQ] = useState(null);
+  const [activeQId, setActiveQId] = useState(null);
 
   const resultsRef = useRef(null);
   const skipSave = useRef(false);
@@ -99,18 +99,17 @@ export default function AnswerKeyAnalyzerPage() {
   }, [cutoffTxt]);
 
   const result = useMemo(
-    () => (parsed && schemeOk ? computeResult(parsed, scheme) : null),
-    [parsed, schemeOk, scheme]
+    () => (parsed && schemeOk ? computeResult(parsed, scheme, { bonusForDropped }) : null),
+    [parsed, schemeOk, scheme, bonusForDropped]
   );
 
   const preset = EXAM_PRESETS.find((p) => p.id === presetId) || EXAM_PRESETS[0];
 
-  /* ── auto-save (debounced; re-saves when marking scheme or cutoff change) ── */
+  /* ── auto-save ── */
   useEffect(() => {
     if (!user || !parsed || !result) return undefined;
 
     if (skipSave.current) {
-      // Just opened from history — nothing new to write.
       skipSave.current = false;
       setSaveState('saved');
       return undefined;
@@ -126,6 +125,7 @@ export default function AnswerKeyAnalyzerPage() {
           presetId: preset.id,
           candidate: parsed.candidate,
           scheme: { correct: scheme.correct, negative: scheme.negative },
+          bonusForDropped,
           totals: result.totals,
           sections: result.sections,
           questions: result.questions,
@@ -148,7 +148,7 @@ export default function AnswerKeyAnalyzerPage() {
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, parsed, result, cutoff, preset.id]);
+  }, [user, parsed, result, cutoff, preset.id, bonusForDropped]);
 
   /* ── handlers ── */
   function choosePreset(id) {
@@ -175,7 +175,7 @@ export default function AnswerKeyAnalyzerPage() {
 
     setLoading(true);
     setParsed(null);
-    setActiveQ(null);
+    setActiveQId(null);
     setFilter('all');
     try {
       const token = await user.getIdToken();
@@ -204,12 +204,19 @@ export default function AnswerKeyAnalyzerPage() {
     setCorrectTxt(formatMarks(row.scheme.correct));
     setNegativeTxt(formatMarks(row.scheme.negative));
     setCutoffTxt(row.cutoff == null ? '' : String(row.cutoff));
-    setActiveQ(null);
+    setBonusForDropped(Boolean(row.bonusForDropped));
+    setActiveQId(null);
     setFilter('all');
     setParsed({
       candidate: row.candidate,
       sections: row.sections.map((s) => s.name),
-      questions: row.questions.map((q) => ({ n: q.n, s: q.s, chosen: q.c, answer: q.a })),
+      questions: row.questions.map((q, idx) => ({
+        id: q.id || `${q.s}-${q.n}-${idx}`,
+        n: q.n,
+        s: q.s,
+        chosen: q.c,
+        answer: q.a,
+      })),
       source: row.source,
       sourceUrl: row.sourceUrl,
       fingerprint: row.fingerprint,
@@ -221,8 +228,8 @@ export default function AnswerKeyAnalyzerPage() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      setError('That file is over 4 MB, which is the upload limit here.');
+    if (file.size > 8 * 1024 * 1024) {
+      setError('That file is over 8 MB, which is the upload limit here.');
       return;
     }
     const reader = new FileReader();
@@ -246,17 +253,19 @@ export default function AnswerKeyAnalyzerPage() {
   /* ── render helpers ── */
   const t = result?.totals;
   const barPct = (n) => (t?.totalQuestions ? (n / t.totalQuestions) * 100 : 0);
-  const activeQuestion = result?.questions.find((q) => q.n === activeQ);
+  const activeQuestion = result?.questions.find((q) => q.id === activeQId);
   const visibleQuestions = result
     ? result.questions.filter((q) => filter === 'all' || q.r === filter)
     : [];
 
   function describe(q) {
     const sec = result.sections[q.s]?.name || '';
-    if (q.r === 'N') return `Q${q.n} (${sec}): no correct answer in this sheet, not scored.`;
-    if (q.r === 'U') return `Q${q.n} (${sec}): not attempted. Correct option is ${q.a}.`;
-    if (q.r === 'C') return `Q${q.n} (${sec}): you chose ${q.c}. Correct.`;
-    return `Q${q.n} (${sec}): you chose ${q.c}. Correct option is ${q.a}.`;
+    if (q.r === 'N') {
+      return `Q${q.n} (${sec}): Dropped / no correct option in key${bonusForDropped ? ' (bonus mark added)' : ' (excluded from scoring)'}.`;
+    }
+    if (q.r === 'U') return `Q${q.n} (${sec}): Not attempted. Correct option is ${q.a}.`;
+    if (q.r === 'C') return `Q${q.n} (${sec}): You chose ${q.c}. Correct.`;
+    return `Q${q.n} (${sec}): You chose ${q.c} (Wrong). Correct option is ${q.a}.`;
   }
 
   return (
@@ -384,10 +393,14 @@ export default function AnswerKeyAnalyzerPage() {
           </label>
         </div>
 
-        <p className={styles.hint}>
-          Marking differs by exam, year and shift. Check your notification and edit the numbers if
-          they don&apos;t match.
-        </p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={bonusForDropped}
+            onChange={(e) => setBonusForDropped(e.target.checked)}
+          />
+          <span>Add full bonus marks for dropped / invalid questions (SSC / RRB norm)</span>
+        </label>
 
         {error && (
           <p className={styles.error} role="alert">
@@ -415,7 +428,7 @@ export default function AnswerKeyAnalyzerPage() {
           <section className={styles.results} aria-label="Result">
             <div className={styles.scoreBlock}>
               <div>
-                <p className={styles.scoreLabel}>Your score</p>
+                <p className={styles.scoreLabel}>Your raw score</p>
                 <p className={styles.score}>
                   {fmt(result.score)}
                   <span className={styles.scoreMax}> / {fmt(result.maxScore)}</span>
@@ -496,8 +509,7 @@ export default function AnswerKeyAnalyzerPage() {
             {t.unscored > 0 && (
               <p className={styles.note}>
                 {t.unscored} question{t.unscored > 1 ? 's have' : ' has'} no correct answer in this
-                sheet (for example dropped or non-multiple-choice) and {t.unscored > 1 ? 'are' : 'is'}{' '}
-                not scored.
+                sheet (dropped/ignored) and {bonusForDropped ? 'bonus marks have been added.' : 'have been excluded from max score.'}
               </p>
             )}
 
@@ -558,13 +570,13 @@ export default function AnswerKeyAnalyzerPage() {
             </div>
             <ul className={styles.qGrid}>
               {visibleQuestions.map((q) => (
-                <li key={q.n}>
+                <li key={q.id}>
                   <button
                     type="button"
                     className={`${styles.q} ${styles[`q${q.r}`]} ${
-                      activeQ === q.n ? styles.qActive : ''
+                      activeQId === q.id ? styles.qActive : ''
                     }`}
-                    onClick={() => setActiveQ(q.n)}
+                    onClick={() => setActiveQId(q.id)}
                     aria-label={describe(q)}
                   >
                     {q.n}
@@ -582,10 +594,6 @@ export default function AnswerKeyAnalyzerPage() {
               {saveState === 'saving' && 'Saving…'}
               {saveState === 'saved' && 'Saved to your account'}
               {saveState === 'error' && 'Could not save this result. Check your connection and change any field to retry.'}
-            </p>
-            <p className={styles.note}>
-              This is an estimate from the answer key in your sheet. Official results can differ
-              because of normalisation or revised keys.
             </p>
           </section>
         )}
