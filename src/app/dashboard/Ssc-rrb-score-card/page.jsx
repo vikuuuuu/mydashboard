@@ -44,6 +44,7 @@ export default function AnswerKeyAnalyzerPage() {
   const [negativeTxt, setNegativeTxt] = useState('1/3');
   const [cutoffTxt, setCutoffTxt] = useState('');
   const [bonusForDropped, setBonusForDropped] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -160,6 +161,17 @@ export default function AnswerKeyAnalyzerPage() {
     }
   }
 
+  async function copyBrowserScript() {
+    const snippet = `copy(document.documentElement.outerHTML); alert('Answer key HTML copied! Now paste it in the analyzer.');`;
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setCopiedScript(true);
+      setTimeout(() => setCopiedScript(false), 3000);
+    } catch {
+      setError('Could not copy script automatically. Just press Ctrl+U on your answer key page, then Ctrl+A and Ctrl+C.');
+    }
+  }
+
   async function analyze(e) {
     e.preventDefault();
     setError('');
@@ -191,7 +203,15 @@ export default function AnswerKeyAnalyzerPage() {
       setParsed(data);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
     } catch (err) {
-      setError(err.message || 'Could not analyze this answer key.');
+      const msg = err.message || 'Could not analyze this answer key.';
+      if (mode === 'url' && (msg.includes('400') || msg.includes('403') || msg.includes('blocked'))) {
+        setMode('html');
+        setError(
+          'Exam server blocked direct link fetch. Open your answer key page in browser -> Press Ctrl+U -> Press Ctrl+A then Ctrl+C -> Paste below!'
+        );
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -261,7 +281,9 @@ export default function AnswerKeyAnalyzerPage() {
   function describe(q) {
     const sec = result.sections[q.s]?.name || '';
     if (q.r === 'N') {
-      return `Q${q.n} (${sec}): Dropped / no correct option in key${bonusForDropped ? ' (bonus mark added)' : ' (excluded from scoring)'}.`;
+      return `Q${q.n} (${sec}): Dropped / no correct option in key${
+        bonusForDropped ? ' (bonus mark added)' : ' (excluded from scoring)'
+      }.`;
     }
     if (q.r === 'U') return `Q${q.n} (${sec}): Not attempted. Correct option is ${q.a}.`;
     if (q.r === 'C') return `Q${q.n} (${sec}): You chose ${q.c}. Correct.`;
@@ -306,31 +328,41 @@ export default function AnswerKeyAnalyzerPage() {
               className={styles.input}
               type="url"
               inputMode="url"
-              placeholder="https://rrb.digialm.com/…  or  https://ssc.digialm.com/…"
+              placeholder="https://rrb.digialm.com//per/…  or  https://ssc.digialm.com/…"
               value={urlText}
               onChange={(e) => setUrlText(e.target.value)}
               autoComplete="off"
             />
             <span className={styles.hint}>
-              Use the address of your response sheet page (the one that shows your questions), not
-              the login page. If it won&apos;t load here, save that page with Ctrl+S and upload it
-              under &ldquo;Paste page source&rdquo;.
+              Paste your AssessmentQPHTMLMode1 response sheet link. If the exam server blocks it,
+              use &ldquo;Paste page source&rdquo; (Ctrl+U &rarr; Ctrl+A &rarr; Ctrl+C).
             </span>
           </label>
         ) : (
-          <label className={styles.field}>
-            <span className={styles.label}>Page source (HTML)</span>
+          <div className={styles.field}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <span className={styles.label}>Page source (HTML)</span>
+              <button
+                type="button"
+                onClick={copyBrowserScript}
+                className={styles.chip}
+                style={{ fontSize: '0.78rem' }}
+              >
+                {copiedScript ? 'Copied! Paste in F12 Console' : 'Copy 1-Click Console Script'}
+              </button>
+            </div>
             <textarea
               className={`${styles.input} ${styles.textarea}`}
               rows={6}
-              placeholder="Paste the full page source of your response sheet here"
+              placeholder="Paste the full page source (Ctrl+U -> Ctrl+A -> Ctrl+C) of your response sheet here"
               value={htmlText}
               onChange={(e) => setHtmlText(e.target.value)}
               spellCheck={false}
             />
             <span className={styles.hint}>
-              Easiest way: open your response sheet, press Ctrl+S to save the page as HTML, then
-              choose that file here.
+              Open your answer key tab &rarr; press <strong>Ctrl+U</strong> (View Source) &rarr;
+              press <strong>Ctrl+A</strong> then <strong>Ctrl+C</strong> &rarr; paste above. Or
+              choose a saved <code>.html</code> file below:
             </span>
             <input
               className={styles.input}
@@ -338,7 +370,7 @@ export default function AnswerKeyAnalyzerPage() {
               accept=".html,.htm,text/html"
               onChange={onPickFile}
             />
-          </label>
+          </div>
         )}
 
         <div className={styles.row}>
@@ -509,7 +541,8 @@ export default function AnswerKeyAnalyzerPage() {
             {t.unscored > 0 && (
               <p className={styles.note}>
                 {t.unscored} question{t.unscored > 1 ? 's have' : ' has'} no correct answer in this
-                sheet (dropped/ignored) and {bonusForDropped ? 'bonus marks have been added.' : 'have been excluded from max score.'}
+                sheet (dropped/ignored) and{' '}
+                {bonusForDropped ? 'bonus marks have been added.' : 'have been excluded from max score.'}
               </p>
             )}
 
@@ -593,7 +626,8 @@ export default function AnswerKeyAnalyzerPage() {
             <p className={styles.saveLine} aria-live="polite">
               {saveState === 'saving' && 'Saving…'}
               {saveState === 'saved' && 'Saved to your account'}
-              {saveState === 'error' && 'Could not save this result. Check your connection and change any field to retry.'}
+              {saveState === 'error' &&
+                'Could not save this result. Check your connection and change any field to retry.'}
             </p>
           </section>
         )}
